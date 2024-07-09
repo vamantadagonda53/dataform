@@ -1,0 +1,1 @@
+SELECT * FROM `cobundu-bi-playground.postg_gbq.locations` --LIMIT 1000

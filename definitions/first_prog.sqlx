@@ -1,0 +1,11 @@
+config {
+    type: "table", // Creates a view in BigQuery. Try changing to "table" instead.
+    schema: "dataform",
+    columns: {
+        test: "A description for the test column", // Column descriptions are pushed to BigQuery.
+    }
+}
+
+  -- The rest of a SQLX file contains your SELECT statement used to create the table.
+SELECT
+  1 AS test_2

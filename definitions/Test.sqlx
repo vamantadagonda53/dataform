@@ -1,0 +1,18 @@
+TRUNCATE TABLE `cobundu-bi-playground.dataform.loc_rec`;
+
+
+insert into `cobundu-bi-playground.dataform.loc_rec` (location_id, area)
+WITH RECURSIVE LOC AS (
+        SELECT  l1.location_id, l1.LOC_REF,  l1.loc_type , l1.parent_id ,l1.LOC_REF  as area   from `cobundu-bi-playground.dataform.locations` l1 where loc_type = 'AREA' AND l1.location_id not in ( select distinct
+parent_id from `cobundu-bi-playground.dataform.locations` l3 where loc_type = 'AREA' and l1.location_id = l3.parent_id)
+     union all
+     select l2.location_id, l2.LOC_REF,  l2.loc_type , l2.parent_id, area   from `cobundu-bi-playground.dataform.locations` l2
+     JOIN LOC loc on loc.location_id = l2.parent_id --and l2.loc_type = 'AREA' and l2.loc_ref = loc.area
+     )
+     select location_id, area from LOC;   --1518
+--inserting area into loc_rec stage table.
+
+
+update `cobundu-bi-playground.dataform.locations` l set loc_area = area from 
+`cobundu-bi-playground.dataform.loc_rec` c where l.location_id = c.location_id ;
+--updating loc_area field in the stage table.
