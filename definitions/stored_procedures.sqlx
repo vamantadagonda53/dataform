@@ -1,0 +1,388 @@
+BEGIN
+
+DECLARE im_table STRING ;
+DECLARE loc_table STRING ;
+DECLARE trunc_loc_rec STRING;
+DECLARE recur_area STRING;
+DECLARE update_area STRING;
+DECLARE recur_site STRING;
+DECLARE update_site STRING;
+DECLARE recur_building STRING;
+DECLARE update_builings STRING;
+DECLARE recur_floor STRING;
+DECLARE update_floor STRING;
+DECLARE recur_room STRING;
+DECLARE update_room STRING;
+DECLARE recur_workplace STRING;
+DECLARE update_workplace STRING;
+DECLARE recur_parking STRING;
+DECLARE update_parking STRING;
+DECLARE stg_workplc STRING;
+DECLARE stg_util_thr STRING;
+DECLARE loc_flr_bld STRING;
+DECLARE crowded_quiet_workplace STRING;
+DECLARE crowd_quiet STRING;
+DECLARE max_crowd STRING;
+DECLARE max_quiet STRING;
+DECLARE workplace_nr STRING;
+DECLARE qsdb_space_cat STRING;
+DECLARE space_category STRING;
+DECLARE room_cat STRING;
+DECLARE space_cat STRING;
+DECLARE agg_lvl STRING;
+DECLARE dim_loc STRING;
+DECLARE upd_dim_loc STRING;
+DECLARE ins_dim_loc STRING;
+--set tgt_table = 'cobundu-bi-playground.ratp.location_test_1';
+
+CALL dataform_sd_procedure.tenant_list();
+
+FOR record IN
+  (SELECT tenant, stg_util,loc_rec,stg_workplc,qsdb_space_cat,dim_loc
+   FROM cobundu-bi-playground.dataform.tent)
+   DO
+/*
+set im_table = 'cobundu-bi-playground.ratp.loc_rec';
+set loc_table = 'cobundu-bi-playground.ratp.locations';
+set stg_workplc = 'cobundu-bi-playground.datafusion.STG_WORKPLACE_ROOM_LINK';
+set stg_util_thr = 'cobundu-bi-playground.datafusion.stg_utilization_thresholds';
+set qsdb_space_cat =  'cobundu-bi-playground.datafusion.qsdb_space_category';
+set dim_loc = 'cobundu-bi-playground.datafusion.dim_locations'
+*/
+
+set im_table = record.loc_rec;
+set loc_table = record.tenant;
+set stg_workplc = record.stg_workplc;
+set stg_util_thr = record.stg_util;
+set qsdb_space_cat =  record.qsdb_space_cat;
+set dim_loc = record.dim_loc;
+
+--############################################################################################
+
+set trunc_loc_rec = FORMAT("""TRUNCATE TABLE `%s`""",im_table);
+
+EXECUTE IMMEDIATE trunc_loc_rec;
+
+set recur_area = FORMAT(""" 
+ insert into `%s` (location_id, area)
+WITH RECURSIVE LOC AS (
+        SELECT  l1.location_id, l1.LOC_REF,  l1.loc_type , l1.parent_id ,l1.LOC_REF  as area   from `%s` l1 where loc_type = 'AREA' AND l1.location_id not in ( select distinct
+parent_id from `%s` l3 where loc_type = 'AREA' and l1.location_id = l3.parent_id)
+     union all
+     select l2.location_id, l2.LOC_REF,  l2.loc_type , l2.parent_id, area   from `%s` l2
+     JOIN LOC loc on loc.location_id = l2.parent_id --and l2.loc_type = 'AREA' and l2.loc_ref = loc.area
+     )
+     select location_id, area from LOC ; """
+     ,im_table,loc_table,loc_table,loc_table );
+
+EXECUTE IMMEDIATE recur_area;
+
+ set update_area = FORMAT(""" 
+ update `%s` l set loc_area = area from `%s` c where l.location_id = c.location_id ;"""
+ , loc_table, im_table);
+
+ EXECUTE IMMEDIATE update_area;
+
+--############################################################################################
+--Truncate table cobundu-bi-playground.datafusion.loc_rec;
+
+EXECUTE IMMEDIATE trunc_loc_rec;
+
+set recur_site = FORMAT("""    
+insert into `%s` (location_id, site)
+WITH RECURSIVE LOC AS (
+     SELECT  l1.location_id, l1.LOC_REF,  l1.loc_type , l1.parent_id,l1.LOC_REF as site   from `%s` l1 where loc_type = 'SITE'
+     union all
+     select l2.location_id, l2.LOC_REF,  l2.loc_type , l2.parent_id, site  from `%s` l2
+     JOIN LOC loc on loc.location_id = l2.parent_id
+     )
+     select location_id, site from LOC; """
+,im_table, loc_table,loc_table);
+
+EXECUTE IMMEDIATE recur_site;
+
+set update_site = FORMAT("""  
+update `%s` l set loc_site = site from `%s` c where l.location_id = c.location_id ;"""
+,loc_table,im_table);
+
+EXECUTE IMMEDIATE update_site;
+
+--############################################################################################
+--Truncate table cobundu-bi-playground.datafusion.loc_rec;
+
+EXECUTE IMMEDIATE trunc_loc_rec;
+
+set recur_building = FORMAT("""
+insert into `%s` (location_id, building)
+WITH RECURSIVE LOC AS (
+SELECT  l1.location_id, l1.LOC_REF,  l1.loc_type , l1.parent_id,l1.LOC_REF as building   from `%s` l1 where loc_type = 'BUILDING'
+union all
+select l2.location_id, l2.LOC_REF,  l2.loc_type , l2.parent_id, building  from `%s` l2
+JOIN LOC loc on loc.location_id = l2.parent_id
+)
+  select location_id, building from LOC  ;"""
+  , im_table, loc_table,loc_table);
+
+EXECUTE IMMEDIATE recur_building;
+
+
+SET update_builings = FORMAT("""
+update `%s` l set loc_building = building from `%s`  c where l.location_id = c.location_id ;"""
+,loc_table, im_table );
+
+EXECUTE IMMEDIATE update_builings;
+
+--############################################################################################
+--Truncate table cobundu-bi-playground.datafusion.loc_rec;
+
+EXECUTE IMMEDIATE trunc_loc_rec;
+
+set recur_floor = FORMAT("""
+insert into `%s` (location_id, floor)
+WITH RECURSIVE LOC AS (
+     SELECT  l1.location_id, l1.LOC_REF,  l1.loc_type , l1.parent_id,l1.LOC_REF as floor   from `%s` l1 where loc_type = 'FLOOR'
+     union all
+     select l2.location_id, l2.LOC_REF,  l2.loc_type , l2.parent_id, floor  from `%s` l2
+     JOIN LOC loc on loc.location_id = l2.parent_id
+     )
+      select location_id, floor from LOC ; """
+  , im_table,loc_table,loc_table    );
+
+EXECUTE IMMEDIATE recur_floor;
+
+set update_floor = FORMAT("""
+ update `%s` l set loc_floor = floor from `%s` c where l.location_id = c.location_id ;"""
+ , loc_table,im_table   );
+
+ EXECUTE IMMEDIATE update_floor;
+
+ --############################################################################################
+
+--Truncate table cobundu-bi-playground.datafusion.loc_rec;
+EXECUTE IMMEDIATE trunc_loc_rec;
+
+set recur_room = FORMAT("""
+insert into `%s` (location_id, room)
+WITH RECURSIVE LOC AS (
+     SELECT  l1.location_id, l1.LOC_REF,  l1.loc_type , l1.parent_id,l1.LOC_REF as room   from `%s` l1 where loc_type = 'ROOM'
+     union all
+     select l2.location_id, l2.LOC_REF,  l2.loc_type , l2.parent_id, room  from `%s` l2
+     JOIN LOC loc on loc.location_id = l2.parent_id
+     )
+    select location_id, room from LOC ;"""
+    , im_table,loc_table, loc_table );
+
+EXECUTE IMMEDIATE recur_room;
+  
+  set update_room = FORMAT("""
+update `%s` l set loc_room = room from `%s` c where l.location_id = c.location_id ;"""
+,loc_table, im_table  );
+
+EXECUTE IMMEDIATE update_room;
+
+--############################################################################################
+--Truncate table cobundu-bi-playground.datafusion.loc_rec;
+EXECUTE IMMEDIATE trunc_loc_rec;
+
+set recur_workplace = FORMAT("""
+insert into `%s` (location_id, workplace)
+WITH RECURSIVE LOC AS (
+     SELECT  l1.location_id, l1.LOC_REF,  l1.loc_type , l1.parent_id,l1.LOC_REF as workplace   from `%s` l1 where loc_type = 'WORKPLACE'  AND l1.location_id not in ( select distinct parent_id from `%s` l3 where loc_type = 'WORKPLACE' and l1.location_id = l3.parent_id)
+     union all
+     select l2.location_id, l2.LOC_REF,  l2.loc_type , l2.parent_id, workplace  from cobundu-bi-playground.datafusion.locations l2
+     JOIN LOC loc on loc.location_id = l2.parent_id
+     )
+       select location_id, workplace from LOC ; """
+,im_table, loc_table,loc_table  );
+
+EXECUTE IMMEDIATE recur_workplace;
+
+set update_workplace = FORMAT(""" 
+update `%s` l set loc_workplace = workplace from `%s` c where l.location_id = c.location_id ;"""
+,loc_table, im_table);
+
+EXECUTE IMMEDIATE update_workplace; 
+
+--############################################################################################
+--Truncate table cobundu-bi-playground.datafusion.loc_rec;
+
+EXECUTE IMMEDIATE trunc_loc_rec;
+
+set recur_parking = FORMAT("""
+insert into `%s` (location_id, room)
+WITH RECURSIVE LOC AS (
+     SELECT  l1.location_id, l1.LOC_REF,  l1.loc_type , l1.parent_id,l1.LOC_REF as workplace   from `%s` l1 where loc_type = 'PARKING'
+     union all
+     select l2.location_id, l2.LOC_REF,  l2.loc_type , l2.parent_id, workplace  from `%s` l2
+     JOIN LOC loc on loc.location_id = l2.parent_id
+     )
+     select location_id, workplace from LOC;"""
+ ,  im_table,loc_table,loc_table);
+
+ EXECUTE IMMEDIATE recur_parking;
+
+ set update_parking = FORMAT(""" 
+update `%s` l set loc_room = room from `%s` c where l.location_id = c.location_id and 
+l.location_id is not null ;"""
+, loc_table , im_table);
+
+EXECUTE IMMEDIATE update_parking;
+
+--############################################################################################
+--########################### PHASE 2 ###################################################### 
+
+
+set loc_flr_bld = FORMAT("""
+update `%s` set LOC_FLR_BLD = CONCAT(LOC_FLOOR,'[',LOC_BUILDING,']') where LOC_FLOOR IS NOT NULL;"""
+,loc_table);
+
+EXECUTE IMMEDIATE loc_flr_bld;
+
+
+--set crowded_quiet_workplace = FORMAT("""
+set crowded_quiet_workplace = FORMAT("""
+update `%s` l set 
+loc_room_max_crowded =  coalesce(ut.max_crowded,0) , 
+loc_room_max_quiet = coalesce(ut.max_quiet,0) , 
+loc_room_nr_workplaces = coalesce(ut.capacity,0)
+from  
+ `%s`  wp,
+ `%s`  ut 
+ where  wp.PARENT_ID = ut.room_id and type like ('WORKPLACE%%') and  l.location_id = wp.location_id """
+ ,loc_table, stg_workplc,stg_util_thr); 
+
+EXECUTE IMMEDIATE crowded_quiet_workplace;
+
+
+set max_crowd = FORMAT("""
+UPDATE `%s` SET loc_room_max_crowded = 0 WHERE loc_room_max_crowded IS NULL ;"""
+,loc_table  );
+
+EXECUTE IMMEDIATE max_crowd;
+
+set max_quiet = FORMAT("""
+UPDATE `%s` SET loc_room_max_quiet = 0 WHERE loc_room_max_quiet IS NULL ;"""
+,loc_table );
+
+EXECUTE IMMEDIATE max_quiet;
+
+set workplace_nr = FORMAT("""
+UPDATE `%s` SET loc_room_nr_workplaces = 0 WHERE loc_room_nr_workplaces IS NULL ;"""
+,loc_table  );
+
+EXECUTE IMMEDIATE workplace_nr;
+
+--###################
+
+set space_category = FORMAT("""
+update `%s`  l set
+ loc_room_category = (select room_category from `%s` q where l.room_category_id =  q.room_category_id)  ,
+ loc_space_category = (select space_category from `%s` q where l.room_category_id =  q.room_category_id) ,--,
+ loc_aggregation_lvl = (select aggregation_lvl from `%s` q where l.room_category_id =  q.room_category_id) 
+ where location_id is not null ;"""
+ ,loc_table, qsdb_space_cat, qsdb_space_cat, qsdb_space_cat  ) ;
+
+ EXECUTE IMMEDIATE space_category;
+
+ set room_cat = FORMAT("""
+UPDATE `%s`  l1 SET loc_room_category = (SELECT loc_room_category FROM `%s` l2 WHERE l1.parent_id = l2.location_id) WHERE loc_room_category IS NULL;"""
+,loc_table,loc_table);
+
+EXECUTE IMMEDIATE room_cat;
+
+set space_cat = FORMAT("""
+UPDATE `%s`  l1 SET loc_space_category = (SELECT loc_space_category FROM `%s` l2 WHERE l1.parent_id = l2.location_id) WHERE loc_space_category IS NULL;"""
+,loc_table, loc_table   );
+
+EXECUTE IMMEDIATE space_cat;
+
+set agg_lvl = FORMAT("""
+UPDATE `%s`  l1 SET loc_aggregation_lvl = (SELECT loc_aggregation_lvl FROM `%s` l2 WHERE l1.parent_id = l2.location_id) WHERE loc_aggregation_lvl IS NULL;"""
+,loc_table, loc_table   );
+
+EXECUTE IMMEDIATE agg_lvl;
+
+--############################################################################################
+--########################### PHASE 3 ###################################################### 
+
+set upd_dim_loc = FORMAT("""
+merge into `%s` d
+using `%s` l 
+on l.location_id = d.location_id and d.current_flag = 'Y' and d.is_deleted = 'N'
+when matched and l.loc_type <> d.loc_type or 
+l.loc_type <> d.loc_type or 
+l.loc_area <> d.loc_area or 
+l.loc_room <> d.loc_room OR 
+l.loc_region <> d.loc_region OR 
+l.loc_site <> d.loc_site OR 
+l.loc_building <> d.loc_building OR 
+l.loc_floor <> d.loc_floor OR 
+l.loc_flr_bld <> d.loc_flr_bld OR 
+cast(l.loc_room_max_quiet as numeric) <> d.loc_room_max_quiet or 
+cast(l.loc_room_max_crowded as numeric) <> d.loc_room_max_crowded OR 
+cast(l.loc_room_nr_workplaces as numeric) <> d.loc_room_nr_workplaces OR 
+l.loc_room_category <> d.loc_room_category OR 
+l.loc_space_category <> d.loc_space_category OR 
+cast(l.loc_aggregation_lvl  as numeric) <> d.loc_aggregation_lvl OR 
+coalesce(round(cast(l.loc_Area_sqm as float64 ),2),0) <> coalesce(cast(d.loc_Area_sqm as float64 ),0) OR
+l.is_reservable <> d.is_reservable OR 
+l.loc_country <> d.loc_country OR 
+l.loc_workplace <> d.loc_workplace-- and 
+
+then update set current_flag = 'N', is_deleted = 'Y';"""
+, dim_loc,loc_table  ); 
+
+EXECUTE IMMEDIATE upd_dim_loc;
+
+set ins_dim_loc = FORMAT("""
+merge into `%s` d 
+using `%s` l
+on l.location_id = d.location_id --and current_flag = 'N'
+when not matched then 
+insert (location_id,
+loc_type,
+loc_area,
+loc_room,
+loc_region,
+loc_site,
+loc_building,
+loc_floor,
+loc_flr_bld,
+loc_room_max_quiet,
+loc_room_max_crowded,
+loc_room_nr_workplaces,
+loc_room_category,
+loc_space_category,
+loc_aggregation_lvl,
+loc_area_sqm,
+is_reservable,
+loc_country,
+loc_workplace,
+current_flag) values 
+(location_id,
+loc_type,
+loc_area,
+loc_room,
+loc_region,
+loc_site,
+loc_building,
+loc_floor,
+loc_flr_bld,
+cast(l.loc_room_max_quiet as numeric) ,
+cast(l.loc_room_max_crowded as numeric), 
+cast(l.loc_room_nr_workplaces as numeric),
+loc_room_category,
+loc_space_category,
+cast(l.loc_aggregation_lvl as int64),
+round(cast(l.loc_Area_sqm as NUMERIC ),2)  ,
+is_reservable,
+loc_country,
+loc_workplace,
+'Y'  )"""
+,dim_loc,loc_table  ); 
+
+EXECUTE IMMEDIATE ins_dim_loc;
+
+END FOR;
+
+END
