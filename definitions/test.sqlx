@@ -1,0 +1,15 @@
+js {
+  // Define the query to get the list of table names
+  const tableQuery = `
+    SELECT tenant
+   FROM cobundu-bi-playground.dataform.tent
+  `;
+
+   const tableResults = dataform.runQuery(tableQuery);
+   const tables = tableResults.map(row => row.table_name);
+
+}
+
+ const selectAllFromTables = tables.map(t => {
+    return `SELECT * FROM \`${t}\``;
+  });
