@@ -1,4 +1,2 @@
-SELECT
-  *
-FROM
-  cubundu-bi-playground.dataform.info
+insert into cobundu-bi-playground.datafusion.view select "pavan"
+
