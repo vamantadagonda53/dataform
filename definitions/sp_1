@@ -1,0 +1,1 @@
+insert into cobundu-bi-playground.datafusion.view select "pavan"
