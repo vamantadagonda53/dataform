@@ -1,0 +1,29 @@
+BEGIN
+
+DECLARE qureystring STRING;
+
+Truncate table cobundu-bi-playground.dataform.tent;
+
+FOR record IN
+  (SELECT tenant
+   FROM cobundu-bi-playground.dataform.info)
+   DO
+
+--set qureystring = ( "select location_id from cobundu-bi-playground.dataform.location_test_1");
+--set qureystring = ( "insert into cobundu-bi-playground.'record.tenant'.location_test_1 select '173839270', 'NEMETCHEK'");
+/*set qureystring  = ("select 'cobundu-bi-playground.'record.tenant'locations', 'cobundu-bi-playground.datafusion.stg_utilization_thresholds', 'cobundu-bi-playground.ratp.loc_rec' , 'cobundu-bi-playground.datafusion.STG_WORKPLACE_ROOM_LINK', 'cobundu-bi-playground.datafusion.qsdb_space_category'"); */
+
+insert into cobundu-bi-playground.dataform.tent 
+select 
+'cobundu-bi-playground.'||record.tenant||'.locations', 
+'cobundu-bi-playground.'||record.tenant||'.stg_utilization_thresholds', 
+'cobundu-bi-playground.'||record.tenant||'.loc_rec' ,
+ 'cobundu-bi-playground.'||record.tenant||'.STG_WORKPLACE_ROOM_LINK', 
+ 'cobundu-bi-playground.'||record.tenant||'.qsdb_space_category', 
+ 'cobundu-bi-playground.'||record.tenant||'.dim_locations' ;
+
+--EXECUTE IMMEDIATE qureystring;
+
+END FOR;
+
+END
