@@ -1,0 +1,4 @@
+SELECT
+  *
+FROM
+  cubundu-bi-playground.dataform.info
