@@ -2,4 +2,8 @@ defaultProject: cobundu-bi-playground
 defaultLocation: EU
 defaultDataset: dataform
 defaultAssertionDataset: dataform_assertions
+<<<<<<< HEAD
+dataformCoreVersion: 3.0.0
+=======
 dataformCoreVersion: 3.0.0-beta.4
+>>>>>>> refs/heads/main
