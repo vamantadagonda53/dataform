@@ -1,3 +1,9 @@
+config {
+  type: "operations",
+  schema: "my_schema",
+  name: "locations_v5"
+}
+
 BEGIN
 
 DECLARE im_table STRING ;
