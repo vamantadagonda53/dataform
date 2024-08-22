@@ -1,9 +1,3 @@
-config {
-  type: "operations",
-  schema: "my_schema",
-  name: "stored_procedures"
-}
-
 BEGIN
 
 DECLARE im_table STRING ;
@@ -41,19 +35,23 @@ DECLARE upd_dim_loc STRING;
 DECLARE ins_dim_loc STRING;
 --set tgt_table = 'cobundu-bi-playground.ratp.location_test_1';
 
-CALL dataform_sd_procedure.tenant_list();
+--CALL dataform_sd_procedure.tenant_list();
 
 FOR record IN
-  (SELECT tenant, stg_util,loc_rec,stg_workplc,qsdb_space_cat,dim_loc
-   FROM cobundu-bi-playground.dataform.tent)
+  --(SELECT tenant, stg_util,loc_rec,stg_workplc,qsdb_space_cat,dim_loc   FROM cobundu-bi-playground.dataform.tent)
+
+(SELECT 'cobundu-bi-playground.'||tenant||'.locations' as tenant, 
+'cobundu-bi-playground.'||tenant||'.stg_utilization_thresholds' as stg_util,
+'cobundu-bi-playground.'||tenant||'.loc_rec' as loc_rec,
+'cobundu-bi-playground.'||tenant||'.STG_WORKPLACE_ROOM_LINK' as stg_workplc,
+'cobundu-bi-playground.'||tenant||'.qsdb_space_category' as qsdb_space_cat,
+'cobundu-bi-playground.'||tenant||'.dim_locations' as dim_loc
+ FROM cobundu-bi-playground.dataform.info)
+
+
    DO
 /*
 set im_table = 'cobundu-bi-playground.ratp.loc_rec';
-set loc_table = 'cobundu-bi-playground.ratp.locations';
-set stg_workplc = 'cobundu-bi-playground.datafusion.STG_WORKPLACE_ROOM_LINK';
-set stg_util_thr = 'cobundu-bi-playground.datafusion.stg_utilization_thresholds';
-set qsdb_space_cat =  'cobundu-bi-playground.datafusion.qsdb_space_category';
-set dim_loc = 'cobundu-bi-playground.datafusion.dim_locations'
 */
 
 set im_table = record.loc_rec;
