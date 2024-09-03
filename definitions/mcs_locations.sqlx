@@ -1,0 +1,2653 @@
+BEGIN
+
+DECLARE dim_location STRING;
+DECLARE vw_rep_int_locations_16 STRING;
+DECLARE vw_rep_space_workplaces_16 STRING;
+DECLARE vw_rep_building_stats_16 STRING;
+DECLARE mcs_dim_loc_insert STRING;
+DECLARE dataset_name STRING;
+DECLARE mcs_dim_loc_update STRING;
+DECLARE vw_rep_reservations_17 STRING;
+DECLARE vw_rep_client_org_16 STRING;
+DECLARE mcs_fact_resrv_insert STRING;
+DECLARE fact_resevations STRING;
+DECLARE mcs_fact_resrv_update STRING;
+DECLARE fact_wp_buildings STRING;
+DECLARE mcs_fact_building_insert STRING;
+DECLARE mcs_fact_building_update STRING;
+DECLARE vw_rep_calls_18 STRING;
+DECLARE fact_helpdesk STRING;
+DECLARE mcs_fact_helpdesk_update STRING;
+DECLARE mcs_fact_helpdesk_insert STRING;
+DECLARE message STRING;
+DECLARE mcs_fact_maintenance_update STRING;
+DECLARE vw_rep_mo_18 STRING;
+DECLARE fact_maintenance STRING;
+DECLARE mcs_fact_maintenance_insert STRING;
+DECLARE mcs_fact_financials_update STRING;
+DECLARE vw_rep_costitems_18 STRING;
+DECLARE fact_financials STRING;
+DECLARE mcs_fact_financials_insert STRING;
+/*
+set dim_location = 'cobundu-bi-playground.CHEMOURS_P.dim_locations';
+set vw_rep_int_locations_16 = 'cobundu-bi-playground.CHEMOURS_P.VW_REP_INT_LOCATIONS_16';
+set vw_rep_space_workplaces_16 = 'cobundu-bi-playground.CHEMOURS_P.VW_REP_SPACE_WORKPLACES_16';
+set vw_rep_building_stats_16 = 'cobundu-bi-playground.CHEMOURS_P.VW_REP_BUILDING_STATS_16';
+*/
+
+
+FOR record IN
+  (SELECT tenant
+   FROM `cobundu-bi-playground.dataform_sd_procedure.info`)
+   DO
+
+BEGIN
+
+--set dataset_name = 'CHEMOURS_P';
+set dataset_name = record.tenant;
+set dim_location = 'cobundu-bi-playground.'||UPPER(dataset_name)||'.dim_locations';
+set vw_rep_int_locations_16 = 'cobundu-bi-playground.'||UPPER(dataset_name)||'.VW_REP_INT_LOCATIONS_16';
+set vw_rep_space_workplaces_16 = 'cobundu-bi-playground.'||UPPER(dataset_name)||'.VW_REP_SPACE_WORKPLACES_16';
+set vw_rep_building_stats_16 = 'cobundu-bi-playground.'||UPPER(dataset_name)||'.VW_REP_BUILDING_STATS_16';
+set vw_rep_reservations_17 = 'cobundu-bi-playground.'||UPPER(dataset_name)||'.VW_REP_RESERVATIONS_17';
+set vw_rep_client_org_16 = 'cobundu-bi-playground.'||UPPER(dataset_name)||'.VW_REP_CLIENT_ORG_16';
+set fact_resevations = 'cobundu-bi-playground.'||UPPER(dataset_name)||'.fact_reservations';
+set fact_wp_buildings = 'cobundu-bi-playground.'||UPPER(dataset_name)||'.fact_wp_buildings';
+set vw_rep_calls_18 =  'cobundu-bi-playground.'||UPPER(dataset_name)||'.VW_REP_CALLS_18';
+set fact_helpdesk =  'cobundu-bi-playground.'||UPPER(dataset_name)||'.FACT_HELPDESK';
+set fact_maintenance = 'cobundu-bi-playground.'||UPPER(dataset_name)||'.FACT_MAINTENANCE';
+set vw_rep_mo_18 = 'cobundu-bi-playground.'||UPPER(dataset_name)||'.VW_REP_MO_18';
+set fact_financials = 'cobundu-bi-playground.'||UPPER(dataset_name)||'.FACT_FINANCIALS';
+set vw_rep_costitems_18 = 'cobundu-bi-playground.'||UPPER(dataset_name)||'.VW_REP_COSTITEMS_18';
+--######################################
+--DIM_LOCATIONS  -- UPDATE
+--######################################
+
+set mcs_dim_loc_update = FORMAT("""
+MERGE INTO `%s` d
+using 
+(
+select  l.room_Cat_ref as loc_room_category,
+l.location_id,
+--r.resource_id,
+l.location_type as loc_type,
+--null as loc_region_code,
+--null as loc_Region,
+CONCAT('loc-',l.LOCATION_ID) as LOC_SVG_LOCATION_ID,
+l.area_code as loc_area_code,
+l.area_ref as loc_area,
+l.site_code as loc_site_code,
+l.site_ref as loc_site,
+l.building_code as loc_building_code,
+l.building_ref as loc_building,
+l.floor_code as loc_floor_code,
+l.floor_ref as loc_floor,
+l.room_code as loc_room_code,
+l.room_ref as loc_room,
+l.floor_ref||'['||l.building_ref||']' as loc_flr_bld,
+w.ref as loc_workplace,
+--null as is_reservable,
+--null as loc_street_nr,
+--null as loc_zip ,
+b.city as loc_city,
+b.country as loc_country,
+--r.resource_out_of_use as loc_rsrv_out_of_use,
+--null as loc_rsrv_out_of_use,
+cast(l.room_area as numeric) as loc_area_sqm,
+cast(null as numeric) loc_drawing_area_sqm,
+CASE WHEN l.LOC_STATUS_CLASS IN ('Archived','Canceled') THEN 'Y' ELSE 'N' END AS IS_ARCHIVED --,
+--'Y' as current_flag, 
+--1 as version, 
+ from `%s` l
+ --left join vw_rep_reservations_17 r
+-- on l.location_id=r.resource_id
+ left join `%s` w
+ on l.location_id=w.workplace_id
+ left join `%s` b
+ on l.building_ref=b.building_name and l.site_ref=b.site_ref ) s 
+ on s.location_id = d.location_id and d.current_flag = 'Y' 
+ when matched and 
+s.loc_room_category <> d.loc_room_category OR
+s.loc_type <> d.loc_type OR
+--coalesce(s.loc_region_code,'0') <> coalesce(d.loc_region_code,'0') OR
+--s.loc_Region <> d.loc_Region OR
+s.LOC_SVG_LOCATION_ID <> d.LOC_SVG_LOCATION_ID OR
+s.loc_area_code <> d.loc_area_code OR
+s.loc_area <> d.loc_area OR
+s.loc_site_code <> d.loc_site_code OR
+s.loc_site <> d.loc_site OR
+s.loc_building_code <> d.loc_building_code OR
+s.loc_building <> d.loc_building OR
+s.loc_floor_code <> d.loc_floor_code OR
+s.loc_floor <> d.loc_floor OR
+s.loc_room_code <> d.loc_room_code OR
+s.loc_room <> d.loc_room OR
+s.loc_workplace <> d.loc_workplace OR
+--s.is_reservable <> d.is_reservable OR
+--s.loc_street_nr <> d.loc_street_nr OR
+--s.loc_zip <> d.loc_zip OR
+s.loc_city <> d.loc_city OR
+s.loc_country <> d.loc_country OR
+--s.loc_rsrv_out_of_use <> d.loc_rsrv_out_of_use OR
+s.loc_area_sqm <> d.loc_area_sqm OR
+s.loc_drawing_area_sqm <> d.loc_drawing_area_sqm OR
+s.IS_ARCHIVED <> d.IS_ARCHIVED 
+  
+then update set current_flag = 'N'
+"""
+,dim_location,vw_rep_int_locations_16, vw_rep_space_workplaces_16, vw_rep_building_stats_16);
+
+EXECUTE IMMEDIATE mcs_dim_loc_update;
+
+--######################################
+--DIM_LOCATIONS  -- INSERT
+--######################################
+
+set mcs_dim_loc_insert = FORMAT("""
+MERGE INTO `%s` d
+using 
+(
+select  l.room_Cat_ref as loc_room_category,
+l.location_id,
+--r.resource_id,
+l.location_type as loc_type,
+--null as loc_region_code,
+--null as loc_Region,
+CONCAT('loc-',l.LOCATION_ID) as loc_svg_location_id,
+l.area_code as loc_area_code,
+l.area_ref as loc_area,
+l.site_code as loc_site_code,
+l.site_ref as loc_site,
+l.building_code as loc_building_code,
+l.building_ref as loc_building,
+l.floor_code as loc_floor_code,
+l.floor_ref as loc_floor,
+l.room_code as loc_room_code,
+l.room_ref as loc_room,
+l.floor_ref||'['||l.building_ref||']' as loc_flr_bld,
+w.ref as loc_workplace,
+--null as is_reservable,
+--null as loc_street_nr,
+--null as loc_zip ,
+b.city as loc_city,
+b.country as loc_country,
+--r.resource_out_of_use as loc_rsrv_out_of_use,
+--null as loc_rsrv_out_of_use,
+cast(l.room_area as numeric) as loc_area_sqm,
+cast(null as numeric) loc_drawing_area_sqm,
+CASE WHEN l.LOC_STATUS_CLASS IN ('Archived','Canceled') THEN 'Y' ELSE 'N' END AS IS_ARCHIVED ,
+'Y' as current_flag, 
+1 as version, 
+ from `%s` l
+ --left join vw_rep_reservations_17 r
+-- on l.location_id=r.resource_id
+ left join `%s` w
+ on l.location_id=w.workplace_id
+ left join `%s` b
+ on l.building_ref=b.building_name and l.site_ref=b.site_ref ) s 
+ on s.location_id = d.location_id and d.current_flag = 'Y' 
+ when not matched then 
+ insert 
+ (loc_room_category,
+location_id,
+loc_type,
+loc_region_code,
+loc_region,
+loc_svg_location_id,
+loc_area_code,
+loc_area,
+loc_site_code,
+loc_site,
+loc_building_code,
+loc_building,
+loc_floor_code,
+loc_floor,
+loc_room_code,
+loc_room,
+loc_flr_bld,
+loc_workplace,
+is_reservable,
+loc_street_nr,
+loc_zip,
+loc_city,
+loc_country,
+--loc_rsrv_out_of_use,
+loc_area_sqm,
+loc_drawing_area_sqm,
+is_archived,
+current_flag,
+version
+)  
+VALUES
+(loc_room_category,
+location_id,
+loc_type,
+null ,
+null ,
+loc_svg_location_id,
+loc_area_code,
+loc_area,
+loc_site_code,
+loc_site,
+loc_building_code,
+loc_building,
+loc_floor_code,
+loc_floor,
+loc_room_code,
+loc_room,
+loc_flr_bld,
+loc_workplace,
+null ,
+null,
+null,
+loc_city,
+loc_country,
+--loc_rsrv_out_of_use,
+loc_area_sqm,
+loc_drawing_area_sqm,
+is_archived,
+current_flag,
+version
+)
+
+"""
+,dim_location,vw_rep_int_locations_16, vw_rep_space_workplaces_16, vw_rep_building_stats_16);
+
+EXECUTE IMMEDIATE mcs_dim_loc_insert;
+
+--######################################
+--FACT_RESERVATIONS  -- UPDATE
+--######################################
+
+set mcs_fact_resrv_update = FORMAT("""
+MERGE INTO `%s` d
+USING (
+  select  --dept_id
+  reservation_line_id as   rsrv_line_id
+, reservation_id as   rsrv_id
+, reservation_class_id as  rsrv_class
+, description as   rsrv_description
+, note as rsrv_note
+, conference_id as  rsrv_conference_id
+, date(from_datetime) as date_id 
+, datetime(from_datetime,"America/New_York") as rsrv_from_datetime 
+, datetime(until_datetime,"America/New_York") as rsrv_until_datetime
+/*
+, cast(booking_datetime as date) as rsrv_booking_datetime
+,cast(cancellation_datetime as date) as  rsrv_cancellation_datetime
+*/
+, cast(preparation_time  as numeric)as  rsrv_preparation_time
+, cast(cleanup_time as numeric) as  rsrv_cleanup_time
+, cast(duration as numeric) as  rsrv_duration
+
+--, location_id as  rsrv_room_id
+--, COALESCE(r.location_id,st.location_id) rsrv_room_id 
+
+, resource_code as  rsrv_resource_code
+, resource_reference as   rsrv_resource_ref
+, resource_class as  rsrv_resource_class
+, resource_note as rsrv_resource_note
+--, CAST(resource_picture  AS BYTEA) as rsrv_resource_picture
+, resource_category_reference as  RSRV_RESOURCE_CATEGORY_REF    --rsrv_room_category_ref
+, room_layout as   rsrv_room_layout
+, room_purpose as   rsrv_room_purpose
+, CAST(room_capacity AS BIGINT) as rsrv_meeting_room_capacity
+, CAST(service_quantity  AS BIGINT) as  rsrv_service_quantity
+, service_delivery_location as  rsrv_delivery_location
+, CAST(canceled AS INT) as rsrv_cancelled
+, CAST(confidential AS INT) as   rsrv_confidential
+, cast(is_tentative as string) as rsrv_is_tentative
+, case when is_recurrent=0 then 'No'
+  when is_recurrent=1 then 'Yes' end  as   rsrv_is_recurrent
+, cast(count_invitees as bigint) as   rsrv_participants
+, responsible_name as rsrv_people_name
+, responsible_department_code as rsrv_department_code
+, region_reference as rsrv_loc_region
+, site_reference as rsrv_loc_site
+, d.loc_area as rsrv_loc_area
+, building_reference as rsrv_loc_building
+, floor_reference as  rsrv_loc_floor
+, CASE WHEN billing='Yes' then 'Y'
+  when billing='No' then 'N' end as rsrv_billing
+, fiscal_entity_code as  rsrv_fiscal_entity_code
+, gl_account as   rsrv_gl_account
+, cost_center as  rsrv_cost_center
+, fk1 as rsrv_fk1
+, fk2 as   rsrv_fk2
+, fk3 as rsrv_fk3
+, fk4 as rsrv_fk4
+, fk5 as rsrv_fk5
+, fk6 as  rsrv_fk6
+, fk7 as rsrv_fk7
+, fk8 as rsrv_fk8
+, CAST(quantity AS numeric) as rsrv_qty
+, uom as rsrv_uom
+, cast(unit_price as numeric) as rsrv_unit_price
+, currency as rsrv_currency
+, cast(revenue_factor as bigint) as  rsrv_revenue_factor
+, cast(revenue_amount as NUMERIC) as   rsrv_revenue_amount
+, project_code as rsrv_project_code
+, project_reference as  rsrv_project_ref
+, project_part_code as  rsrv_project_part_code
+, project_part_reference as rsrv_project_part_ref
+, resource_reference as   rsrv_room_name
+, c.department_id as rsrv_department_id
+, c.department_name as department_name,
+ r.Client_Organization_ID as rsrv_Client_Organization_ID,
+ r.Client_Organization_Code as rsrv_Client_Organization_Code,
+ r.Client_Organization_Name as rsrv_Client_Organization_Name
+FROM `%s` r
+left join `%s` c
+on r.responsible_department_code = c.department_code
+left join (select  DISTINCT LOC_SITE, LOC_aREA from `%s` where loc_type='SITE' AND CURRENT_FLAG='Y') d
+on r.site_reference=d.loc_site
+--left join  stg_api_location_id st
+--on r.resource_id = st.reference_id
+) s 
+on s.rsrv_line_id = d.rsrv_line_id and d.is_deleted = 'N' 
+when matched and 
+s.rsrv_line_id <> d.rsrv_line_id OR
+s.rsrv_id <> d.rsrv_id OR
+s.rsrv_class <> d.rsrv_class OR
+s.rsrv_conference_id <> d.rsrv_conference_id OR
+s.rsrv_description <> d.rsrv_description OR
+s.rsrv_note <> d.rsrv_note OR
+s.rsrv_from_datetime <> d.rsrv_from_datetime OR
+s.rsrv_until_datetime <> d.rsrv_until_datetime OR
+--s.fk_date_id <> d.fk_date_id OR
+--s.rsrv_booking_datetime <> d.rsrv_booking_datetime OR
+--s.rsrv_cancellation_datetime <> d.rsrv_cancellation_datetime OR
+s.rsrv_preparation_time <> d.rsrv_preparation_time OR
+s.rsrv_cleanup_time <> d.rsrv_cleanup_time OR
+s.rsrv_duration <> d.rsrv_duration OR
+--s.rsrv_cancelled <> d.rsrv_cancelled OR
+--s.rsrv_confidential <> d.rsrv_confidential OR
+s.rsrv_is_tentative <> d.rsrv_is_tentative OR
+s.rsrv_is_recurrent <> d.rsrv_is_recurrent OR
+s.rsrv_participants <> d.rsrv_participants OR
+s.rsrv_resource_code <> d.rsrv_resource_code OR
+s.rsrv_resource_ref <> d.rsrv_resource_ref OR
+s.rsrv_resource_class <> d.rsrv_resource_class OR
+--s.rsrv_resource_category_id <> d.rsrv_resource_category_id OR--
+--s.rsrv_resource_category <> d.rsrv_resource_category OR--
+s.rsrv_resource_category_ref <> d.rsrv_resource_category_ref OR--
+s.rsrv_resource_note <> d.rsrv_resource_note OR
+--s.rsrv_resource_picture <> d.rsrv_resource_picture OR
+s.rsrv_room_layout <> d.rsrv_room_layout OR
+s.rsrv_room_purpose <> d.rsrv_room_purpose OR
+s.rsrv_meeting_room_capacity <> d.rsrv_meeting_room_capacity OR
+s.rsrv_service_quantity <> d.rsrv_service_quantity OR
+s.rsrv_delivery_location <> d.rsrv_delivery_location OR 
+s.rsrv_people_name <> d.rsrv_people_name OR
+--s.rsrv_region_code <> d.rsrv_region_code OR
+s.rsrv_loc_region <> d.rsrv_loc_region OR
+s.rsrv_loc_area <> d.rsrv_loc_area OR
+s.rsrv_loc_site <> d.rsrv_loc_site OR
+s.rsrv_loc_building <> d.rsrv_loc_building OR
+s.rsrv_loc_floor <> d.rsrv_loc_floor OR
+--s.rsrv_room_id <> d.rsrv_room_id OR  -- do not delete this field
+s.rsrv_room_name <> d.rsrv_room_name OR
+s.rsrv_billing <> d.rsrv_billing OR
+s.rsrv_fiscal_entity_code <> d.rsrv_fiscal_entity_code OR
+s.rsrv_gl_account <> d.rsrv_gl_account OR
+s.rsrv_cost_center <> d.rsrv_cost_center OR
+s.rsrv_fk1 <> d.rsrv_fk1 OR
+s.rsrv_fk2 <> d.rsrv_fk2 OR
+s.rsrv_fk3 <> d.rsrv_fk3 OR
+s.rsrv_fk4 <> d.rsrv_fk4 OR
+s.rsrv_fk5 <> d.rsrv_fk5 OR
+s.rsrv_fk6 <> d.rsrv_fk6 OR
+s.rsrv_fk7 <> d.rsrv_fk7 OR
+s.rsrv_fk8 <> d.rsrv_fk8 OR
+--s.fk_financial_dim_id <> d.fk_financial_dim_id OR
+--s.rsrv_cost_item_id <> d.rsrv_cost_item_id OR
+s.rsrv_qty <> d.rsrv_qty OR
+s.rsrv_uom <> d.rsrv_uom OR
+s.rsrv_unit_price <> d.rsrv_unit_price OR
+s.rsrv_currency <> d.rsrv_currency OR
+s.rsrv_revenue_factor <> d.rsrv_revenue_factor OR
+s.rsrv_revenue_amount <> d.rsrv_revenue_amount OR
+s.rsrv_project_code <> d.rsrv_project_code OR
+s.rsrv_project_ref <> d.rsrv_project_ref OR
+s.rsrv_project_part_code <> d.rsrv_project_part_code OR
+s.rsrv_project_part_ref <> d.rsrv_project_part_ref OR
+s.rsrv_department_id <> d.rsrv_department_id OR
+--s.fk_dept_id <> d.fk_dept_id OR
+--s.dept_id <> d.dept_id OR  -- do not delete this field
+s.rsrv_department_code <> d.rsrv_department_code OR
+s.department_name <> d.department_name OR
+s.rsrv_client_organization_id <> d.rsrv_client_organization_id OR
+s.rsrv_client_organization_code <> d.rsrv_client_organization_code OR
+s.rsrv_client_organization_name <> d.rsrv_client_organization_name --OR
+--s.creation_timestamp <> d.creation_timestamp OR
+--s.modification_timestamp <> d.modification_timestamp OR
+--s.is_deleted <> d.is_deleted OR
+--s.start_date <> d.start_date OR
+--s.start_by <> d.start_by OR
+--s.last_modified_timestamp <> d.last_modified_timestamp OR
+then update set is_deleted = 'Y' 
+"""
+,fact_resevations,vw_rep_reservations_17,vw_rep_client_org_16, dim_location);
+
+EXECUTE IMMEDIATE mcs_fact_resrv_update;
+
+--######################################
+--FACT_RESERVATIONS  -- INSERT
+--######################################
+
+set mcs_fact_resrv_insert = FORMAT("""
+MERGE INTO `%s` d
+USING (
+  select  --dept_id
+  reservation_line_id as   rsrv_line_id
+, reservation_id as   rsrv_id
+, reservation_class_id as  rsrv_class
+, description as   rsrv_description
+, note as rsrv_note
+, conference_id as  rsrv_conference_id
+, date(from_datetime) as date_id 
+, datetime(from_datetime,"America/New_York") as rsrv_from_datetime 
+, datetime(until_datetime,"America/New_York") as rsrv_until_datetime
+/*
+, cast(booking_datetime as date) as rsrv_booking_datetime
+,cast(cancellation_datetime as date) as  rsrv_cancellation_datetime
+*/
+, cast(preparation_time  as numeric)as  rsrv_preparation_time
+, cast(cleanup_time as numeric) as  rsrv_cleanup_time
+, cast(duration as numeric) as  rsrv_duration
+
+--, location_id as  rsrv_room_id
+--, COALESCE(r.location_id,st.location_id) rsrv_room_id 
+
+, resource_code as  rsrv_resource_code
+, resource_reference as   rsrv_resource_ref
+, resource_class as  rsrv_resource_class
+, resource_note as rsrv_resource_note
+--, CAST(resource_picture  AS BYTEA) as rsrv_resource_picture
+, resource_category_reference as  RSRV_RESOURCE_CATEGORY_REF    --rsrv_room_category_ref
+, room_layout as   rsrv_room_layout
+, room_purpose as   rsrv_room_purpose
+, CAST(room_capacity AS BIGINT) as rsrv_meeting_room_capacity
+, CAST(service_quantity  AS BIGINT) as  rsrv_service_quantity
+, service_delivery_location as  rsrv_delivery_location
+, CAST(canceled AS INT) as rsrv_cancelled
+, CAST(confidential AS INT) as   rsrv_confidential
+, cast(is_tentative as string)  as rsrv_is_tentative
+, case when is_recurrent=0 then 'No'
+  when is_recurrent=1 then 'Yes' end  as   rsrv_is_recurrent
+, cast(count_invitees as bigint) as   rsrv_participants
+, responsible_name as rsrv_people_name
+, responsible_department_code as rsrv_department_code
+, region_reference as rsrv_loc_region
+, site_reference as rsrv_loc_site
+, d.loc_area as rsrv_loc_area
+, building_reference as rsrv_loc_building
+, floor_reference as  rsrv_loc_floor
+, CASE WHEN billing='Yes' then 'Y'
+  when billing='No' then 'N' end as rsrv_billing
+, fiscal_entity_code as  rsrv_fiscal_entity_code
+, gl_account as   rsrv_gl_account
+, cost_center as  rsrv_cost_center
+, fk1 as rsrv_fk1
+, fk2 as   rsrv_fk2
+, fk3 as rsrv_fk3
+, fk4 as rsrv_fk4
+, fk5 as rsrv_fk5
+, fk6 as  rsrv_fk6
+, fk7 as rsrv_fk7
+, fk8 as rsrv_fk8
+, CAST(quantity AS numeric) as rsrv_qty
+, uom as rsrv_uom
+, cast(unit_price as numeric) as rsrv_unit_price
+, currency as rsrv_currency
+, cast(revenue_factor as bigint) as  rsrv_revenue_factor
+, cast(revenue_amount as NUMERIC) as   rsrv_revenue_amount
+, project_code as rsrv_project_code
+, project_reference as  rsrv_project_ref
+, project_part_code as  rsrv_project_part_code
+, project_part_reference as rsrv_project_part_ref
+, resource_reference as   rsrv_room_name
+, c.department_id as rsrv_department_id
+, c.department_name as department_name,
+ r.Client_Organization_ID as rsrv_Client_Organization_ID,
+ r.Client_Organization_Code as rsrv_Client_Organization_Code,
+ r.Client_Organization_Name as rsrv_Client_Organization_Name
+FROM `%s` r
+left join `%s` c
+on r.responsible_department_code = c.department_code
+left join (select  DISTINCT LOC_SITE, LOC_aREA from `%s` where loc_type='SITE' AND CURRENT_FLAG='Y') d
+on r.site_reference=d.loc_site
+--left join  stg_api_location_id st
+--on r.resource_id = st.reference_id
+) s 
+on s.rsrv_line_id = d.rsrv_line_id and d.is_deleted = 'N' 
+when not matched then
+Insert (
+ rsrv_line_id,
+rsrv_id,
+rsrv_class,
+rsrv_description,
+rsrv_note,
+rsrv_conference_id,
+--date_id,
+rsrv_from_datetime,
+rsrv_until_datetime,
+--rsrv_booking_datetime,
+--rsrv_cancellation_datetime,
+rsrv_preparation_time,
+rsrv_cleanup_time,
+rsrv_duration,
+--rsrv_room_id,
+rsrv_resource_code,
+rsrv_resource_ref,
+rsrv_resource_class,
+rsrv_resource_note,
+--rsrv_resource_picture,
+--rsrv_room_category_ref,
+rsrv_room_layout,
+rsrv_room_purpose,
+rsrv_meeting_room_capacity,
+rsrv_service_quantity,
+--rsrv_cancelled,
+--rsrv_confidential,
+rsrv_is_tentative,
+rsrv_is_recurrent,
+rsrv_participants,
+rsrv_people_name,
+rsrv_department_code,
+rsrv_loc_region,
+rsrv_loc_site,
+rsrv_loc_area,
+rsrv_loc_building,
+rsrv_loc_floor,
+rsrv_billing,
+rsrv_fiscal_entity_code,
+rsrv_gl_account,
+rsrv_cost_center,
+rsrv_fk1,
+rsrv_fk2,
+rsrv_fk3,
+rsrv_fk4,
+rsrv_fk5,
+rsrv_fk6,
+rsrv_fk7,
+rsrv_fk8,
+rsrv_qty,
+rsrv_uom,
+rsrv_unit_price,
+rsrv_currency,
+rsrv_revenue_factor,
+rsrv_revenue_amount,
+rsrv_project_code,
+rsrv_project_ref,
+rsrv_project_part_code,
+rsrv_project_part_ref,
+rsrv_room_name,
+rsrv_department_id,
+department_name,
+rsrv_Client_Organization_ID,
+rsrv_Client_Organization_Code,
+rsrv_Client_Organization_Name,
+--creation_timestamp,
+--modification_timestamp,
+is_deleted,
+--start_date,
+--start_by,
+last_modified_timestamp
+)
+VALUES
+(
+ rsrv_line_id,
+rsrv_id,
+rsrv_class,
+rsrv_description,
+rsrv_note,
+rsrv_conference_id,
+--date_id,
+rsrv_from_datetime,
+rsrv_until_datetime,
+--rsrv_booking_datetime,
+--rsrv_cancellation_datetime,
+rsrv_preparation_time,
+rsrv_cleanup_time,
+rsrv_duration,
+--rsrv_room_id,
+rsrv_resource_code,
+rsrv_resource_ref,
+rsrv_resource_class,
+rsrv_resource_note,
+--rsrv_resource_picture,
+--rsrv_room_category_ref,
+rsrv_room_layout,
+rsrv_room_purpose,
+rsrv_meeting_room_capacity,
+rsrv_service_quantity,
+--rsrv_cancelled,
+--rsrv_confidential,
+rsrv_is_tentative,
+rsrv_is_recurrent,
+rsrv_participants,
+rsrv_people_name,
+rsrv_department_code,
+rsrv_loc_region,
+rsrv_loc_site,
+rsrv_loc_area,
+rsrv_loc_building,
+rsrv_loc_floor,
+rsrv_billing,
+rsrv_fiscal_entity_code,
+rsrv_gl_account,
+rsrv_cost_center,
+rsrv_fk1,
+rsrv_fk2,
+rsrv_fk3,
+rsrv_fk4,
+rsrv_fk5,
+rsrv_fk6,
+rsrv_fk7,
+rsrv_fk8,
+rsrv_qty,
+rsrv_uom,
+rsrv_unit_price,
+rsrv_currency,
+rsrv_revenue_factor,
+rsrv_revenue_amount,
+rsrv_project_code,
+rsrv_project_ref,
+rsrv_project_part_code,
+rsrv_project_part_ref,
+rsrv_room_name,
+rsrv_department_id,
+department_name,
+rsrv_Client_Organization_ID,
+rsrv_Client_Organization_Code,
+rsrv_Client_Organization_Name,
+--creation_timestamp,
+--modification_timestamp,
+'N' ,
+--start_date,
+---start_by,
+TIMESTAMP_TRUNC(datetime(current_timestamp(),"CET"), SECOND)
+)
+"""
+,fact_resevations,vw_rep_reservations_17,vw_rep_client_org_16, dim_location);
+
+EXECUTE IMMEDIATE mcs_fact_resrv_insert;
+
+
+--######################################
+--FACT_WP_BUILDINGS  -- UPDATE
+--######################################
+
+set mcs_fact_building_update = FORMAT("""
+merge into `%s` d
+using (WITH loc AS (
+    SELECT 
+        ll.location_id,
+        ll.location_id AS loc_room_id,
+        lf.location_id AS loc_floor_id,
+        lb.location_id AS loc_building_id,
+        b.city,
+        b.country,
+        ls.location_id AS loc_site_id,
+        la.location_id AS loc_area_id 
+    FROM 
+        `%s` ll
+    LEFT JOIN `%s` lr ON ll.location_id = lr.location_id 
+    LEFT JOIN `%s` lf ON lr.parent_id = lf.location_id
+    LEFT JOIN `%s` lb ON lf.parent_id = lb.location_id
+    LEFT JOIN `%s` ls ON lb.parent_id = ls.location_id
+    LEFT JOIN `%s` la ON ls.parent_id = la.location_id
+    LEFT JOIN `%s` b ON lb.location_id = b.location_id
+    WHERE ll.location_type = 'ROOM' AND lr.location_type = 'ROOM'
+    UNION ALL
+    SELECT 
+        ll.location_id, 
+        NULL AS loc_room_id,
+        ll.location_id AS loc_floor_id,
+        lb.location_id AS loc_building_id,
+        b.city,
+        b.country,
+        ls.location_id AS loc_site_id,
+        la.location_id AS loc_Area_id
+    FROM
+        `%s` ll
+    LEFT JOIN `%s` lf ON ll.location_id=lf.location_id
+    LEFT JOIN `%s` lb ON lf.parent_id=lb.location_id
+    LEFT JOIN `%s` ls ON lb.parent_id=ls.location_id
+    LEFT JOIN `%s` la ON ls.parent_id=la.location_id
+    LEFT JOIN `%s` b ON lb.location_id=b.location_id
+    WHERE ll.location_type='FLOOR' AND lf.location_type='FLOOR' AND lb.location_type='BUILDING'
+    UNION ALL
+    SELECT 
+        ll.location_id,
+        NULL AS loc_room_id,
+        NULL AS loc_floor_id,
+        ll.location_id AS loc_building_id,
+        b.city,
+        b.country,
+        ls.location_id AS loc_site_id,
+        la.location_id AS loc_area_id
+    FROM
+        `%s` ll 
+    LEFT JOIN `%s` ls ON ll.parent_id=ls.location_id
+    LEFT JOIN `%s` la ON ls.parent_id=la.location_id
+    LEFT JOIN `%s` b ON ll.location_id=b.location_id
+    WHERE ll.location_type='BUILDING'
+    UNION ALL
+    SELECT 
+        ll.location_id, 
+        NULL AS loc_room_id,
+        NULL AS loc_floor_id,
+        NULL AS loc_building_id,
+        NULL AS city,
+        NULL AS country,
+        ls.location_id AS  loc_site_id,
+        la.location_id AS loc_area_id
+    FROM  
+        `%s` ll  
+    LEFT JOIN `%s` ls ON ll.location_id=ls.location_id
+    LEFT JOIN `%s` la ON ls.parent_id=la.location_id
+    WHERE ll.location_type='SITE' AND ls.location_type='SITE'
+    UNION ALL
+    SELECT
+        ll.location_id,
+        NULL AS loc_room_id,
+        NULL AS loc_floor_id,
+        NULL AS loc_building_id,
+        NULL AS city,
+        NULL AS country,
+        NULL AS loc_site_id,
+        la.location_id AS loc_area_id
+    FROM  
+        `%s` ll
+    LEFT JOIN `%s` la ON ll.location_id=la.location_id
+    WHERE ll.location_type='AREA' AND la.location_type='AREA' 
+)
+SELECT 
+    DISTINCT l.location_id AS wp_location_id,
+    l.location_type AS wp_location_type,
+    CASE 
+        WHEN l.location_type = 'BUILDING' THEN l.building_type_ref
+    END AS wp_building_type,
+    b.prop_ownership_type_code AS wp_ownership_type,
+    b.accommodation AS wp_Accommodation,
+    CAST(b.year_build AS INT) AS wp_year_built,
+    b.re_zone AS wp_real_estate_zone,
+    EXTRACT(YEAR FROM CURRENT_DATE) - CAST(b.year_build AS INT) AS WP_BUILDING_AGE,
+    l.room_cat_ref AS wp_room_category_reference,
+    l.room_purpose_ref AS wp_room_purpose_reference,
+    CAST(l.room_area AS numeric) AS wp_room_Area,
+    CAST(l.workplaces_nr AS int) AS wp_nr_of_workplaces,
+    CAST(l.employees_nr AS int) AS wp_nr_of_employees,
+    l.room_cat_group_ref AS wp_room_category_group_reference,
+    loc.loc_room_id AS wp_loc_room_id,
+    l.room_ref AS wp_loc_room_ref,
+    loc.loc_floor_id AS wp_loc_floor_id,
+    l.floor_ref AS wp_loc_floor_Ref,
+    loc.loc_building_id AS wp_loc_building_id,
+    l.building_ref AS wp_loc_building_ref,
+    loc.loc_site_id AS wp_loc_site_id,
+    l.site_ref AS wp_loc_site_Ref,
+    loc.loc_area_id AS wp_loc_area_id,
+    l.area_Ref AS wp_loc_area_ref,
+    CASE 
+        WHEN l.location_type = 'BUILDING' THEN loc.city
+    END AS wp_city,
+    CASE 
+        WHEN l.location_type = 'BUILDING' THEN loc.country
+    END AS wp_country,
+    CAST(b.en15221_gross_floor_area AS float64) AS wp_gross_floor_area,
+    CAST(b.en15221_net_room_area  AS float64)AS wp_net_room_area,
+    CAST(b.en15221_net_floor_area  AS float64) AS wp_net_floor_area,
+    CAST(b.iso9836_net_area AS float64) AS wp_net_area,
+    CAST(b.iso9836_gross_external_area  AS float64)AS wp_gross_external_area,
+    CAST(b.iso9836_usable_Area AS float64) AS wp_usable_area,
+    CAST(b.en15221_gross_floor_area AS float64) as en15221_gross_floor_area,
+    CAST(b.en15221_net_room_area  AS float64) as en15221_net_room_area,
+    CAST(b.en15221_net_floor_area  AS float64) as en15221_net_floor_area,
+    CAST(b.iso9836_net_area AS float64) as iso9836_net_area,
+    CAST(b.iso9836_gross_external_area  AS float64) as iso9836_gross_external_area,
+    CAST(b.iso9836_usable_Area AS float64) as iso9836_usable_Area,
+    CAST(b.en15221_level_area AS float64) as en15221_level_area,
+    CAST(b.en15221_internal_floor_area AS float64) as en15221_internal_floor_area,
+    CAST(b.en15221_techical_area AS float64) as en15221_techical_area,
+    CAST(b.en15221_circulation_area AS float64) as en15221_circulation_area,
+    CAST(b.en15221_amenity_area AS float64) as en15221_amenity_area,
+    CAST(b.en15221_primary_area AS float64) as en15221_primary_area,
+    CAST(b.en15221_nonfunc_level_area AS float64) as en15221_nonfunc_level_area,
+    CAST(b.en15221_ext_construct_area AS float64) as en15221_ext_construct_area,
+    CAST(b.en15221_int_construct_area AS float64) as en15221_int_construct_area,
+    CAST(b.en15221_partition_wall_area AS float64) as en15221_partition_wall_area,
+    CAST(b.iso9836_gross_internal_area AS float64) as iso9836_gross_internal_area,
+    CAST(b.iso9836_main_usable_area AS float64) as iso9836_main_usable_area,
+    CAST(b.iso9836_subsidiary_usage_area AS float64) as iso9836_subsidiary_usage_area,
+    CAST(b.iso9836_services_area AS float64) as iso9836_services_area,
+    CAST(b.iso9836_circulations_area AS float64) as iso9836_circulations_area,
+    CAST(b.iso9836_exterior_walls_area AS float64) as iso9836_exterior_walls_area,
+    CAST(b.iso9836_int_construction_area AS float64) as iso9836_int_construction_area
+FROM 
+    `%s` l 
+LEFT JOIN loc ON l.location_id = loc.location_id
+LEFT JOIN `%s` b ON l.location_id = b.location_id
+WHERE 
+    l.LOC_STATUS_CLASS = 'Active') s on 
+    s.wp_location_id = d.wp_location_id and d.is_deleted = 'N'
+    when  matched and
+   s.wp_location_id <> d.wp_location_id OR
+s.wp_location_type <> d.wp_location_type OR
+s.wp_building_type <> d.wp_building_type OR
+s.wp_ownership_type <> d.wp_ownership_type OR
+s.wp_Accommodation <> d.wp_Accommodation OR
+s.wp_year_built <> d.wp_year_built OR
+s.wp_real_estate_zone <> d.wp_real_estate_zone OR
+s.WP_BUILDING_AGE <> d.WP_BUILDING_AGE OR
+s.wp_room_category_reference <> d.wp_room_category_reference OR
+s.wp_room_purpose_reference <> d.wp_room_purpose_reference OR
+s.wp_room_Area <> d.wp_room_Area OR
+s.wp_nr_of_workplaces <> d.wp_nr_of_workplaces OR
+s.wp_nr_of_employees <> d.wp_nr_of_employees OR
+s.wp_room_category_group_reference <> d.wp_room_category_group_reference OR
+s.wp_loc_room_id <> d.wp_loc_room_id OR
+s.wp_loc_room_ref <> d.wp_loc_room_ref OR
+s.wp_loc_floor_id <> d.wp_loc_floor_id OR
+s.wp_loc_floor_Ref <> d.wp_loc_floor_Ref OR
+s.wp_loc_building_id <> d.wp_loc_building_id OR
+s.wp_loc_building_ref <> d.wp_loc_building_ref OR
+s.wp_loc_site_id <> d.wp_loc_site_id OR
+s.wp_loc_site_Ref <> d.wp_loc_site_Ref OR
+s.wp_loc_area_id <> d.wp_loc_area_id OR
+s.wp_loc_area_ref <> d.wp_loc_area_ref OR
+s.wp_city <> d.wp_city OR
+s.wp_country <> d.wp_country OR
+s.wp_gross_floor_area <> d.wp_gross_floor_area OR
+s.wp_net_room_area <> d.wp_net_room_area OR
+s.wp_net_floor_area <> d.wp_net_floor_area OR
+s.wp_net_area <> d.wp_net_area OR
+s.wp_gross_external_area <> d.wp_gross_external_area OR
+s.wp_usable_area <> d.wp_usable_area OR
+s.en15221_gross_floor_area <> d.en15221_gross_floor_area OR
+s.en15221_net_room_area <> d.en15221_net_room_area OR
+s.en15221_net_floor_area <> d.en15221_net_floor_area OR
+s.iso9836_net_area <> d.iso9836_net_area OR
+s.iso9836_gross_external_area <> d.iso9836_gross_external_area OR
+s.iso9836_usable_Area <> d.iso9836_usable_Area OR
+s.en15221_level_area <> d.en15221_level_area OR
+s.en15221_internal_floor_area <> d.en15221_internal_floor_area OR
+s.en15221_techical_area <> d.en15221_techical_area OR
+s.en15221_circulation_area <> d.en15221_circulation_area OR
+s.en15221_amenity_area <> d.en15221_amenity_area OR
+s.en15221_primary_area <> d.en15221_primary_area OR
+s.en15221_nonfunc_level_area <> d.en15221_nonfunc_level_area OR
+s.en15221_ext_construct_area <> d.en15221_ext_construct_area OR
+s.en15221_int_construct_area <> d.en15221_int_construct_area OR
+s.en15221_partition_wall_area <> d.en15221_partition_wall_area OR
+s.iso9836_gross_internal_area <> d.iso9836_gross_internal_area OR
+s.iso9836_main_usable_area <> d.iso9836_main_usable_area OR
+s.iso9836_subsidiary_usage_area <> d.iso9836_subsidiary_usage_area OR
+s.iso9836_services_area <> d.iso9836_services_area OR
+s.iso9836_circulations_area <> d.iso9836_circulations_area OR
+s.iso9836_exterior_walls_area <> d.iso9836_exterior_walls_area OR
+s.iso9836_int_construction_area <> d.iso9836_int_construction_area
+then update set is_deleted = 'Y'
+"""
+,
+fact_wp_buildings,
+vw_rep_int_locations_16,
+vw_rep_int_locations_16,
+vw_rep_int_locations_16,
+vw_rep_int_locations_16,
+vw_rep_int_locations_16,
+vw_rep_int_locations_16,
+vw_rep_building_stats_16,
+vw_rep_int_locations_16,
+vw_rep_int_locations_16,
+vw_rep_int_locations_16,
+vw_rep_int_locations_16,
+vw_rep_int_locations_16,
+vw_rep_building_stats_16,
+vw_rep_int_locations_16,
+vw_rep_int_locations_16,
+vw_rep_int_locations_16,
+vw_rep_building_stats_16,
+vw_rep_int_locations_16,
+vw_rep_int_locations_16,
+vw_rep_int_locations_16,
+vw_rep_int_locations_16,
+vw_rep_int_locations_16,
+vw_rep_int_locations_16,
+vw_rep_building_stats_16
+);
+
+EXECUTE IMMEDIATE mcs_fact_building_update;
+
+--######################################
+--FACT_WP_BUILDINGS  -- INSERT
+--######################################
+
+
+set mcs_fact_building_insert = FORMAT("""
+merge into `%s` d
+using (WITH loc AS (
+    SELECT 
+        ll.location_id,
+        ll.location_id AS loc_room_id,
+        lf.location_id AS loc_floor_id,
+        lb.location_id AS loc_building_id,
+        b.city,
+        b.country,
+        ls.location_id AS loc_site_id,
+        la.location_id AS loc_area_id 
+    FROM 
+        `%s` ll
+    LEFT JOIN `%s` lr ON ll.location_id = lr.location_id 
+    LEFT JOIN `%s` lf ON lr.parent_id = lf.location_id
+    LEFT JOIN `%s` lb ON lf.parent_id = lb.location_id
+    LEFT JOIN `%s` ls ON lb.parent_id = ls.location_id
+    LEFT JOIN `%s` la ON ls.parent_id = la.location_id
+    LEFT JOIN `%s` b ON lb.location_id = b.location_id
+    WHERE ll.location_type = 'ROOM' AND lr.location_type = 'ROOM'
+    UNION ALL
+    SELECT 
+        ll.location_id, 
+        NULL AS loc_room_id,
+        ll.location_id AS loc_floor_id,
+        lb.location_id AS loc_building_id,
+        b.city,
+        b.country,
+        ls.location_id AS loc_site_id,
+        la.location_id AS loc_Area_id
+    FROM
+        `%s` ll
+    LEFT JOIN `%s` lf ON ll.location_id=lf.location_id
+    LEFT JOIN `%s` lb ON lf.parent_id=lb.location_id
+    LEFT JOIN `%s` ls ON lb.parent_id=ls.location_id
+    LEFT JOIN `%s` la ON ls.parent_id=la.location_id
+    LEFT JOIN `%s` b ON lb.location_id=b.location_id
+    WHERE ll.location_type='FLOOR' AND lf.location_type='FLOOR' AND lb.location_type='BUILDING'
+    UNION ALL
+    SELECT 
+        ll.location_id,
+        NULL AS loc_room_id,
+        NULL AS loc_floor_id,
+        ll.location_id AS loc_building_id,
+        b.city,
+        b.country,
+        ls.location_id AS loc_site_id,
+        la.location_id AS loc_area_id
+    FROM
+        `%s` ll 
+    LEFT JOIN `%s` ls ON ll.parent_id=ls.location_id
+    LEFT JOIN `%s` la ON ls.parent_id=la.location_id
+    LEFT JOIN `%s` b ON ll.location_id=b.location_id
+    WHERE ll.location_type='BUILDING'
+    UNION ALL
+    SELECT 
+        ll.location_id, 
+        NULL AS loc_room_id,
+        NULL AS loc_floor_id,
+        NULL AS loc_building_id,
+        NULL AS city,
+        NULL AS country,
+        ls.location_id AS  loc_site_id,
+        la.location_id AS loc_area_id
+    FROM  
+        `%s` ll  
+    LEFT JOIN `%s` ls ON ll.location_id=ls.location_id
+    LEFT JOIN `%s` la ON ls.parent_id=la.location_id
+    WHERE ll.location_type='SITE' AND ls.location_type='SITE'
+    UNION ALL
+    SELECT
+        ll.location_id,
+        NULL AS loc_room_id,
+        NULL AS loc_floor_id,
+        NULL AS loc_building_id,
+        NULL AS city,
+        NULL AS country,
+        NULL AS loc_site_id,
+        la.location_id AS loc_area_id
+    FROM  
+        `%s` ll
+    LEFT JOIN `%s` la ON ll.location_id=la.location_id
+    WHERE ll.location_type='AREA' AND la.location_type='AREA' 
+)
+SELECT 
+    DISTINCT l.location_id AS wp_location_id,
+    l.location_type AS wp_location_type,
+    CASE 
+        WHEN l.location_type = 'BUILDING' THEN l.building_type_ref
+    END AS wp_building_type,
+    b.prop_ownership_type_code AS wp_ownership_type,
+    b.accommodation AS wp_Accommodation,
+    CAST(b.year_build AS INT) AS wp_year_built,
+    b.re_zone AS wp_real_estate_zone,
+    EXTRACT(YEAR FROM CURRENT_DATE) - CAST(b.year_build AS INT) AS WP_BUILDING_AGE,
+    l.room_cat_ref AS wp_room_category_reference,
+    l.room_purpose_ref AS wp_room_purpose_reference,
+    CAST(l.room_area AS numeric) AS wp_room_Area,
+    CAST(l.workplaces_nr AS int) AS wp_nr_of_workplaces,
+    CAST(l.employees_nr AS int) AS wp_nr_of_employees,
+    l.room_cat_group_ref AS wp_room_category_group_reference,
+    loc.loc_room_id AS wp_loc_room_id,
+    l.room_ref AS wp_loc_room_ref,
+    loc.loc_floor_id AS wp_loc_floor_id,
+    l.floor_ref AS wp_loc_floor_Ref,
+    loc.loc_building_id AS wp_loc_building_id,
+    l.building_ref AS wp_loc_building_ref,
+    loc.loc_site_id AS wp_loc_site_id,
+    l.site_ref AS wp_loc_site_Ref,
+    loc.loc_area_id AS wp_loc_area_id,
+    l.area_Ref AS wp_loc_area_ref,
+    CASE 
+        WHEN l.location_type = 'BUILDING' THEN loc.city
+    END AS wp_city,
+    CASE 
+        WHEN l.location_type = 'BUILDING' THEN loc.country
+    END AS wp_country,
+    CAST(b.en15221_gross_floor_area AS float64) AS wp_gross_floor_area,
+    CAST(b.en15221_net_room_area  AS float64)AS wp_net_room_area,
+    CAST(b.en15221_net_floor_area  AS float64) AS wp_net_floor_area,
+    CAST(b.iso9836_net_area AS float64) AS wp_net_area,
+    CAST(b.iso9836_gross_external_area  AS float64)AS wp_gross_external_area,
+    CAST(b.iso9836_usable_Area AS float64) AS wp_usable_area,
+    CAST(b.en15221_gross_floor_area AS float64) as en15221_gross_floor_area,
+    CAST(b.en15221_net_room_area  AS float64) as en15221_net_room_area,
+    CAST(b.en15221_net_floor_area  AS float64) as en15221_net_floor_area,
+    CAST(b.iso9836_net_area AS float64) as iso9836_net_area,
+    CAST(b.iso9836_gross_external_area  AS float64) as iso9836_gross_external_area,
+    CAST(b.iso9836_usable_Area AS float64) as iso9836_usable_Area,
+    CAST(b.en15221_level_area AS float64) as en15221_level_area,
+    CAST(b.en15221_internal_floor_area AS float64) as en15221_internal_floor_area,
+    CAST(b.en15221_techical_area AS float64) as en15221_techical_area,
+    CAST(b.en15221_circulation_area AS float64) as en15221_circulation_area,
+    CAST(b.en15221_amenity_area AS float64) as en15221_amenity_area,
+    CAST(b.en15221_primary_area AS float64) as en15221_primary_area,
+    CAST(b.en15221_nonfunc_level_area AS float64) as en15221_nonfunc_level_area,
+    CAST(b.en15221_ext_construct_area AS float64) as en15221_ext_construct_area,
+    CAST(b.en15221_int_construct_area AS float64) as en15221_int_construct_area,
+    CAST(b.en15221_partition_wall_area AS float64) as en15221_partition_wall_area,
+    CAST(b.iso9836_gross_internal_area AS float64) as iso9836_gross_internal_area,
+    CAST(b.iso9836_main_usable_area AS float64) as iso9836_main_usable_area,
+    CAST(b.iso9836_subsidiary_usage_area AS float64) as iso9836_subsidiary_usage_area,
+    CAST(b.iso9836_services_area AS float64) as iso9836_services_area,
+    CAST(b.iso9836_circulations_area AS float64) as iso9836_circulations_area,
+    CAST(b.iso9836_exterior_walls_area AS float64) as iso9836_exterior_walls_area,
+    CAST(b.iso9836_int_construction_area AS float64) as iso9836_int_construction_area
+FROM 
+    `%s` l 
+LEFT JOIN loc ON l.location_id = loc.location_id
+LEFT JOIN `%s` b ON l.location_id = b.location_id
+WHERE 
+    l.LOC_STATUS_CLASS = 'Active') s on 
+    s.wp_location_id = d.wp_location_id 
+    when not matched then
+    insert (
+wp_location_id,
+wp_location_type,
+wp_building_type,
+wp_ownership_type,
+wp_Accommodation,
+wp_year_built,
+wp_real_estate_zone,
+WP_BUILDING_AGE,
+wp_room_category_reference,
+wp_room_purpose_reference,
+wp_room_Area,
+wp_nr_of_workplaces,
+wp_nr_of_employees,
+wp_room_category_group_reference,
+wp_loc_room_id,
+wp_loc_room_ref,
+wp_loc_floor_id,
+wp_loc_floor_Ref,
+wp_loc_building_id,
+wp_loc_building_ref,
+wp_loc_site_id,
+wp_loc_site_Ref,
+wp_loc_area_id,
+wp_loc_area_ref,
+wp_city,
+wp_country,
+wp_gross_floor_area,
+wp_net_room_area,
+wp_net_floor_area,
+wp_net_area,
+wp_gross_external_area,
+wp_usable_area,
+en15221_gross_floor_area,
+en15221_net_room_area,
+en15221_net_floor_area,
+iso9836_net_area,
+iso9836_gross_external_area,
+iso9836_usable_Area,
+en15221_level_area,
+en15221_internal_floor_area,
+en15221_techical_area,
+en15221_circulation_area,
+en15221_amenity_area,
+en15221_primary_area,
+en15221_nonfunc_level_area,
+en15221_ext_construct_area,
+en15221_int_construct_area,
+en15221_partition_wall_area,
+iso9836_gross_internal_area,
+iso9836_main_usable_area,
+iso9836_subsidiary_usage_area,
+iso9836_services_area,
+iso9836_circulations_area,
+iso9836_exterior_walls_area,
+iso9836_int_construction_area,
+is_deleted,
+last_modified_timestamp
+
+    )
+    values 
+    (wp_location_id,
+wp_location_type,
+wp_building_type,
+wp_ownership_type,
+wp_Accommodation,
+wp_year_built,
+wp_real_estate_zone,
+WP_BUILDING_AGE,
+wp_room_category_reference,
+wp_room_purpose_reference,
+wp_room_Area,
+wp_nr_of_workplaces,
+wp_nr_of_employees,
+wp_room_category_group_reference,
+wp_loc_room_id,
+wp_loc_room_ref,
+wp_loc_floor_id,
+wp_loc_floor_Ref,
+wp_loc_building_id,
+wp_loc_building_ref,
+wp_loc_site_id,
+wp_loc_site_Ref,
+wp_loc_area_id,
+wp_loc_area_ref,
+wp_city,
+wp_country,
+wp_gross_floor_area,
+wp_net_room_area,
+wp_net_floor_area,
+wp_net_area,
+wp_gross_external_area,
+wp_usable_area,
+en15221_gross_floor_area,
+en15221_net_room_area,
+en15221_net_floor_area,
+iso9836_net_area,
+iso9836_gross_external_area,
+iso9836_usable_Area,
+en15221_level_area,
+en15221_internal_floor_area,
+en15221_techical_area,
+en15221_circulation_area,
+en15221_amenity_area,
+en15221_primary_area,
+en15221_nonfunc_level_area,
+en15221_ext_construct_area,
+en15221_int_construct_area,
+en15221_partition_wall_area,
+iso9836_gross_internal_area,
+iso9836_main_usable_area,
+iso9836_subsidiary_usage_area,
+iso9836_services_area,
+iso9836_circulations_area,
+iso9836_exterior_walls_area,
+iso9836_int_construction_area,
+'N',
+TIMESTAMP_TRUNC(datetime(current_timestamp(),"CET"), SECOND)
+
+)
+"""
+,
+fact_wp_buildings,
+vw_rep_int_locations_16,
+vw_rep_int_locations_16,
+vw_rep_int_locations_16,
+vw_rep_int_locations_16,
+vw_rep_int_locations_16,
+vw_rep_int_locations_16,
+vw_rep_building_stats_16,
+vw_rep_int_locations_16,
+vw_rep_int_locations_16,
+vw_rep_int_locations_16,
+vw_rep_int_locations_16,
+vw_rep_int_locations_16,
+vw_rep_building_stats_16,
+vw_rep_int_locations_16,
+vw_rep_int_locations_16,
+vw_rep_int_locations_16,
+vw_rep_building_stats_16,
+vw_rep_int_locations_16,
+vw_rep_int_locations_16,
+vw_rep_int_locations_16,
+vw_rep_int_locations_16,
+vw_rep_int_locations_16,
+vw_rep_int_locations_16,
+vw_rep_building_stats_16
+);
+
+
+EXECUTE IMMEDIATE mcs_fact_building_insert;
+
+
+---#####################
+---FACT_HELPDESK UPDATE
+---#####################
+set mcs_fact_helpdesk_update = FORMAT("""
+MERGE INTO `%s` h
+using
+(
+  SELECT 
+                 c.call_id      AS           hd_call_id
+               , c.ext_reference                        AS           hd_external_ref
+               , c.priority                                     AS           hd_priority
+               , c.cause       AS           hd_cause
+               , c.book_method                                        AS           hd_book_method
+               , DATETIME(c.date_received,"America/New_York")                           AS                hd_date_received
+               , DATETIME(c.date_due,"America/New_York")                                    AS               hd_due_date
+               , DATETIME(c.date_closed ,"America/New_York")                              AS               hd_date_closed 
+               , c.nature_code                           AS           hd_nature_code
+               , c.nature_reference   AS               hd_nature
+               , c.nature_lvl1                             AS           hd_nature_l1
+               , c.nature_lvl2                             AS           hd_nature_l2
+               , c.nature_lvl3                             AS           hd_nature_l3
+               , c.caller_name                           AS           hd_caller_name
+               , c.caller_code                             AS           hd_caller_code
+               , c.caller_dept_name  AS               hd_caller_department
+               , c.caller_dept_code    AS               hd_caller_department_code
+               , c.caller_company_name         AS           hd_caller_company
+               , c.caller_company_code          AS           hd_caller_company_code
+               , c.ASsigned_name                     AS           hd_ASsigned_person_name 
+               , c.ASsigned_code                       AS           hd_ASsigned_person_code
+               , c.ASsigned_dept_name          AS           hd_ASsigned_person_department 
+               , ASsigned_dept_code  AS               hd_ASsigned_person_department_code 
+               , ASsigned_company_name     AS           hd_ASsigned_person_company
+               , ASsigned_company_code       AS           hd_ASsigned_person_company_code
+               , c.area_code                               AS           hd_area_code
+               , c.area_reference                      AS           hd_area_reference
+               , c.site_code                                AS           hd_site_code
+               , c.site_reference                       AS           hd_site_reference
+               , c.building_code                         AS           hd_building_code
+               , c.building_reference   AS               hd_building_reference
+               , c.floor_code                               AS           hd_floor_code
+               , c.floor_reference                      AS           hd_floor_reference
+               , c.room_code                             AS           hd_room_code
+               , c.room_reference                    AS           hd_room_reference
+               , c.status_code                            AS           hd_status_code
+               , c.status_name                          AS           hd_status
+               , c.status_clASs_name  AS               hd_status_clASs
+               , CAST(EXTRACT(DAY FROM c.elapsed_time) AS INT64)    AS           hd_elapsed_time
+               , NULL           AS  start_by
+               , c.reference                                AS           hd_reference
+               , b.city                                           AS  hd_city
+               , b.country                                   AS  hd_country
+               , b.building_type_ref   AS  hd_building_type
+               , CASE    WHEN EXTRACT(DAY FROM c.elapsed_time) =0 THEN '0d'
+                                             WHEN EXTRACT(DAY FROM c.elapsed_time) =1 THEN '1d'
+                                             WHEN EXTRACT(DAY FROM c.elapsed_time) BETWEEN 2 AND 7 THEN '2-7d'
+                                             WHEN EXTRACT(DAY FROM c.elapsed_time) BETWEEN 8 and 14 THEN '8-14d'
+                                             WHEN EXTRACT(DAY FROM c.elapsed_time) BETWEEN 15 AND 30 THEN '15-30d'
+                                             WHEN EXTRACT(DAY FROM c.elapsed_time) > 30 THEN '>30d' 
+                 END             AS  hd_elapsed_time_slices
+               , CAST(c.date_received AS DATETIME )  AS  hd_date_received_YMD
+               , 'NULL'         AS  hd_customer                                          
+               , 'NULL'                                         AS  hd_customer_code
+               , c.CLIENT_ORGANIZATION_ID                                AS  hd_Client_Organization_ID
+               , c.CLIENT_ORGANIZATION_CODE                                         AS  hd_Client_Organization_Code
+               , c.CLIENT_ORGANIZATION_NAME                                        AS  hd_Client_Organization_Name
+               FROM 
+               `%s` c
+               LEFT JOIN
+               `%s` b 
+               ON c.building_reference = b.building_name
+               ) s
+ON s.hd_call_id = h.hd_call_id and h.is_deleted = 'Y'
+WHEN matched AND
+               s.hd_external_ref <> h.hd_external_ref OR
+               s.hd_priority <> h.hd_priority OR
+               s.hd_cause <> h.hd_cause OR
+               s.hd_book_method <> h.hd_book_method OR
+               s.hd_date_received <> h.hd_date_received OR
+               s.hd_due_date <> h.hd_due_date OR
+               s.hd_date_closed <> h.hd_date_closed OR
+               s.hd_nature_code <> h.hd_nature_code OR
+               s.hd_nature <> h.hd_nature OR
+               s.hd_nature_l1 <> h.hd_nature_l1 OR
+               s.hd_nature_l2 <> h.hd_nature_l2 OR
+               s.hd_nature_l3 <> h.hd_nature_l3 OR
+               s.hd_caller_name <> h.hd_caller_name OR
+               s.hd_caller_code <> h.hd_caller_code OR
+               s.hd_caller_department <> h.hd_caller_department OR
+               s.hd_caller_department_code <> h.hd_caller_department_code OR
+               s.hd_caller_company <> h.hd_caller_company OR
+               s.hd_caller_company_code <> h.hd_caller_company_code OR
+               s.hd_ASsigned_person_name <> h.hd_ASsigned_person_name OR
+               s.hd_ASsigned_person_code <> h.hd_ASsigned_person_code OR
+               s.hd_ASsigned_person_department <> h.hd_ASsigned_person_department OR
+               s.hd_ASsigned_person_department_code <> h.hd_ASsigned_person_department_code OR
+               s.hd_ASsigned_person_company <> h.hd_ASsigned_person_company OR
+               s.hd_ASsigned_person_company_code <> h.hd_ASsigned_person_company_code OR
+               s.hd_area_code <> h.hd_area_code OR
+               s.hd_area_reference <> h.hd_area_reference OR
+               s.hd_site_code <> h.hd_site_code OR
+               s.hd_site_reference <> h.hd_site_reference OR
+               s.hd_building_code <> h.hd_building_code OR
+               s.hd_building_reference <> h.hd_building_reference OR
+               s.hd_floor_code <> h.hd_floor_code OR
+               s.hd_floor_reference <> h.hd_floor_reference OR
+               s.hd_room_code <> h.hd_room_code OR
+               s.hd_room_reference <> h.hd_room_reference OR
+               s.hd_status_code <> h.hd_status_code OR
+               s.hd_status <> h.hd_status OR
+               s.hd_status_clASs <> h.hd_status_clASs OR
+               s.hd_elapsed_time <> h.hd_elapsed_time OR
+               s.hd_reference <> h.hd_reference OR
+               s.hd_city <> h.hd_city OR
+               s.hd_country <> h.hd_country OR
+               s.hd_building_type <> h.hd_building_type OR
+               s.hd_elapsed_time_slices <> h.hd_elapsed_time_slices OR
+               s.hd_date_received_YMD <> h.hd_date_received_YMD OR
+               s.hd_customer <> h.hd_customer OR
+               s.hd_customer_code <> h.hd_customer_code OR
+               s.hd_Client_Organization_ID <> h.hd_Client_Organization_ID OR
+               s.hd_Client_Organization_Code <> h.hd_Client_Organization_Code OR
+               s.hd_Client_Organization_Name <> h.hd_Client_Organization_Name
+THEN UPDATE SET is_deleted = 'Y',modification_timestamp = CURRENT_DATETIME
+"""
+,fact_helpdesk, vw_rep_calls_18 , vw_rep_building_stats_16);          
+
+EXECUTE IMMEDIATE mcs_fact_helpdesk_update;
+
+
+---#####################
+---FACT_HELPDESK INSERT
+---#####################
+
+set mcs_fact_helpdesk_insert = FORMAT("""
+MERGE INTO `%s` h
+USING
+               (
+               SELECT 
+                 ROW_NUMBER() OVER()       AS  pk_fact_helpdesk_seq_id
+               , c.call_id      AS           hd_call_id
+               , c.ext_reference                        AS           hd_external_ref
+               , c.priority                                     AS           hd_priority
+               , c.cause       AS           hd_cause
+               , c.book_method                                        AS           hd_book_method
+               , DATETIME(c.date_received,"America/New_York")                           AS                hd_date_received
+               , DATETIME(c.date_due,"America/New_York")                                    AS               hd_due_date
+               , DATETIME(c.date_closed ,"America/New_York")                              AS               hd_date_closed 
+               , c.nature_code                           AS           hd_nature_code
+               , c.nature_reference   AS               hd_nature
+               , c.nature_lvl1                             AS           hd_nature_l1
+               , c.nature_lvl2                             AS           hd_nature_l2
+               , c.nature_lvl3                             AS           hd_nature_l3
+               , c.caller_name                           AS           hd_caller_name
+               , c.caller_code                             AS           hd_caller_code
+               , c.caller_dept_name  AS               hd_caller_department
+               , c.caller_dept_code    AS               hd_caller_department_code
+               , c.caller_company_name         AS           hd_caller_company
+               , c.caller_company_code          AS           hd_caller_company_code
+               , c.ASsigned_name                     AS           hd_ASsigned_person_name 
+               , c.ASsigned_code                       AS           hd_ASsigned_person_code
+               , c.ASsigned_dept_name          AS           hd_ASsigned_person_department 
+               , ASsigned_dept_code  AS               hd_ASsigned_person_department_code 
+               , ASsigned_company_name     AS           hd_ASsigned_person_company
+               , ASsigned_company_code       AS           hd_ASsigned_person_company_code
+               , c.area_code                               AS           hd_area_code
+               , c.area_reference                      AS           hd_area_reference
+               , c.site_code                                AS           hd_site_code
+               , c.site_reference                       AS           hd_site_reference
+               , c.building_code                         AS           hd_building_code
+               , c.building_reference   AS               hd_building_reference
+               , c.floor_code                               AS           hd_floor_code
+               , c.floor_reference                      AS           hd_floor_reference
+               , c.room_code                             AS           hd_room_code
+               , c.room_reference                    AS           hd_room_reference
+               , c.status_code                            AS           hd_status_code
+               , c.status_name                          AS           hd_status
+               , c.status_clASs_name  AS               hd_status_clASs
+               , CAST(EXTRACT(DAY FROM c.elapsed_time) AS INT64)    AS           hd_elapsed_time
+               , CURRENT_DATETIME              AS  start_date
+               , NULL           AS  start_by
+               , c.reference                                AS           hd_reference
+               , b.city                                           AS  hd_city
+               , b.country                                   AS  hd_country
+               , b.building_type_ref   AS  hd_building_type
+               , CASE    WHEN EXTRACT(DAY FROM c.elapsed_time) =0 THEN '0d'
+                                             WHEN EXTRACT(DAY FROM c.elapsed_time) =1 THEN '1d'
+                                             WHEN EXTRACT(DAY FROM c.elapsed_time) BETWEEN 2 AND 7 THEN '2-7d'
+                                             WHEN EXTRACT(DAY FROM c.elapsed_time) BETWEEN 8 and 14 THEN '8-14d'
+                                             WHEN EXTRACT(DAY FROM c.elapsed_time) BETWEEN 15 AND 30 THEN '15-30d'
+                                             WHEN EXTRACT(DAY FROM c.elapsed_time) > 30 THEN '>30d' 
+                 END             AS  hd_elapsed_time_slices
+               , CAST(EXTRACT(DAY FROM (CURRENT_DATE -CAST(c.date_received AS DATE))) AS INT64)   AS hd_age
+               , CASE    WHEN EXTRACT(DAY FROM (CURRENT_DATE -CAST(c.date_received AS DATE))) =0 THEN '0d'
+                                             WHEN EXTRACT(DAY FROM (CURRENT_DATE -CAST(c.date_received AS DATE))) =1 THEN '1d'
+                                             WHEN EXTRACT(DAY FROM (CURRENT_DATE -CAST(c.date_received AS DATE))) BETWEEN 2 AND 7  THEN '2-7d'
+                                             WHEN EXTRACT(DAY FROM (CURRENT_DATE -CAST(c.date_received AS DATE))) BETWEEN 8 and 14   THEN '8-14d'
+                                             WHEN EXTRACT(DAY FROM (CURRENT_DATE -CAST(c.date_received AS DATE))) BETWEEN 15 AND 30 THEN '15-30d'
+                                             WHEN EXTRACT(DAY FROM (CURRENT_DATE -CAST(c.date_received AS DATE))) > 30 THEN '>30d' 
+                 END AS hd_age_slices
+               , CAST(c.date_received AS DATETIME )  AS  hd_date_received_YMD
+               , 'NULL'                        AS  hd_customer                                          
+               , 'NULL'         AS  hd_customer_code
+               , c.CLIENT_ORGANIZATION_ID                                AS  hd_Client_Organization_ID
+               , c.CLIENT_ORGANIZATION_CODE                                         AS  hd_Client_Organization_Code
+               , c.CLIENT_ORGANIZATION_NAME                                        AS  hd_Client_Organization_Name
+               , CURRENT_DATETIME              AS  creation_timestamp
+               , 'N'                 AS  is_deleted
+               FROM 
+               `%s` c
+               LEFT JOIN
+               `%s` b 
+               ON c.building_reference = b.building_name
+               ) s
+               ON s.hd_call_id = h.hd_call_id and h.is_deleted = 'N'
+WHEN NOT matched THEN
+INSERT
+(             pk_fact_helpdesk_seq_id,
+    hd_call_id,
+               hd_external_ref,
+               hd_priority,
+               hd_cause,
+               hd_book_method,
+               hd_date_received,
+               hd_due_date,
+               hd_date_closed,
+               hd_nature_code,
+               hd_nature,
+               hd_nature_l1,
+               hd_nature_l2,
+               hd_nature_l3,
+               hd_caller_name,
+               hd_caller_code,
+               hd_caller_department,
+               hd_caller_department_code,
+               hd_caller_company,
+               hd_caller_company_code,
+               hd_ASsigned_person_name,
+               hd_ASsigned_person_code,
+               hd_ASsigned_person_department,
+               hd_ASsigned_person_department_code,
+               hd_ASsigned_person_company,
+               hd_ASsigned_person_company_code,
+               hd_area_code,
+               hd_area_reference,
+               hd_site_code,
+               hd_site_reference,
+               hd_building_code,
+               hd_building_reference,
+               hd_floor_code,
+               hd_floor_reference,
+               hd_room_code,
+               hd_room_reference,
+               hd_status_code,
+               hd_status,
+               hd_status_clASs,
+               hd_elapsed_time,
+               hd_reference,
+               hd_city,
+               hd_country,
+               hd_building_type,
+               hd_elapsed_time_slices,
+               hd_date_received_YMD,
+               hd_customer,
+               hd_customer_code,
+               hd_Client_Organization_ID,
+               hd_Client_Organization_Code,
+               hd_Client_Organization_Name,
+               creation_timestamp,
+               is_deleted
+               )  
+VALUES
+(             pk_fact_helpdesk_seq_id,
+    hd_call_id,
+               hd_external_ref,
+               hd_priority,
+               hd_cause,
+               hd_book_method,
+               hd_date_received,
+               hd_due_date,
+               hd_date_closed,
+               hd_nature_code,
+               hd_nature,
+               hd_nature_l1,
+               hd_nature_l2,
+               hd_nature_l3,
+               hd_caller_name,
+               hd_caller_code,
+               hd_caller_department,
+               hd_caller_department_code,
+               hd_caller_company,
+               hd_caller_company_code,
+               hd_ASsigned_person_name,
+               hd_ASsigned_person_code,
+               hd_ASsigned_person_department,
+               hd_ASsigned_person_department_code,
+               hd_ASsigned_person_company,
+               hd_ASsigned_person_company_code,
+               hd_area_code,
+               hd_area_reference,
+               hd_site_code,
+               hd_site_reference,
+               hd_building_code,
+               hd_building_reference,
+               hd_floor_code,
+               hd_floor_reference,
+               hd_room_code,
+               hd_room_reference,
+               hd_status_code,
+               hd_status,
+               hd_status_clASs,
+               hd_elapsed_time,
+               hd_reference,
+               hd_city,
+               hd_country,
+               hd_building_type,
+               hd_elapsed_time_slices,
+               hd_date_received_YMD,
+               hd_customer,
+               hd_customer_code,
+               hd_Client_Organization_ID,
+               hd_Client_Organization_Code,
+               hd_Client_Organization_Name,
+               creation_timestamp,
+               is_deleted
+               )
+"""
+,fact_helpdesk, vw_rep_calls_18 , vw_rep_building_stats_16);
+               
+
+EXECUTE IMMEDIATE mcs_fact_helpdesk_insert;
+
+
+
+--##############################
+--FACT_MAINTENANCE -- UPDATE
+--##############################
+
+set mcs_fact_maintenance_update = FORMAT("""
+MERGE INTO `%s` m
+using
+(
+               SELECT
+                 mo_id 
+               , guid   AS mo_guid 
+               , code  AS mo_code
+               , reference        AS mo_reference
+               , brand               AS mo_brand
+               , serial_nbr       AS mo_serial_nbr
+               , category_reference         AS mo_category_reference
+               , category_code                AS mo_category_code
+               , classification_reference  AS mo_classification_reference
+               , classification_code           AS mo_classification_code
+               , criticality_reference     AS mo_criticality_reference
+               , criticality_code                AS mo_criticality_code
+               , group_reference             AS mo_group_reference
+               , group_code    AS mo_group_code 
+               , supplier_name                AS mo_supplier_name 
+               , supplier_code   AS mo_supplier_code
+               , fiscal_entity_reference   AS mo_fiscal_entity_reference
+               , fiscal_entity_code            AS mo_fiscal_entity_code
+               , cost_center    AS mo_cost_center 
+               , cost_category_reference AS mo_cost_category_reference 
+               , cost_category_code        AS mo_cost_category_code
+               , CAST(investment_date AS DATETIME)                AS mo_investment_date
+               , CAST(construction_date  AS DATETIME)   AS mo_construction_date
+               , CAST(warranty_date AS DATETIME)          AS mo_warranty_date
+               , CAST(expected_lifetime AS INT64)            AS mo_expected_lifetime
+               , CAST(expected_replacement_year AS INT64)  AS mo_expected_replacement_year
+               , CAST(expected_replacement_cost AS NUMERIC)             AS mo_expected_replacement_cost
+               , expected_replacement_currency              AS mo_expected_replacement_currency
+               , CAST(yearly_cost AS NUMERIC)               AS mo_yearly_cost
+               , yearly_cost_currency      AS mo_yearly_cost_currency
+               , area_code      AS mo_area_code
+               , area_reference               AS mo_area_reference
+               , site_code        AS mo_site_code
+               , site_reference                 AS mo_site_reference
+               , building_code   AS mo_building_code 
+               , building_reference           AS mo_building_reference
+               , floor_code      AS mo_floor_code
+               , floor_reference               AS mo_floor_reference
+               , room_code    AS mo_room_code
+               , room_reference             AS mo_room_reference
+               , exterior_location_code   AS mo_exterior_location_code 
+               , exterior_location_ref  AS mo_exterior_location_ref
+               , land_code      AS mo_land_code
+               , land_reference               AS mo_land_reference
+               , status_code   AS mo_status_code
+               , status_reference            AS mo_status_reference
+               , status_class    AS mo_status_class
+               , parent_id        AS mo_parent_id
+               , location_id     AS mo_location_id     
+               FROM `%s`
+               ) s
+ON s.mo_id = m.mo_id 
+               AND s.mo_guid = m.mo_guid
+               AND m.is_deleted = 'N'
+WHEN matched AND
+               s.mo_id <> m.mo_id OR 
+               s.mo_guid              <> m.mo_guid OR 
+               s.mo_code            <> m.mo_code OR 
+               s.mo_reference                 <> m.mo_reference OR 
+               s.mo_brand           <> m.mo_brand OR 
+               s.mo_serial_nbr   <> m.mo_serial_nbr OR 
+               s.mo_category_reference               <> m.mo_category_reference OR 
+               s.mo_category_code       <> m.mo_category_code OR 
+               s.mo_classification_reference    <> m.mo_classification_reference OR 
+               s.mo_classification_code  <> m.mo_classification_code OR 
+               s.mo_criticality_reference        <> m.mo_criticality_reference OR 
+               s.mo_criticality_code        <> m.mo_criticality_code OR 
+               s.mo_group_reference      <> m.mo_group_reference OR 
+               s.mo_group_code  <> m.mo_group_code OR 
+               s.mo_supplier_name       <> m.mo_supplier_name OR 
+               s.mo_supplier_code         <> m.mo_supplier_code OR 
+               s.mo_fiscal_entity_reference     <> m.mo_fiscal_entity_reference OR 
+               s.mo_fiscal_entity_code <> m.mo_fiscal_entity_code OR 
+               s.mo_cost_center             <> m.mo_cost_center OR 
+               s.mo_cost_category_reference <> m.mo_cost_category_reference OR 
+               s.mo_cost_category_code               <> m.mo_cost_category_code OR 
+               s.mo_investment_date     <> m.mo_investment_date OR 
+               s.mo_construction_date <> m.mo_construction_date OR 
+               s.mo_warranty_date       <> m.mo_warranty_date OR 
+               s.mo_expected_lifetime   <> m.mo_expected_lifetime OR 
+               s.mo_expected_replacement_year         <> m.mo_expected_replacement_year OR 
+               s.mo_expected_replacement_cost         <> m.mo_expected_replacement_cost OR 
+               s.mo_expected_replacement_currency   <> m.mo_expected_replacement_currency OR 
+               s.mo_yearly_cost             <> m.mo_yearly_cost OR 
+               s.mo_yearly_cost_currency     <> m.mo_yearly_cost_currency OR 
+               s.mo_area_code   <> m.mo_area_code OR 
+               s.mo_area_reference      <> m.mo_area_reference OR 
+               s.mo_site_code                 <> m.mo_site_code OR 
+               s.mo_site_reference        <> m.mo_site_reference OR 
+               s.mo_building_code         <> m.mo_building_code OR 
+               s.mo_building_reference                 <> m.mo_building_reference OR 
+               s.mo_floor_code  <> m.mo_floor_code OR 
+               s.mo_floor_reference        <> m.mo_floor_reference OR 
+               s.mo_room_code <> m.mo_room_code OR 
+               s.mo_room_reference     <> m.mo_room_reference OR 
+               s.mo_exterior_location_code  <> m.mo_exterior_location_code OR 
+               s.mo_exterior_location_ref     <> m.mo_exterior_location_ref OR 
+               s.mo_land_code  <> m.mo_land_code OR 
+               s.mo_land_reference       <> m.mo_land_reference OR 
+               s.mo_status_code            <> m.mo_status_code OR 
+               s.mo_status_reference     <> m.mo_status_reference OR 
+               s.mo_status_class            <> m.mo_status_class OR 
+               s.mo_parent_id                 <> m.mo_parent_id OR 
+               s.mo_location_id              <> m.mo_location_id 
+ THEN UPDATE SET is_deleted = 'Y',
+ modification_timestamp = CURRENT_DATETIME
+ """
+ ,fact_maintenance,vw_rep_mo_18);
+
+EXECUTE IMMEDIATE mcs_fact_maintenance_update;
+
+--##############################
+--FACT_MAINTENANCE -- INSERT
+--##############################
+
+set mcs_fact_maintenance_insert = FORMAT("""
+MERGE INTO `%s` m
+USING
+               (
+               SELECT
+  mo_id 
+               , guid    AS mo_guid
+               , code  AS mo_code
+               , reference  AS mo_reference
+               , brand       AS mo_brand
+               , serial_nbr                AS mo_serial_nbr
+               , category_reference  AS mo_category_reference
+               , category_code       AS mo_category_code
+               , "class"     AS mo_class
+               , classification_reference          AS mo_classification_reference
+               , classification_code    AS mo_classification_code
+               , criticality_reference  AS mo_criticality_reference
+               , criticality_code       AS mo_criticality_code
+               , group_reference    AS mo_group_reference
+               , group_code             AS mo_group_code 
+               , supplier_name       AS mo_supplier_name 
+               , supplier_code         AS mo_supplier_code
+               , fiscal_entity_reference           AS mo_fiscal_entity_reference
+               , fiscal_entity_code AS mo_fiscal_entity_code
+               , cost_center             AS mo_cost_center 
+               , cost_category_reference       AS mo_cost_category_reference 
+               , cost_category_code                AS mo_cost_category_code
+               , CAST(investment_date AS DATETIME) AS mo_investment_date
+               , CAST(construction_date  AS DATETIME)             AS mo_construction_date
+               , CAST(warranty_date AS DATETIME)     AS mo_warranty_date
+               , CAST(expected_lifetime AS INT64)       AS mo_expected_lifetime
+               , CAST(expected_replacement_year AS INT64)    AS mo_expected_replacement_year
+               , CAST(expected_replacement_cost AS NUMERIC)             AS mo_expected_replacement_cost
+               , expected_replacement_currency         AS mo_expected_replacement_currency
+               , CAST(yearly_cost AS NUMERIC)          AS mo_yearly_cost
+               , yearly_cost_currency              AS mo_yearly_cost_currency
+               , area_code               AS mo_area_code
+               , area_reference      AS mo_area_reference
+               , site_code  AS mo_site_code
+               , site_reference        AS mo_site_reference
+               , building_code         AS mo_building_code 
+               , building_reference    AS mo_building_reference
+               , floor_code               AS mo_floor_code
+               , floor_reference      AS mo_floor_reference
+               , room_code             AS mo_room_code
+               , room_reference    AS mo_room_reference
+               , exterior_location_code           AS mo_exterior_location_code 
+               , exterior_location_ref              AS mo_exterior_location_ref
+               , land_code               AS mo_land_code
+               , land_reference      AS mo_land_reference
+               , status_code            AS mo_status_code
+               , status_reference   AS mo_status_reference
+               , status_class             AS mo_status_class
+               , parent_id  AS mo_parent_id
+               , location_id              AS mo_location_id
+               , 'N'      AS is_deleted                
+               , CURRENT_DATETIME          AS start_date   
+               , 'NULL'      AS start_by
+               , CURRENT_DATETIME          AS creation_timestamp 
+               FROM `%s`
+               ) s
+               ON s.mo_id = m.mo_id 
+               AND s.mo_guid = m.mo_guid
+               AND m.is_deleted = 'N'
+WHEN NOT matched THEN
+INSERT
+(             
+               mo_id,
+               mo_guid,
+               mo_code,
+               mo_reference,
+               mo_brand,
+               mo_serial_nbr,
+               mo_category_reference,
+               mo_category_code,
+               mo_class,
+               mo_classification_reference,
+               mo_classification_code,
+               mo_criticality_reference,
+               mo_criticality_code,
+               mo_group_reference,
+               mo_group_code,
+               mo_supplier_name,
+               mo_supplier_code,
+               mo_fiscal_entity_reference,
+               mo_fiscal_entity_code,
+               mo_cost_center,
+               mo_cost_category_reference,
+               mo_cost_category_code,
+               mo_investment_date,
+               mo_construction_date,
+               mo_warranty_date,
+               mo_expected_lifetime,
+               mo_expected_replacement_year,
+               mo_expected_replacement_cost,
+               mo_expected_replacement_currency,
+               mo_yearly_cost,
+               mo_yearly_cost_currency,
+               mo_area_code,
+               mo_area_reference,
+               mo_site_code,
+               mo_site_reference,
+               mo_building_code,
+               mo_building_reference,
+               mo_floor_code,
+               mo_floor_reference,
+               mo_room_code,
+               mo_room_reference,
+               mo_exterior_location_code,
+               mo_exterior_location_ref,
+               mo_land_code,
+               mo_land_reference,
+               mo_status_code,
+               mo_status_reference,
+               mo_status_class,
+               mo_parent_id,
+               is_deleted,
+               start_date,
+               start_by,
+               mo_location_id,
+               creation_timestamp
+               )  
+VALUES
+(             mo_id,
+               mo_guid,
+               mo_code,
+               mo_reference,
+               mo_brand,
+               mo_serial_nbr,
+               mo_category_reference,
+               mo_category_code,
+               mo_class,
+               mo_classification_reference,
+               mo_classification_code,
+               mo_criticality_reference,
+               mo_criticality_code,
+               mo_group_reference,
+               mo_group_code,
+               mo_supplier_name,
+               mo_supplier_code,
+               mo_fiscal_entity_reference,
+               mo_fiscal_entity_code,
+               mo_cost_center,
+               mo_cost_category_reference,
+               mo_cost_category_code,
+               mo_investment_date,
+               mo_construction_date,
+               mo_warranty_date,
+               mo_expected_lifetime,
+               mo_expected_replacement_year,
+               mo_expected_replacement_cost,
+               mo_expected_replacement_currency,
+               mo_yearly_cost,
+               mo_yearly_cost_currency,
+               mo_area_code,
+               mo_area_reference,
+               mo_site_code,
+               mo_site_reference,
+               mo_building_code,
+               mo_building_reference,
+               mo_floor_code,
+               mo_floor_reference,
+               mo_room_code,
+               mo_room_reference,
+               mo_exterior_location_code,
+               mo_exterior_location_ref,
+               mo_land_code,
+               mo_land_reference,
+               mo_status_code,
+               mo_status_reference,
+               mo_status_class,
+               mo_parent_id,
+               is_deleted,
+               start_date,
+               start_by,
+               mo_location_id,
+               creation_timestamp
+               )"""
+,fact_maintenance,vw_rep_mo_18);
+
+EXECUTE IMMEDIATE mcs_fact_maintenance_insert;         
+
+
+--##############################
+--FACT_MAINTENANCE -- UPDATE
+--##############################
+
+set mcs_fact_financials_update = FORMAT("""
+MERGE INTO `%s` f
+using
+(
+               SELECT
+               COST_ITEM_ID                                   AS             fin_cost_item_id
+               ,MASTER_COST_ITEM_ID                               AS            fin_master_cost_item_id
+               ,COST_DATE                                           AS            fin_cost_date
+               ,DESCRIPTION AS            fin_description
+               ,EXPENSE_AMOUNT AS            fin_expense_amount
+               ,REVENUE_AMOUNT AS            fin_revenue_amount
+               ,TAX_CODE_ID AS            fin_tax_code_id
+               ,TAX_CODE_CODE AS            fin_tax_code_code
+               ,TAX_CODE_REFERENCE AS            fin_tax_code_reference
+               ,TAX_CODE_PERCENTAGE AS            fin_tax_code_percentage
+               ,REVENUE_TAX_AMOUNT AS            fin_revenue_tax_amount
+               ,CURRENCY_ID AS            fin_currency_id
+               ,COST_CLASS_ID AS            fin_cost_class_id
+               ,COST_CATEGORY_ID AS            fin_cost_category_id
+               ,COST_CATEGORY_CODE AS            fin_cost_category_code
+               ,COST_CATEGORY_REFERENCE AS            fin_cost_category_reference
+               ,COST_CARRIER_ID AS            fin_cost_carrier_id
+               ,COST_CARRIER_CODE AS            fin_cost_carrier_code
+               ,COST_CARRIER_REFERENCE AS            fin_cost_carrier_reference
+               ,COST_GENERATOR_ID AS            fin_cost_generator_id
+               ,COST_GENERATOR_TYPE AS            fin_cost_generator_type
+               ,COST_GENERATOR_CODE AS            fin_cost_generator_code
+               ,COST_GENERATOR_REFERENCE AS            fin_cost_generator_reference
+               ,COST_CENTER_ID AS            fin_cost_center_id
+               ,COST_CENTER_CODE AS            fin_cost_center_code
+               ,COST_CENTER_DESCRIPTION AS            fin_cost_center_description
+               ,GL_ACCOUNT_ID AS            fin_gl_account_id
+               ,GL_ACCOUNT_CODE AS            fin_gl_account_code
+               ,GL_ACCOUNT_REFERENCE AS            fin_gl_account_reference
+               ,CONTRACT_ID AS            fin_contract_id
+               ,CONTRACT_CODE AS            fin_contract_code
+               ,CONTRACT_REFERENCE AS            fin_contract_reference
+               ,LOCATION_ID AS            fin_location_id
+               ,LOCATION_CODE AS            fin_location_code
+               ,LOCATION_REF AS            fin_location_ref
+               ,SUPPLIER_ID AS            fin_supplier_id
+               ,SUPPLIER_CODE AS            fin_supplier_code
+               ,SUPPLIER_NAME AS            fin_supplier_name
+               ,BILLING AS            fin_billing
+               ,COMM_OR_ACTUAL AS            fin_comm_or_actual
+               ,BILLING_REQUISITION_ID AS            fin_billing_requisition_id
+               ,FISCAL_ENTITY_ID AS            fin_fiscal_entity_id
+               ,FISCAL_ENTITY_CODE AS            fin_fiscal_entity_code
+               ,FISCAL_ENTITY_NAME AS            fin_fiscal_entity_name
+               ,FIN_KEY_1 AS            fin_fin_key_1
+               ,FIN_KEY_2 AS            fin_fin_key_2
+               ,FIN_KEY_3 AS            fin_fin_key_3
+               ,FIN_KEY_4 AS            fin_fin_key_4
+               ,FIN_KEY_5 AS            fin_fin_key_5
+               ,FIN_KEY_6 AS            fin_fin_key_6
+               ,FIN_KEY_7 AS            fin_fin_key_7
+               ,FIN_KEY_8 AS            fin_fin_key_8
+               ,PRICE_LIST_DETAIL_ID AS            fin_price_list_detail_id
+               ,EXP_LIST_DETAIL_ID AS            fin_exp_list_detail_id
+               ,CAST(QUANTITY AS INT64) AS            fin_quantity
+               ,UOM_ID AS            fin_uom_id
+               ,UOM_CODE AS            fin_uom_code
+               ,UOM_REF AS            fin_uom_ref
+               ,CUSTOMER_ID AS            fin_customer_id
+               ,CUSTOMER_CODE AS            fin_customer_code
+               ,CUSTOMER_NAME AS            fin_customer_name
+               ,COST_CARRIER_TYPE AS            fin_cost_carrier_type
+               ,START_DATE AS            fin_start_date
+               ,END_DATE AS            fin_end_date
+               ,CAST(INTERVAL_VALUE AS INT64) AS            fin_interval_value
+               ,INTERVAL_UNIT AS            fin_interval_unit
+               ,MATERIAL_NUMBER_ID AS            fin_material_integer_id
+               ,MATERIAL_NUMBER_CODE AS            fin_material_integer_code
+               ,MATERIAL_NUMBER_REF AS            fin_material_integer_ref
+               ,EXTERNAL_PROP_REF AS            fin_external_prop_ref
+               ,UNIT_PRICE AS            fin_unit_price
+               ,REU_ID AS            fin_reu_id
+               ,REU_CODE AS            fin_reu_code
+               ,REU_REF AS            fin_reu_ref
+               ,EXTERNAL_PROP_REF_ID AS            fin_external_prop_ref_id
+               ,FIN_KEY_1_VALUE AS            fin_fin_key_1_value
+               ,FIN_KEY_2_VALUE AS            fin_fin_key_2_value
+               ,FIN_KEY_3_VALUE AS            fin_fin_key_3_value
+               ,FIN_KEY_4_VALUE AS            fin_fin_key_4_value
+               ,FIN_KEY_5_VALUE AS            fin_fin_key_5_value
+               ,FIN_KEY_6_VALUE AS            fin_fin_key_6_value
+               ,FIN_KEY_7_VALUE AS            fin_fin_key_7_value
+               ,FIN_KEY_8_VALUE AS            fin_fin_key_8_value
+               ,REVENUE_FACTOR AS            fin_revenue_factor
+               ,CREATION_ACCOUNT_ID AS            fin_creation_account_id
+               ,LATEST_MOD_ACCOUNT_ID AS            fin_latest_mod_account_id
+               ,PRODUCT_CATEGORY_REF AS            fin_product_category_ref
+               ,PRODUCT_CLASS_NAME AS            fin_product_class_name
+               ,COST_CARRIER_FIN_STAT AS            fin_cost_carrier_fin_stat
+               ,PERIOD_TYPE AS            fin_period_type
+               ,PRODUCT_SERVICE_ID AS            fin_product_service_id
+               ,PRODUCT_CODE AS            fin_product_code
+               ,PRODUCT_REFERENCE AS            fin_product_reference
+               ,CTR_VERSION_ID AS            fin_ctr_version_id
+               ,CAST(CTR_VERSION_NR AS INT64) AS            fin_ctr_version_nr
+               ,IS_ADVANCE_PAYMENT AS            fin_is_advance_payment
+               ,PROPERTY_ID AS            fin_property_id
+               ,PROPERTY_CODE AS            fin_property_code
+               ,PROPERTY_REF AS            fin_property_ref
+               ,COST_CARRIER_STATUS AS            fin_cost_carrier_status
+               ,PARENT_COST_CARRIER_TYPE AS            fin_parent_cost_carrier_type
+               ,PARENT_COST_CARRIER_CODE AS            fin_parent_cost_carrier_code
+               ,PARENT_COST_CARRIER_REFERENCE AS            fin_parent_cost_carrier_reference
+               ,PARENT_COST_CARRIER_STATUS AS            fin_parent_cost_carrier_status
+               ,PARENT_COST_CARRIER_ID AS            fin_parent_cost_carrier_id
+               ,TOP_COST_CARRIER_TYPE AS            fin_top_cost_carrier_type
+               ,TOP_COST_CARRIER_CODE AS            fin_top_cost_carrier_code
+               ,TOP_COST_CARRIER_REFERENCE AS            fin_top_cost_carrier_reference
+               ,TOP_COST_CARRIER_STATUS AS            fin_top_cost_carrier_status
+               ,TOP_COST_CARRIER_ID AS            fin_top_cost_carrier_id
+               ,APPORT_SCHEDULE_ID AS            fin_apport_schedule_id
+               ,CAST(EXPENSE_FACTOR AS INT64) AS            fin_expense_factor
+               ,HIST_IDX_DETAIL_ID AS            fin_hist_idx_detail_id
+               ,COST_DISTR_KEY_ID AS            fin_cost_distr_key_id
+               ,COST_DISTR_KEY_CODE AS            fin_cost_distr_key_code
+               ,COST_DISTR_KEY_REF AS            fin_cost_distr_key_ref
+               ,COST_DISTR_KEY_PCT AS            fin_cost_distr_key_pct
+               ,BASE_COST_ITEM_ID AS            fin_base_cost_item_id
+               ,CAST(CREATION_DATE AS DATETIME) AS            fin_creation_date
+               ,CAST(LATEST_MOD_DATE AS DATETIME) AS            fin_latest_mod_date
+               ,CAST(BILLING_DATE AS DATETIME) AS            fin_billing_date
+               ,COST_GENERATOR_DETAIL_ID AS            fin_cost_generator_detail_id
+               ,PRICE_ORIGIN AS            fin_price_origin
+               ,CAST(SESSION_ID AS STRING) AS            fin_session_id
+               ,SETTLEMENT_FACTOR AS             fin_settlement_factor
+               ,CAST(CALC_OBJECT_ID AS INT64) AS            fin_calc_object_id
+               ,CAST(CALC_OBJECT_DETAIL_ID AS INT64) AS            fin_calc_object_detail_id
+               ,BASED_ON_INDEXED_PRICE AS            fin_based_on_indexed_price
+               ,ACCOUNTING_DATE AS            fin_accounting_date
+               ,CAST(BENEFICIARY_FACTOR AS INT64) AS            fin_beneficiary_factor
+               ,CALC_OBJECT_METER_ID AS            fin_calc_object_meter_id
+               ,IS_HISTORICAL AS                       fin_is_historical
+               ,CURRENCY AS            fin_currency
+               ,COST_CLASS_NAME AS            fin_cost_class_name
+               ,CONTRACT_TYPE AS            fin_contract_type
+               ,CONTRACT_STATUS AS            fin_contract_status
+               ,CONTRACT_STATUS_CLASS AS            fin_contract_status_class
+               ,CONTRACT_STARTDATE AS            fin_contract_startdate
+               ,CONTRACT_ENDDATE AS            fin_contract_enddate
+               ,'NULL' AS            start_by
+               ,client_organization_id AS            fin_client_organization_id
+               ,client_organization_code AS            fin_client_organization_code
+               ,client_organization_name AS            fin_client_organization_name
+               FROM `%s`
+               ) s
+ON s.fin_cost_item_id = f.fin_cost_item_id 
+               AND s.fin_master_cost_item_id = f.fin_master_cost_item_id
+               AND f.is_deleted = 'N'
+WHEN matched AND
+               s.fin_cost_date                <> f.fin_cost_date OR 
+               s.fin_description               <> f.fin_description OR 
+               s.fin_expense_amount    <> f.fin_expense_amount OR 
+               s.fin_revenue_amount    <> f.fin_revenue_amount OR 
+               s.fin_tax_code_id             <> f.fin_tax_code_id OR 
+               s.fin_tax_code_code       <> f.fin_tax_code_code OR 
+               s.fin_tax_code_reference              <> f.fin_tax_code_reference OR 
+               s.fin_tax_code_percentage           <> f.fin_tax_code_percentage OR 
+               s.fin_revenue_tax_amount           <> f.fin_revenue_tax_amount OR 
+               s.fin_currency_id              <> f.fin_currency_id OR 
+               s.fin_cost_class_id           <> f.fin_cost_class_id OR 
+               s.fin_cost_category_id    <> f.fin_cost_category_id OR 
+               s.fin_cost_category_code              <> f.fin_cost_category_code OR 
+               s.fin_cost_category_reference     <> f.fin_cost_category_reference OR 
+               s.fin_cost_carrier_id        <> f.fin_cost_carrier_id OR 
+               s.fin_cost_carrier_code  <> f.fin_cost_carrier_code OR 
+               s.fin_cost_carrier_reference         <> f.fin_cost_carrier_reference OR 
+               s.fin_cost_generator_id  <> f.fin_cost_generator_id OR 
+               s.fin_cost_generator_type            <> f.fin_cost_generator_type OR 
+               s.fin_cost_generator_code           <> f.fin_cost_generator_code OR 
+               s.fin_cost_generator_reference  <> f.fin_cost_generator_reference OR 
+               s.fin_cost_center_id        <> f.fin_cost_center_id OR 
+               s.fin_cost_center_code   <> f.fin_cost_center_code OR 
+               s.fin_cost_center_description      <> f.fin_cost_center_description OR 
+               s.fin_gl_account_id          <> f.fin_gl_account_id OR 
+               s.fin_gl_account_code    <> f.fin_gl_account_code OR 
+               s.fin_gl_account_reference           <> f.fin_gl_account_reference OR 
+               s.fin_contract_id              <> f.fin_contract_id OR 
+               s.fin_contract_code         <> f.fin_contract_code OR 
+               s.fin_contract_reference               <> f.fin_contract_reference OR 
+               s.fin_location_id               <> f.fin_location_id OR 
+               s.fin_location_code          <> f.fin_location_code OR 
+               s.fin_location_ref             <> f.fin_location_ref OR 
+               s.fin_supplier_id               <> f.fin_supplier_id OR 
+               s.fin_supplier_code          <> f.fin_supplier_code OR 
+               s.fin_supplier_name        <> f.fin_supplier_name OR 
+               s.fin_billing          <> f.fin_billing OR 
+               s.fin_comm_or_actual    <> f.fin_comm_or_actual OR 
+               s.fin_billing_requisition_id            <> f.fin_billing_requisition_id OR 
+               s.fin_fiscal_entity_id       <> f.fin_fiscal_entity_id OR 
+               s.fin_fiscal_entity_code  <> f.fin_fiscal_entity_code OR 
+               s.fin_fiscal_entity_name               <> f.fin_fiscal_entity_name OR 
+               s.fin_fin_key_1  <> f.fin_fin_key_1 OR 
+               s.fin_fin_key_2  <> f.fin_fin_key_2 OR 
+               s.fin_fin_key_3  <> f.fin_fin_key_3 OR 
+               s.fin_fin_key_4  <> f.fin_fin_key_4 OR 
+               s.fin_fin_key_5  <> f.fin_fin_key_5 OR 
+               s.fin_fin_key_6  <> f.fin_fin_key_6 OR 
+               s.fin_fin_key_7  <> f.fin_fin_key_7 OR 
+               s.fin_fin_key_8  <> f.fin_fin_key_8 OR 
+               s.fin_price_list_detail_id                <> f.fin_price_list_detail_id OR 
+               s.fin_exp_list_detail_id   <> f.fin_exp_list_detail_id OR 
+               s.fin_quantity     <> f.fin_quantity OR 
+               s.fin_uom_id       <> f.fin_uom_id OR 
+               s.fin_uom_code <> f.fin_uom_code OR 
+               s.fin_uom_ref     <> f.fin_uom_ref OR 
+               s.fin_customer_id             <> f.fin_customer_id OR 
+               s.fin_customer_code       <> f.fin_customer_code OR 
+               s.fin_customer_name      <> f.fin_customer_name OR 
+               s.fin_cost_carrier_type   <> f.fin_cost_carrier_type OR 
+               s.fin_start_date <> f.fin_start_date OR 
+               s.fin_end_date   <> f.fin_end_date OR 
+               s.fin_interval_value         <> f.fin_interval_value OR 
+               s.fin_interval_unit            <> f.fin_interval_unit OR 
+               s.fin_material_integer_id              <> f.fin_material_integer_id OR 
+               s.fin_material_integer_code         <> f.fin_material_integer_code OR 
+               s.fin_material_integer_ref             <> f.fin_material_integer_ref OR 
+               s.fin_external_prop_ref  <> f.fin_external_prop_ref OR 
+               s.fin_unit_price  <> f.fin_unit_price OR 
+               s.fin_reu_id         <> f.fin_reu_id OR 
+               s.fin_reu_code   <> f.fin_reu_code OR 
+               s.fin_reu_ref       <> f.fin_reu_ref OR 
+               s.fin_external_prop_ref_id            <> f.fin_external_prop_ref_id OR 
+               s.fin_fin_key_1_value     <> f.fin_fin_key_1_value OR 
+               s.fin_fin_key_2_value     <> f.fin_fin_key_2_value OR 
+               s.fin_fin_key_3_value     <> f.fin_fin_key_3_value OR 
+               s.fin_fin_key_4_value     <> f.fin_fin_key_4_value OR 
+               s.fin_fin_key_5_value     <> f.fin_fin_key_5_value OR 
+               s.fin_fin_key_6_value     <> f.fin_fin_key_6_value OR 
+               s.fin_fin_key_7_value     <> f.fin_fin_key_7_value OR 
+               s.fin_fin_key_8_value     <> f.fin_fin_key_8_value OR 
+               s.fin_revenue_factor       <> f.fin_revenue_factor OR 
+               s.fin_creation_account_id             <> f.fin_creation_account_id OR 
+               s.fin_latest_mod_account_id       <> f.fin_latest_mod_account_id OR 
+               s.fin_product_category_ref          <> f.fin_product_category_ref OR 
+               s.fin_product_class_name             <> f.fin_product_class_name OR 
+               s.fin_cost_carrier_fin_stat            <> f.fin_cost_carrier_fin_stat OR 
+               s.fin_period_type             <> f.fin_period_type OR 
+               s.fin_product_service_id                <> f.fin_product_service_id OR 
+               s.fin_product_code          <> f.fin_product_code OR 
+               s.fin_product_reference                <> f.fin_product_reference OR 
+               s.fin_ctr_version_id         <> f.fin_ctr_version_id OR 
+               s.fin_ctr_version_nr         <> f.fin_ctr_version_nr OR 
+               s.fin_is_advance_payment            <> f.fin_is_advance_payment OR 
+               s.fin_property_id              <> f.fin_property_id OR 
+               s.fin_property_code         <> f.fin_property_code OR 
+               s.fin_property_ref            <> f.fin_property_ref OR 
+               s.fin_cost_carrier_status               <> f.fin_cost_carrier_status OR 
+               s.fin_parent_cost_carrier_type    <> f.fin_parent_cost_carrier_type OR 
+               s.fin_parent_cost_carrier_code   <> f.fin_parent_cost_carrier_code OR 
+               s.fin_parent_cost_carrier_reference         <> f.fin_parent_cost_carrier_reference OR 
+               s.fin_parent_cost_carrier_status                <> f.fin_parent_cost_carrier_status OR 
+               s.fin_parent_cost_carrier_id         <> f.fin_parent_cost_carrier_id OR 
+               s.fin_top_cost_carrier_type          <> f.fin_top_cost_carrier_type OR 
+               s.fin_top_cost_carrier_code         <> f.fin_top_cost_carrier_code OR 
+               s.fin_top_cost_carrier_reference               <> f.fin_top_cost_carrier_reference OR 
+               s.fin_top_cost_carrier_status       <> f.fin_top_cost_carrier_status OR 
+               s.fin_top_cost_carrier_id               <> f.fin_top_cost_carrier_id OR 
+               s.fin_apport_schedule_id              <> f.fin_apport_schedule_id OR 
+               s.fin_expense_factor       <> f.fin_expense_factor OR 
+               s.fin_hist_idx_detail_id   <> f.fin_hist_idx_detail_id OR 
+               s.fin_cost_distr_key_id   <> f.fin_cost_distr_key_id OR 
+               s.fin_cost_distr_key_code             <> f.fin_cost_distr_key_code OR 
+               s.fin_cost_distr_key_ref  <> f.fin_cost_distr_key_ref OR 
+               s.fin_cost_distr_key_pct                <> f.fin_cost_distr_key_pct OR 
+               s.fin_base_cost_item_id                <> f.fin_base_cost_item_id OR 
+               s.fin_creation_date          <> f.fin_creation_date OR 
+               s.fin_latest_mod_date    <> f.fin_latest_mod_date OR 
+               s.fin_billing_date              <> f.fin_billing_date OR 
+               s.fin_cost_generator_detail_id    <> f.fin_cost_generator_detail_id OR 
+               s.fin_price_origin              <> f.fin_price_origin OR 
+               s.fin_session_id  <> f.fin_session_id OR 
+               s.fin_settlement_factor   <> f.fin_settlement_factor OR 
+               s.fin_calc_object_id         <> f.fin_calc_object_id OR 
+               s.fin_calc_object_detail_id           <> f.fin_calc_object_detail_id OR 
+               s.fin_based_on_indexed_price    <> f.fin_based_on_indexed_price OR 
+               s.fin_accounting_date     <> f.fin_accounting_date OR 
+               s.fin_beneficiary_factor  <> f.fin_beneficiary_factor OR 
+               s.fin_calc_object_meter_id           <> f.fin_calc_object_meter_id OR 
+               s.fin_is_historical              <> f.fin_is_historical OR 
+               s.fin_currency    <> f.fin_currency OR 
+               s.fin_cost_class_name    <> f.fin_cost_class_name OR 
+               s.fin_contract_type          <> f.fin_contract_type OR 
+               s.fin_contract_status       <> f.fin_contract_status OR 
+               s.fin_contract_status_class           <> f.fin_contract_status_class OR 
+               s.fin_contract_startdate                <> f.fin_contract_startdate OR 
+               s.fin_contract_enddate   <> f.fin_contract_enddate OR 
+               s.start_by            <> f.start_by OR 
+               s.fin_client_organization_id          <> f.fin_client_organization_id OR 
+               s.fin_client_organization_code    <> f.fin_client_organization_code OR 
+               s.fin_client_organization_name   <> f.fin_client_organization_name 
+ THEN UPDATE SET is_deleted = 'Y',
+                                  last_modified_timestamp = CURRENT_DATETIME;
+
+ """
+ ,fact_financials,vw_rep_costitems_18);
+
+EXECUTE IMMEDIATE mcs_fact_financials_update;
+
+--##############################
+--FACT_MAINTENANCE -- INSERT
+--##############################
+
+set mcs_fact_financials_insert = FORMAT("""
+MERGE INTO `%s` f
+USING
+               (
+               SELECT
+               COST_ITEM_ID AS             fin_cost_item_id
+               ,MASTER_COST_ITEM_ID AS            fin_master_cost_item_id
+               ,COST_DATE AS            fin_cost_date
+               ,DESCRIPTION AS            fin_description
+               ,EXPENSE_AMOUNT AS            fin_expense_amount
+               ,REVENUE_AMOUNT AS            fin_revenue_amount
+               ,TAX_CODE_ID AS            fin_tax_code_id
+               ,TAX_CODE_CODE AS            fin_tax_code_code
+               ,TAX_CODE_REFERENCE AS            fin_tax_code_reference
+               ,TAX_CODE_PERCENTAGE AS            fin_tax_code_percentage
+               ,REVENUE_TAX_AMOUNT AS            fin_revenue_tax_amount
+               ,CURRENCY_ID AS            fin_currency_id
+               ,COST_CLASS_ID AS            fin_cost_class_id
+               ,COST_CATEGORY_ID AS            fin_cost_category_id
+               ,COST_CATEGORY_CODE AS            fin_cost_category_code
+               ,COST_CATEGORY_REFERENCE AS            fin_cost_category_reference
+               ,COST_CARRIER_ID AS            fin_cost_carrier_id
+               ,COST_CARRIER_CODE AS            fin_cost_carrier_code
+               ,COST_CARRIER_REFERENCE AS            fin_cost_carrier_reference
+               ,COST_GENERATOR_ID AS            fin_cost_generator_id
+               ,COST_GENERATOR_TYPE AS            fin_cost_generator_type
+               ,COST_GENERATOR_CODE AS            fin_cost_generator_code
+               ,COST_GENERATOR_REFERENCE AS            fin_cost_generator_reference
+               ,COST_CENTER_ID AS            fin_cost_center_id
+               ,COST_CENTER_CODE AS            fin_cost_center_code
+               ,COST_CENTER_DESCRIPTION AS            fin_cost_center_description
+               ,GL_ACCOUNT_ID AS            fin_gl_account_id
+               ,GL_ACCOUNT_CODE AS            fin_gl_account_code
+               ,GL_ACCOUNT_REFERENCE AS            fin_gl_account_reference
+               ,CONTRACT_ID AS            fin_contract_id
+               ,CONTRACT_CODE AS            fin_contract_code
+               ,CONTRACT_REFERENCE AS            fin_contract_reference
+               ,LOCATION_ID AS            fin_location_id
+               ,LOCATION_CODE AS            fin_location_code
+               ,LOCATION_REF AS            fin_location_ref
+               ,SUPPLIER_ID AS            fin_supplier_id
+               ,SUPPLIER_CODE AS            fin_supplier_code
+               ,SUPPLIER_NAME AS            fin_supplier_name
+               ,BILLING AS            fin_billing
+               ,COMM_OR_ACTUAL AS            fin_comm_or_actual
+               ,BILLING_REQUISITION_ID AS            fin_billing_requisition_id
+               ,FISCAL_ENTITY_ID AS            fin_fiscal_entity_id
+               ,FISCAL_ENTITY_CODE AS            fin_fiscal_entity_code
+               ,FISCAL_ENTITY_NAME AS            fin_fiscal_entity_name
+               ,FIN_KEY_1 AS            fin_fin_key_1
+               ,FIN_KEY_2 AS            fin_fin_key_2
+               ,FIN_KEY_3 AS            fin_fin_key_3
+               ,FIN_KEY_4 AS            fin_fin_key_4
+               ,FIN_KEY_5 AS            fin_fin_key_5
+               ,FIN_KEY_6 AS            fin_fin_key_6
+               ,FIN_KEY_7 AS            fin_fin_key_7
+               ,FIN_KEY_8 AS            fin_fin_key_8
+               ,PRICE_LIST_DETAIL_ID AS            fin_price_list_detail_id
+               ,EXP_LIST_DETAIL_ID AS            fin_exp_list_detail_id
+               ,CAST(QUANTITY AS INT64) AS            fin_quantity
+               ,UOM_ID AS            fin_uom_id
+               ,UOM_CODE AS            fin_uom_code
+               ,UOM_REF AS            fin_uom_ref
+               ,CUSTOMER_ID AS            fin_customer_id
+               ,CUSTOMER_CODE AS            fin_customer_code
+               ,CUSTOMER_NAME AS            fin_customer_name
+               ,COST_CARRIER_TYPE AS            fin_cost_carrier_type
+               ,START_DATE AS            fin_start_date
+               ,END_DATE AS            fin_end_date
+               ,CAST(INTERVAL_VALUE AS INT64) AS            fin_interval_value
+               ,INTERVAL_UNIT AS            fin_interval_unit
+               ,MATERIAL_NUMBER_ID AS            fin_material_integer_id
+               ,MATERIAL_NUMBER_CODE AS            fin_material_integer_code
+               ,MATERIAL_NUMBER_REF AS            fin_material_integer_ref
+               ,EXTERNAL_PROP_REF AS            fin_external_prop_ref
+               ,UNIT_PRICE AS            fin_unit_price
+               ,REU_ID AS            fin_reu_id
+               ,REU_CODE AS            fin_reu_code
+               ,REU_REF AS            fin_reu_ref
+               ,EXTERNAL_PROP_REF_ID AS            fin_external_prop_ref_id
+               ,FIN_KEY_1_VALUE AS            fin_fin_key_1_value
+               ,FIN_KEY_2_VALUE AS            fin_fin_key_2_value
+               ,FIN_KEY_3_VALUE AS            fin_fin_key_3_value
+               ,FIN_KEY_4_VALUE AS            fin_fin_key_4_value
+               ,FIN_KEY_5_VALUE AS            fin_fin_key_5_value
+               ,FIN_KEY_6_VALUE AS            fin_fin_key_6_value
+               ,FIN_KEY_7_VALUE AS            fin_fin_key_7_value
+               ,FIN_KEY_8_VALUE AS            fin_fin_key_8_value
+               ,REVENUE_FACTOR AS            fin_revenue_factor
+               ,CREATION_ACCOUNT_ID AS            fin_creation_account_id
+               ,LATEST_MOD_ACCOUNT_ID AS            fin_latest_mod_account_id
+               ,PRODUCT_CATEGORY_REF AS            fin_product_category_ref
+               ,PRODUCT_CLASS_NAME AS            fin_product_class_name
+               ,COST_CARRIER_FIN_STAT AS            fin_cost_carrier_fin_stat
+               ,PERIOD_TYPE AS            fin_period_type
+               ,PRODUCT_SERVICE_ID AS            fin_product_service_id
+               ,PRODUCT_CODE AS            fin_product_code
+               ,PRODUCT_REFERENCE AS            fin_product_reference
+               ,CTR_VERSION_ID AS            fin_ctr_version_id
+               ,CAST(CTR_VERSION_NR AS INT64) AS            fin_ctr_version_nr
+               ,IS_ADVANCE_PAYMENT AS            fin_is_advance_payment
+               ,PROPERTY_ID AS            fin_property_id
+               ,PROPERTY_CODE AS            fin_property_code
+               ,PROPERTY_REF AS            fin_property_ref
+               ,COST_CARRIER_STATUS AS            fin_cost_carrier_status
+               ,PARENT_COST_CARRIER_TYPE AS            fin_parent_cost_carrier_type
+               ,PARENT_COST_CARRIER_CODE AS            fin_parent_cost_carrier_code
+               ,PARENT_COST_CARRIER_REFERENCE AS            fin_parent_cost_carrier_reference
+               ,PARENT_COST_CARRIER_STATUS AS            fin_parent_cost_carrier_status
+               ,PARENT_COST_CARRIER_ID AS            fin_parent_cost_carrier_id
+               ,TOP_COST_CARRIER_TYPE AS            fin_top_cost_carrier_type
+               ,TOP_COST_CARRIER_CODE AS            fin_top_cost_carrier_code
+               ,TOP_COST_CARRIER_REFERENCE AS            fin_top_cost_carrier_reference
+               ,TOP_COST_CARRIER_STATUS AS            fin_top_cost_carrier_status
+               ,TOP_COST_CARRIER_ID AS            fin_top_cost_carrier_id
+               ,APPORT_SCHEDULE_ID AS            fin_apport_schedule_id
+               ,CAST(EXPENSE_FACTOR AS INT64) AS            fin_expense_factor
+               ,HIST_IDX_DETAIL_ID AS            fin_hist_idx_detail_id
+               ,COST_DISTR_KEY_ID AS            fin_cost_distr_key_id
+               ,COST_DISTR_KEY_CODE AS            fin_cost_distr_key_code
+               ,COST_DISTR_KEY_REF AS            fin_cost_distr_key_ref
+               ,COST_DISTR_KEY_PCT AS            fin_cost_distr_key_pct
+               ,BASE_COST_ITEM_ID AS            fin_base_cost_item_id
+               ,CAST(CREATION_DATE AS DATETIME) AS            fin_creation_date
+               ,CAST(LATEST_MOD_DATE AS DATETIME) AS            fin_latest_mod_date
+               ,CAST(BILLING_DATE AS DATETIME) AS            fin_billing_date
+               ,COST_GENERATOR_DETAIL_ID AS            fin_cost_generator_detail_id
+               ,PRICE_ORIGIN AS            fin_price_origin
+               ,CAST(SESSION_ID AS STRING) AS            fin_session_id
+               ,SETTLEMENT_FACTOR AS             fin_settlement_factor
+               ,CAST(CALC_OBJECT_ID AS INT64) AS            fin_calc_object_id
+               ,CAST(CALC_OBJECT_DETAIL_ID AS INT64) AS            fin_calc_object_detail_id
+               ,BASED_ON_INDEXED_PRICE AS            fin_based_on_indexed_price
+               ,ACCOUNTING_DATE AS            fin_accounting_date
+               ,CAST(BENEFICIARY_FACTOR AS INT64) AS            fin_beneficiary_factor
+               ,CALC_OBJECT_METER_ID AS            fin_calc_object_meter_id
+               ,IS_HISTORICAL AS                       fin_is_historical
+               ,CURRENCY AS            fin_currency
+               ,COST_CLASS_NAME AS            fin_cost_class_name
+               ,CONTRACT_TYPE AS            fin_contract_type
+               ,CONTRACT_STATUS AS            fin_contract_status
+               ,CONTRACT_STATUS_CLASS AS            fin_contract_status_class
+               ,CONTRACT_STARTDATE AS            fin_contract_startdate
+               ,CONTRACT_ENDDATE AS            fin_contract_enddate
+               ,'NULL' AS            start_by
+               ,client_organization_id AS            fin_client_organization_id
+               ,client_organization_code AS            fin_client_organization_code
+               ,client_organization_name AS            fin_client_organization_name
+               FROM `%s`
+               ) s
+               ON s.fin_cost_item_id = f.fin_cost_item_id 
+               AND s.fin_master_cost_item_id = f.fin_master_cost_item_id
+               AND f.is_deleted = 'N'
+WHEN NOT matched THEN
+INSERT
+(             
+               fin_cost_item_id,
+               fin_master_cost_item_id,
+               fin_cost_date,
+               fin_description,
+               fin_expense_amount,
+               fin_revenue_amount,
+               fin_tax_code_id,
+               fin_tax_code_code,
+               fin_tax_code_reference,
+               fin_tax_code_percentage,
+               fin_revenue_tax_amount,
+               fin_currency_id,
+               fin_cost_class_id,
+               fin_cost_category_id,
+               fin_cost_category_code,
+               fin_cost_category_reference,
+               fin_cost_carrier_id,
+               fin_cost_carrier_code,
+               fin_cost_carrier_reference,
+               fin_cost_generator_id,
+               fin_cost_generator_type,
+               fin_cost_generator_code,
+               fin_cost_generator_reference,
+               fin_cost_center_id,
+               fin_cost_center_code,
+               fin_cost_center_description,
+               fin_gl_account_id,
+               fin_gl_account_code,
+               fin_gl_account_reference,
+               fin_contract_id,
+               fin_contract_code,
+               fin_contract_reference,
+               fin_location_id,
+               fin_location_code,
+               fin_location_ref,
+               fin_supplier_id,
+               fin_supplier_code,
+               fin_supplier_name,
+               fin_billing,
+               fin_comm_or_actual,
+               fin_billing_requisition_id,
+               fin_fiscal_entity_id,
+               fin_fiscal_entity_code,
+               fin_fiscal_entity_name,
+               fin_fin_key_1,
+               fin_fin_key_2,
+               fin_fin_key_3,
+               fin_fin_key_4,
+               fin_fin_key_5,
+               fin_fin_key_6,
+               fin_fin_key_7,
+               fin_fin_key_8,
+               fin_price_list_detail_id,
+               fin_exp_list_detail_id,
+               fin_quantity,
+               fin_uom_id,
+               fin_uom_code,
+               fin_uom_ref,
+               fin_customer_id,
+               fin_customer_code,
+               fin_customer_name,
+               fin_cost_carrier_type,
+               fin_start_date,
+               fin_end_date,
+               fin_interval_value,
+               fin_interval_unit,
+               fin_material_integer_id,
+               fin_material_integer_code,
+               fin_material_integer_ref,
+               fin_external_prop_ref,
+               fin_unit_price,
+               fin_reu_id,
+               fin_reu_code,
+               fin_reu_ref,
+               fin_external_prop_ref_id,
+               fin_fin_key_1_value,
+               fin_fin_key_2_value,
+               fin_fin_key_3_value,
+               fin_fin_key_4_value,
+               fin_fin_key_5_value,
+               fin_fin_key_6_value,
+               fin_fin_key_7_value,
+               fin_fin_key_8_value,
+               fin_revenue_factor,
+               fin_creation_account_id,
+               fin_latest_mod_account_id,
+               fin_product_category_ref,
+               fin_product_class_name,
+               fin_cost_carrier_fin_stat,
+               fin_period_type,
+               fin_product_service_id,
+               fin_product_code,
+               fin_product_reference,
+               fin_ctr_version_id,
+               fin_ctr_version_nr,
+               fin_is_advance_payment,
+               fin_property_id,
+               fin_property_code,
+               fin_property_ref,
+               fin_cost_carrier_status,
+               fin_parent_cost_carrier_type,
+               fin_parent_cost_carrier_code,
+               fin_parent_cost_carrier_reference,
+               fin_parent_cost_carrier_status,
+               fin_parent_cost_carrier_id,
+               fin_top_cost_carrier_type,
+               fin_top_cost_carrier_code,
+               fin_top_cost_carrier_reference,
+               fin_top_cost_carrier_status,
+               fin_top_cost_carrier_id,
+               fin_apport_schedule_id,
+               fin_expense_factor,
+               fin_hist_idx_detail_id,
+               fin_cost_distr_key_id,
+               fin_cost_distr_key_code,
+               fin_cost_distr_key_ref,
+               fin_cost_distr_key_pct,
+               fin_base_cost_item_id,
+               fin_creation_date,
+               fin_latest_mod_date,
+               fin_billing_date,
+               fin_cost_generator_detail_id,
+               fin_price_origin,
+               fin_session_id,
+               fin_settlement_factor,
+               fin_calc_object_id,
+               fin_calc_object_detail_id,
+               fin_based_on_indexed_price,
+               fin_accounting_date,
+               fin_beneficiary_factor,
+               fin_calc_object_meter_id,
+               fin_is_historical,
+               fin_currency,
+               fin_cost_class_name,
+               fin_contract_type,
+               fin_contract_status,
+               fin_contract_status_class,
+               fin_contract_startdate,
+               fin_contract_enddate,
+               start_date,
+               start_by,
+               fin_client_organization_id,
+               fin_client_organization_code,
+               fin_client_organization_name,
+               is_deleted
+               )  
+VALUES
+(             
+               fin_cost_item_id,
+               fin_master_cost_item_id,
+               fin_cost_date,
+               fin_description,
+               fin_expense_amount,
+               fin_revenue_amount,
+               fin_tax_code_id,
+               fin_tax_code_code,
+               fin_tax_code_reference,
+               fin_tax_code_percentage,
+               fin_revenue_tax_amount,
+               fin_currency_id,
+               fin_cost_class_id,
+               fin_cost_category_id,
+               fin_cost_category_code,
+               fin_cost_category_reference,
+               fin_cost_carrier_id,
+               fin_cost_carrier_code,
+               fin_cost_carrier_reference,
+               fin_cost_generator_id,
+               fin_cost_generator_type,
+               fin_cost_generator_code,
+               fin_cost_generator_reference,
+               fin_cost_center_id,
+               fin_cost_center_code,
+               fin_cost_center_description,
+               fin_gl_account_id,
+               fin_gl_account_code,
+               fin_gl_account_reference,
+               fin_contract_id,
+               fin_contract_code,
+               fin_contract_reference,
+               fin_location_id,
+               fin_location_code,
+               fin_location_ref,
+               fin_supplier_id,
+               fin_supplier_code,
+               fin_supplier_name,
+               fin_billing,
+               fin_comm_or_actual,
+               fin_billing_requisition_id,
+               fin_fiscal_entity_id,
+               fin_fiscal_entity_code,
+               fin_fiscal_entity_name,
+               fin_fin_key_1,
+               fin_fin_key_2,
+               fin_fin_key_3,
+               fin_fin_key_4,
+               fin_fin_key_5,
+               fin_fin_key_6,
+               fin_fin_key_7,
+               fin_fin_key_8,
+               fin_price_list_detail_id,
+               fin_exp_list_detail_id,
+               fin_quantity,
+               fin_uom_id,
+               fin_uom_code,
+               fin_uom_ref,
+               fin_customer_id,
+               fin_customer_code,
+               fin_customer_name,
+               fin_cost_carrier_type,
+               fin_start_date,
+               fin_end_date,
+               fin_interval_value,
+               fin_interval_unit,
+               fin_material_integer_id,
+               fin_material_integer_code,
+               fin_material_integer_ref,
+               fin_external_prop_ref,
+               fin_unit_price,
+               fin_reu_id,
+               fin_reu_code,
+               fin_reu_ref,
+               fin_external_prop_ref_id,
+               fin_fin_key_1_value,
+               fin_fin_key_2_value,
+               fin_fin_key_3_value,
+               fin_fin_key_4_value,
+               fin_fin_key_5_value,
+               fin_fin_key_6_value,
+               fin_fin_key_7_value,
+               fin_fin_key_8_value,
+               fin_revenue_factor,
+               fin_creation_account_id,
+               fin_latest_mod_account_id,
+               fin_product_category_ref,
+               fin_product_class_name,
+               fin_cost_carrier_fin_stat,
+               fin_period_type,
+               fin_product_service_id,
+               fin_product_code,
+               fin_product_reference,
+               fin_ctr_version_id,
+               fin_ctr_version_nr,
+               fin_is_advance_payment,
+               fin_property_id,
+               fin_property_code,
+               fin_property_ref,
+               fin_cost_carrier_status,
+               fin_parent_cost_carrier_type,
+               fin_parent_cost_carrier_code,
+               fin_parent_cost_carrier_reference,
+               fin_parent_cost_carrier_status,
+               fin_parent_cost_carrier_id,
+               fin_top_cost_carrier_type,
+               fin_top_cost_carrier_code,
+               fin_top_cost_carrier_reference,
+               fin_top_cost_carrier_status,
+               fin_top_cost_carrier_id,
+               fin_apport_schedule_id,
+               fin_expense_factor,
+               fin_hist_idx_detail_id,
+               fin_cost_distr_key_id,
+               fin_cost_distr_key_code,
+               fin_cost_distr_key_ref,
+               fin_cost_distr_key_pct,
+               fin_base_cost_item_id,
+               fin_creation_date,
+               fin_latest_mod_date,
+               fin_billing_date,
+               fin_cost_generator_detail_id,
+               fin_price_origin,
+               fin_session_id,
+               fin_settlement_factor,
+               fin_calc_object_id,
+               fin_calc_object_detail_id,
+               fin_based_on_indexed_price,
+               fin_accounting_date,
+               fin_beneficiary_factor,
+               fin_calc_object_meter_id,
+               fin_is_historical,
+               fin_currency,
+               fin_cost_class_name,
+               fin_contract_type,
+               fin_contract_status,
+               fin_contract_status_class,
+               fin_contract_startdate,
+               fin_contract_enddate,
+               CURRENT_DATETIME(),
+               start_by,
+               fin_client_organization_id,
+               fin_client_organization_code,
+               fin_client_organization_name,
+               'N'
+               )
+"""             
+ ,fact_financials,vw_rep_costitems_18);
+
+EXECUTE IMMEDIATE mcs_fact_financials_insert;
+
+
+EXCEPTION WHEN ERROR THEN
+SELECT @@error.message, @@error.statement_text;
+--SET message = FORMAT('Error executing query: %s', ERROR_MESSAGE());
+  -- insert into `cobundu-bi-playground.dataform_sd_procedure.err_log` (message,insert_time) values ( dataset_name ||' tenant failed', TIMESTAMP_TRUNC(datetime(current_timestamp(),"CET"), SECOND));
+    --insert into `cobundu-bi-playground.dataform_sp_procedure_us_central.err_log` (message,insert_time) values ( message ||' tenant failed', TIMESTAMP_TRUNC(datetime(current_timestamp(),"CET"), SECOND));
+END;
+
+END FOR;
+
+END
