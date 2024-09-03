@@ -4,7 +4,6 @@ config {
   name: "mcs_locations"
 }
 
-
 BEGIN
 
 DECLARE dim_location STRING;
@@ -45,7 +44,7 @@ set vw_rep_building_stats_16 = 'cobundu-bi-playground.CHEMOURS_P.VW_REP_BUILDING
 
 FOR record IN
   (SELECT tenant
-   FROM `cobundu-bi-playground.dataform_sd_procedure.info`)
+   FROM `cobundu-bi-playground.dataform_sd_procedure.info` )
    DO
 
 BEGIN
@@ -2649,10 +2648,16 @@ EXECUTE IMMEDIATE mcs_fact_financials_insert;
 
 
 EXCEPTION WHEN ERROR THEN
-SELECT @@error.message, @@error.statement_text;
+
+/*SELECT @@error.message, @@error.statement_text;
 --SET message = FORMAT('Error executing query: %s', ERROR_MESSAGE());
   -- insert into `cobundu-bi-playground.dataform_sd_procedure.err_log` (message,insert_time) values ( dataset_name ||' tenant failed', TIMESTAMP_TRUNC(datetime(current_timestamp(),"CET"), SECOND));
     --insert into `cobundu-bi-playground.dataform_sp_procedure_us_central.err_log` (message,insert_time) values ( message ||' tenant failed', TIMESTAMP_TRUNC(datetime(current_timestamp(),"CET"), SECOND));
+*/
+
+insert into `cobundu-bi-playground.dataform_sd_procedure.error_log` (tenant, message, sql_text,insert_time) values
+(dataset_name, @@error.message,@@error.statement_text, TIMESTAMP_TRUNC(datetime(current_timestamp(),"CET"), SECOND) );
+
 END;
 
 END FOR;
