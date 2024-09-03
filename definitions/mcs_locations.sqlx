@@ -1,3 +1,10 @@
+config {
+  type: "operations",
+  schema: "my_schema",
+  name: "mcs_locations"
+}
+
+
 BEGIN
 
 DECLARE dim_location STRING;
