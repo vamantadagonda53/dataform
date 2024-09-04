@@ -45,7 +45,7 @@ set vw_rep_building_stats_16 = 'cobundu-bi-playground.CHEMOURS_P.VW_REP_BUILDING
 FOR record IN
   (SELECT tenant
    FROM `cobundu-bi-playground.dataform_sd_procedure.info` 
-   where tenant = 'CHEMOURS_T'
+   --where tenant = 'CHEMOURS_T'
     )
    DO
 
