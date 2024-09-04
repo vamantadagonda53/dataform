@@ -44,7 +44,9 @@ set vw_rep_building_stats_16 = 'cobundu-bi-playground.CHEMOURS_P.VW_REP_BUILDING
 
 FOR record IN
   (SELECT tenant
-   FROM `cobundu-bi-playground.dataform_sd_procedure.info` )
+   FROM `cobundu-bi-playground.dataform_sd_procedure.info` 
+  -- where tenant = 'CHEMOURS_P'
+    )
    DO
 
 BEGIN
@@ -1253,9 +1255,12 @@ using
                , c.priority                                     AS           hd_priority
                , c.cause       AS           hd_cause
                , c.book_method                                        AS           hd_book_method
-               , DATETIME(c.date_received,"America/New_York")                           AS                hd_date_received
-               , DATETIME(c.date_due,"America/New_York")                                    AS               hd_due_date
-               , DATETIME(c.date_closed ,"America/New_York")                              AS               hd_date_closed 
+               , DATETIME(TIMESTAMP(c.date_received),"America/New_York")                           AS                hd_date_received
+               , DATETIME(TIMESTAMP(c.date_due),"America/New_York")                                    AS               hd_due_date
+               , DATETIME(TIMESTAMP(c.date_closed) ,"America/New_York")                              AS               hd_date_closed 
+              -- ,c.date_received  AS                hd_date_received
+              -- ,c.date_due AS               hd_due_date
+              -- ,c.date_closed AS               hd_date_closed
                , c.nature_code                           AS           hd_nature_code
                , c.nature_reference   AS               hd_nature
                , c.nature_lvl1                             AS           hd_nature_l1
@@ -1320,6 +1325,12 @@ WHEN matched AND
                s.hd_date_received <> h.hd_date_received OR
                s.hd_due_date <> h.hd_due_date OR
                s.hd_date_closed <> h.hd_date_closed OR
+               /* Coalesce(s.hd_date_received,'2099-12-31T23:59:59') <> Coalesce(h.hd_date_received,'2099-12-31T23:59:59') OR
+                Coalesce(s.hd_due_date,'2099-12-31T23:59:59') <> Coalesce(s.hd_due_date,'2099-12-31T23:59:59') OR
+                Coalesce(s.hd_date_closed,'2099-12-31T23:59:59') <> Coalesce(s.hd_date_closed,'2099-12-31T23:59:59') OR
+                SAFE_CAST( Coalesce(s.hd_date_received,'2099-12-31T23:59:59') AS DATETIME) <> SAFE_CAST( Coalesce(h.hd_date_received,'2099-12-31T23:59:59')AS DATETIME) OR
+                SAFE_CAST(Coalesce(s.hd_due_date,'2099-12-31T23:59:59') AS DATETIME) <> SAFE_CAST(Coalesce(s.hd_due_date,'2099-12-31T23:59:59') AS DATETIME)  OR
+               SAFE_CAST( Coalesce(s.hd_date_closed,'2099-12-31T23:59:59') AS DATETIME) <> SAFE_CAST( Coalesce(s.hd_date_closed,'2099-12-31T23:59:59')  AS DATETIME) OR */
                s.hd_nature_code <> h.hd_nature_code OR
                s.hd_nature <> h.hd_nature OR
                s.hd_nature_l1 <> h.hd_nature_l1 OR
@@ -1384,9 +1395,12 @@ USING
                , c.priority                                     AS           hd_priority
                , c.cause       AS           hd_cause
                , c.book_method                                        AS           hd_book_method
-               , DATETIME(c.date_received,"America/New_York")                           AS                hd_date_received
-               , DATETIME(c.date_due,"America/New_York")                                    AS               hd_due_date
-               , DATETIME(c.date_closed ,"America/New_York")                              AS               hd_date_closed 
+               , DATETIME(TIMESTAMP(c.date_received),"America/New_York")                           AS                hd_date_received
+               , DATETIME(TIMESTAMP(c.date_due),"America/New_York")                                    AS               hd_due_date
+               , DATETIME(TIMESTAMP(c.date_closed) ,"America/New_York")                              AS               hd_date_closed 
+               --,c.date_received                           AS                hd_date_received
+               --,c.date_due                                    AS               hd_due_date
+               --,c.date_closed                               AS               hd_date_closed 
                , c.nature_code                           AS           hd_nature_code
                , c.nature_reference   AS               hd_nature
                , c.nature_lvl1                             AS           hd_nature_l1
@@ -1517,6 +1531,9 @@ VALUES
                hd_priority,
                hd_cause,
                hd_book_method,
+               --DATETIME(hd_date_received,"America/New_York"),
+               --DATETIME(hd_due_date,"America/New_York"),
+               --DATETIME(hd_date_closed,"America/New_York"),
                hd_date_received,
                hd_due_date,
                hd_date_closed,
