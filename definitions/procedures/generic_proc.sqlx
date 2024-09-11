@@ -1,0 +1,9 @@
+js {
+  const params = require("definitions/template.js");
+  const param1 = params.project_id;
+  const param2 = params.dataset_name;
+}
+
+BEGIN
+  CALL `cobundu-bi-playground.dataform_sd_procedure.mcs_location_v2`('${param1}','${param2}');
+END;
