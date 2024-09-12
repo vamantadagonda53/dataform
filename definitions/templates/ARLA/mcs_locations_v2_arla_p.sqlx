@@ -1,0 +1,15 @@
+js {
+  const params = require("definitions/env_var.js");
+  const parameter1 = params.project_id;
+  const parameter2 = params.arla_p_dataset_name;
+}
+
+
+config {
+  type: "operations",
+  description: "Job for ARLA_P"
+}
+
+BEGIN
+  CALL `cobundu-bi-playground.dataform_sd_procedure.mcs_location_v2`('${parameter1}', '${parameter2}');
+END;

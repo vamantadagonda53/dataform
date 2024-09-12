@@ -1,6 +1,7 @@
 js {
-  const parameter1 = "cobundu-bi-playground";
-  const parameter2 = "CHEMOURS_T";
+  const params = require("definitions/env_var.js");
+  const parameter1 = params.project_id;
+  const parameter2 = params.chemours_t_dataset_name;
 }
 
 config {
