@@ -1,0 +1,15 @@
+js {
+  const params = require("definitions/env_var.js");
+  const parameter1 = params.project_id;
+  const parameter2 = params.chemours_p_dataset_name;
+  const parameter3 = params.nordea_p_ver_num;
+}
+
+config {
+  type: "operations",
+  description: "Job for Nordea_P"
+}
+
+BEGIN
+  CALL `cobundu-bi-playground.dataform_sd_procedure.mcs_stream_v4`('${parameter1}', '${parameter2}','${parameter3}');
+END;

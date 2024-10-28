@@ -1,0 +1,1003 @@
+CREATE OR REPLACE PROCEDURE `cobundu-bi-playground.dataform_sd_procedure.pr_fact_sla_workorders`(IN p_project_id STRING, IN p_dataset_name STRING, IN p_num INT64)
+BEGIN
+	DECLARE 	nCount									INT64;
+	DECLARE		strSqlSnt								STRING;
+	DECLARE 	MV_REP_SLA_WO							STRING;
+	DECLARE 	mcs_fact_sla_workorders_update		 	STRING;
+	DECLARE		mcs_fact_sla_workorders_insert			STRING;
+	DECLARE		FACT_SLA_WORKORDERS						STRING;
+	DECLARE		strRemarks								STRING;
+	DECLARE 	error_txt								STRING;
+	DECLARE 	strErrorMessage         				STRING;
+	DECLARE		strProcName								STRING;
+	
+	SET strProcName 				= 'pr_fact_sla_workorders';
+	SET strRemarks					= '';
+	SET FACT_SLA_WORKORDERS  		= p_project_id||'.'||p_dataset_name||'.FACT_SLA_WORKORDERS';
+	
+	CALL `cobundu-bi-playground.dataform_sd_procedure.Execution_log`(p_dataset_name, strProcName, 'S', strRemarks);
+	
+	SET strSqlSnt = FORMAT("""SELECT COUNT(*) FROM `%s` """,FACT_SLA_WORKORDERS);
+	
+	EXECUTE IMMEDIATE strSqlSnt INTO nCount;
+				
+	IF nCount <= 1
+	THEN
+		SET MV_REP_SLA_WO 		= 	p_project_id||'.'||p_dataset_name||'.MV_REP_SLA_WO_'||p_num;															
+		--##############################
+		--FACT_SLA_WORKORDERS --UPDATE
+		--##############################
+
+		BEGIN	
+			SET mcs_fact_sla_workorders_update = FORMAT("""
+														MERGE INTO `%s` d
+															using
+															(
+																SELECT 
+																	SLA_EVALUATION_ID 						AS 	sla_wo_evaluation_id,
+																	SLA_EVAL_STATUS 						AS 	sla_wo_eval_status,
+																	SLA_OBJECT_ID 							AS 	sla_wo_object_id,
+																	SLA_OBJECT_CODE 						AS 	sla_wo_object_code,
+																	SLA_OBJECT_REF 							AS 	sla_wo_object_ref,
+																	SLA_OBJECT_METRIC_ID 					AS 	sla_wo_object_metric_id,
+																	METRIC_NAME 							AS 	sla_wo_metric_name,
+																	METRIC_LABEL 							AS 	sla_wo_metric_label,
+																	cast(HIGH_TARGET as numeric) 			as 	sla_wo_high_target,
+																	cast(LOW_TARGET as numeric) 			as 	sla_wo_low_target,
+																	START_STATUS_ID 						AS  sla_wo_start_status_id,
+																	START_STATUS_NAME 						AS  sla_wo_start_status_name,
+																	END_STATUS_ID 							AS  sla_wo_end_status_id,
+																	END_STATUS_NAME 						AS  sla_wo_end_status_name,
+																	WORKORDER_ID 							AS  sla_wo_workorder_id,
+																	cast(METRIC_VALUE as numeric) 			as 	sla_wo_metric_value,
+																	CHRONO 									AS 	sla_wo_chrono,
+																	METRIC_EVALUATION_SCORE 				AS 	sla_wo_metric_evaluation_score,
+																	METRIC_EVALUATION_LABEL 				AS 	sla_wo_metric_evaluation_label,
+																	cast(HIGH_TARGET_DEVIATION as numeric) 	as 	sla_wo_high_target_deviation,
+																	cast(LOW_TARGET_DEVIATION as numeric) 	as 	sla_wo_low_target_deviation,
+																	WORKORDER_REFERENCE 					AS 	sla_wo_workorder_reference,
+																	WORKORDER_TYPE 							AS 	sla_wo_workorder_type,
+																	WORKORDER_PRIORITY 						AS 	sla_wo_workorder_priority,
+																	WORKORDER_SEVERITY 						AS 	sla_wo_workorder_severity,
+																	WORKORDER_COMPLIANCE_LEVEL 				AS 	sla_wo_workorder_compliance_level,
+																	WORKORDER_CLASS 						AS 	sla_wo_workorder_class,
+																	MAINTENANCE_PLAN 						AS 	sla_wo_maintenance_plan,
+																	--CAST(TO_TIMESTAMP(DATE_REGISTERED,'DD-MON-YY HH12.MI.SS.US AM') AS TIMESTAMP WITHOUT TIME ZONE) 	AS DATE_REGISTERED,
+																	--CAST(TO_TIMESTAMP(DATE_WISHED,'DD-MON-YY HH12.MI.SS.US AM') AS TIMESTAMP WITHOUT TIME ZONE) 		AS DATE_WISHED,
+																	--CAST(TO_TIMESTAMP(DATE_FINISHED,'DD-MON-YY HH12.MI.SS.US AM') AS TIMESTAMP WITHOUT TIME ZONE) 	AS DATE_FINISHED,
+																	TIMESTAMP_TRUNC(datetime(DATE_REGISTERED,"CET"), SECOND) 	AS sla_wo_date_registered,
+																	TIMESTAMP_TRUNC(datetime(DATE_WISHED,"CET"), SECOND) 		AS sla_wo_date_wished,
+																	TIMESTAMP_TRUNC(datetime(DATE_FINISHED,"CET"), SECOND) 		AS sla_wo_date_finished,
+																	NATURE_CODE 								AS  sla_wo_nature_code,
+																	NATURE_REFERENCE 							AS  sla_wo_nature_reference,
+																	NATURE_LVL1 								AS  sla_wo_nature_lvl1,
+																	NATURE_LVL2 								AS  sla_wo_nature_lvl2,
+																	NATURE_LVL3 								AS  sla_wo_nature_lvl3,
+																	--NATURE_LVL1_1 -- TO BE INVESTIGATED,	
+																	--NATURE_LVL2_1 -- TO BE INVESTIGATED,	
+																	--NATURE_LVL3_1 -- TO BE INVESTIGATED,	
+																	REGISTERED_BY_NAME 							AS  sla_wo_registered_by_name,
+																	REGISTERED_BY_CODE 							AS  sla_wo_registered_by_code,
+																	REGISTERED_BY_DEPARTMENT_NAME 				AS  sla_wo_registered_by_department_name,
+																	REGISTERED_BY_DEPARTMENT_CODE 				AS  sla_wo_registered_by_department_code,
+																	REGISTERED_BY_COMPANY_NAME 					AS  sla_wo_registered_by_company_name,
+																	REGISTERED_BY_COMPANY_CODE 					AS  sla_wo_registered_by_company_code,
+																	REQUESTED_BY_NAME 							AS  sla_wo_requested_by_name,
+																	REQUESTED_BY_CODE 							AS  sla_wo_requested_by_code,
+																	REQUESTED_BY_DEPARTMENT_NAME 				AS  sla_wo_requested_by_department_name,
+																	REQUESTED_BY_DEPARTMENT_CODE 				AS  sla_wo_requested_by_department_code,
+																	REQUESTED_BY_COMPANY_NAME 					AS  sla_wo_requested_by_company_name,
+																	REQUESTED_BY_COMPANY_CODE 					AS  sla_wo_requested_by_company_code,
+																	CUSTOMER_NAME 								AS  sla_wo_customer_name,
+																	CUSTOMER_CODE 								AS  sla_wo_customer_code,
+																	ASSIGNED_PERS_NAME 							AS  sla_wo_assigned_pers_name,
+																	ASSIGNED_PERS_CODE 							AS  sla_wo_assigned_pers_code,
+																	ASSIGNED_PERS_DEPARTMENT_NAME 				AS  sla_wo_assigned_pers_department_name,
+																	ASSIGNED_PERS_DEPARTMENT_CODE 				AS  sla_wo_assigned_pers_department_code,
+																	ASSIGNED_PERS_COMPANY_NAME 					AS  sla_wo_assigned_pers_company_name,
+																	ASSIGNED_PERS_COMPANY_CODE 					AS  sla_wo_assigned_pers_company_code,
+																	PLANNER_NAME 								AS  sla_wo_planner_name,
+																	PLANNER_CODE 								AS  sla_wo_planner_code,
+																	TASKFORCE_NAME 								AS  sla_wo_taskforce_name,
+																	TASKFORCE_CODE 								AS  sla_wo_taskforce_code,
+																	SUPPLIER_NAME 								AS  sla_wo_supplier_name,
+																	SUPPLIER_CODE 								AS  sla_wo_supplier_code,
+																	LOCATION_ID 								AS  sla_wo_location_id,
+																	AREA_CODE 									AS  sla_wo_area_code,
+																	AREA_REFERENCE 								AS  sla_wo_area_reference,
+																	SITE_CODE 									AS  sla_wo_site_code,
+																	SITE_REFERENCE 								AS  sla_wo_site_reference,
+																	BUILDING_CODE 								AS  sla_wo_building_code,
+																	BUILDING_REFERENCE 							AS  sla_wo_building_reference,
+																	FLOOR_CODE 									AS  sla_wo_floor_code,
+																	FLOOR_REFERENCE 							AS  sla_wo_floor_reference,
+																	ROOM_CODE 									AS  sla_wo_room_code,
+																	ROOM_REFERENCE 								AS  sla_wo_room_reference,
+																	EXTERIOR_LOCATION_CODE 						AS  sla_wo_exterior_location_code,
+																	EXTERIOR_LOCATION_REF 						AS  sla_wo_exterior_location_ref,
+																	WORKORDER_STATUS 							AS  sla_wo_workorder_status,
+																	WORKORDER_STATUS_CLASS 						AS  sla_wo_workorder_status_class,
+																	cast(creation_timestamp as datetime) 		as  creation_timestamp,
+																	cast(modification_timestamp as datetime) 	as 	modification_timestamp 
+																from `%s` 
+																) s 
+															ON s.sla_wo_evaluation_id = d.sla_wo_evaluation_id
+															AND is_deleted = 'N'
+															WHEN MATCHED AND 
+																s.sla_wo_evaluation_id 					<> 		d.sla_wo_evaluation_id OR
+																s.sla_wo_eval_status 					<> 		d.sla_wo_eval_status OR
+																s.sla_wo_object_id 						<> 		d.sla_wo_object_id OR
+																s.sla_wo_object_code 					<> 		d.sla_wo_object_code OR
+																s.sla_wo_object_ref 					<> 		d.sla_wo_object_ref OR
+																s.sla_wo_object_metric_id 				<> 		d.sla_wo_object_metric_id OR
+																s.sla_wo_metric_name 					<> 		d.sla_wo_metric_name OR
+																s.sla_wo_metric_label 					<> 		d.sla_wo_metric_label OR
+																s.sla_wo_high_target 					<> 		d.sla_wo_high_target OR
+																s.sla_wo_low_target 					<> 		d.sla_wo_low_target OR
+																s.sla_wo_start_status_id 				<> 		d.sla_wo_start_status_id OR
+																s.sla_wo_start_status_name 				<> 		d.sla_wo_start_status_name OR
+																s.sla_wo_end_status_id 					<> 		d.sla_wo_end_status_id OR
+																s.sla_wo_end_status_name 				<> 		d.sla_wo_end_status_name OR
+																s.sla_wo_workorder_id 					<> 		d.sla_wo_workorder_id OR
+																s.sla_wo_metric_value 					<> 		d.sla_wo_metric_value OR
+																s.sla_wo_chrono 						<> 		d.sla_wo_chrono OR
+																s.sla_wo_metric_evaluation_score 		<> 		d.sla_wo_metric_evaluation_score OR
+																s.sla_wo_metric_evaluation_label 		<> 		d.sla_wo_metric_evaluation_label OR
+																s.sla_wo_high_target_deviation 			<> 		d.sla_wo_high_target_deviation OR
+																s.sla_wo_low_target_deviation 			<> 		d.sla_wo_low_target_deviation OR
+																s.sla_wo_workorder_reference 			<> 		d.sla_wo_workorder_reference OR
+																s.sla_wo_workorder_type 				<> 		d.sla_wo_workorder_type OR
+																s.sla_wo_workorder_priority 			<> 		d.sla_wo_workorder_priority OR
+																s.sla_wo_workorder_severity 			<> 		d.sla_wo_workorder_severity OR
+																s.sla_wo_workorder_compliance_level 	<> 		d.sla_wo_workorder_compliance_level OR
+																s.sla_wo_workorder_class 				<> 		d.sla_wo_workorder_class OR
+																s.sla_wo_maintenance_plan 				<> 		d.sla_wo_maintenance_plan OR
+																s.sla_wo_date_registered 				<> 		d.sla_wo_date_registered OR
+																s.sla_wo_date_wished 					<> 		d.sla_wo_date_wished OR
+																s.sla_wo_date_finished 					<> 		d.sla_wo_date_finished OR
+																s.sla_wo_nature_code 					<> 		d.sla_wo_nature_code OR
+																s.sla_wo_nature_reference 				<> 		d.sla_wo_nature_reference OR
+																s.sla_wo_nature_lvl1 					<> 		d.sla_wo_nature_lvl1 OR
+																s.sla_wo_nature_lvl2 					<> 		d.sla_wo_nature_lvl2 OR
+																s.sla_wo_nature_lvl3 					<> 		d.sla_wo_nature_lvl3 OR
+																s.sla_wo_registered_by_name 			<> 		d.sla_wo_registered_by_name OR
+																s.sla_wo_registered_by_code 			<> 		d.sla_wo_registered_by_code OR
+																s.sla_wo_registered_by_department_name 	<> 		d.sla_wo_registered_by_department_name OR
+																s.sla_wo_registered_by_department_code 	<> 		d.sla_wo_registered_by_department_code OR
+																s.sla_wo_registered_by_company_name 	<> 		d.sla_wo_registered_by_company_name OR
+																s.sla_wo_registered_by_company_code 	<> 		d.sla_wo_registered_by_company_code OR
+																s.sla_wo_requested_by_name 				<> 		d.sla_wo_requested_by_name OR
+																s.sla_wo_requested_by_code 				<> 		d.sla_wo_requested_by_code OR
+																s.sla_wo_requested_by_department_name 	<> 		d.sla_wo_requested_by_department_name OR
+																s.sla_wo_requested_by_department_code 	<> 		d.sla_wo_requested_by_department_code OR
+																s.sla_wo_requested_by_company_name 		<> 		d.sla_wo_requested_by_company_name OR
+																s.sla_wo_requested_by_company_code 		<> 		d.sla_wo_requested_by_company_code OR
+																s.sla_wo_customer_name 					<> 		d.sla_wo_customer_name OR
+																s.sla_wo_customer_code 					<> 		d.sla_wo_customer_code OR
+																s.sla_wo_assigned_pers_name 			<> 		d.sla_wo_assigned_pers_name OR
+																s.sla_wo_assigned_pers_code 			<> 		d.sla_wo_assigned_pers_code OR
+																s.sla_wo_assigned_pers_department_name 	<> 		d.sla_wo_assigned_pers_department_name OR
+																s.sla_wo_assigned_pers_department_code 	<> 		d.sla_wo_assigned_pers_department_code OR
+																s.sla_wo_assigned_pers_company_name 	<> 		d.sla_wo_assigned_pers_company_name OR
+																s.sla_wo_assigned_pers_company_code 	<> 		d.sla_wo_assigned_pers_company_code OR
+																s.sla_wo_planner_name 					<> 		d.sla_wo_planner_name OR
+																s.sla_wo_planner_code 					<> 		d.sla_wo_planner_code OR
+																s.sla_wo_taskforce_name 				<> 		d.sla_wo_taskforce_name OR
+																s.sla_wo_taskforce_code 				<> 		d.sla_wo_taskforce_code OR
+																s.sla_wo_supplier_name 					<> 		d.sla_wo_supplier_name OR
+																s.sla_wo_supplier_code 					<> 		d.sla_wo_supplier_code OR
+																s.sla_wo_location_id 					<> 		d.sla_wo_location_id OR
+																s.sla_wo_area_code 						<> 		d.sla_wo_area_code OR
+																s.sla_wo_area_reference 				<> 		d.sla_wo_area_reference OR
+																s.sla_wo_site_code 						<> 		d.sla_wo_site_code OR
+																s.sla_wo_site_reference 				<> 		d.sla_wo_site_reference OR
+																s.sla_wo_building_code 					<> 		d.sla_wo_building_code OR
+																s.sla_wo_building_reference 			<> 		d.sla_wo_building_reference OR
+																s.sla_wo_floor_code 					<> 		d.sla_wo_floor_code OR
+																s.sla_wo_floor_reference 				<> 		d.sla_wo_floor_reference OR
+																s.sla_wo_room_code 						<> 		d.sla_wo_room_code OR
+																s.sla_wo_room_reference 				<> 		d.sla_wo_room_reference OR
+																s.sla_wo_exterior_location_code 		<> 		d.sla_wo_exterior_location_code OR
+																s.sla_wo_exterior_location_ref 			<> 		d.sla_wo_exterior_location_ref OR
+																s.sla_wo_workorder_status 				<> 		d.sla_wo_workorder_status OR
+																s.sla_wo_workorder_status_class 		<> 		d.sla_wo_workorder_status_class OR
+																s.creation_timestamp 					<> 		d.creation_timestamp OR
+																s.modification_timestamp 				<> 		d.modification_timestamp
+															THEN UPDATE SET 
+																	is_deleted = 'Y',
+																	last_modified_timestamp = TIMESTAMP_TRUNC(datetime(current_timestamp(),"CET"), SECOND)"""
+														,FACT_SLA_WORKORDERS,MV_REP_SLA_WO);
+
+				EXECUTE IMMEDIATE mcs_fact_sla_workorders_update;
+			
+		EXCEPTION WHEN ERROR THEN
+
+			SET strRemarks 			= 'Failed in '||strProcName||', check error_log table for more info';
+			SET strErrorMessage 	= @@error.message;
+			SET error_txt		  	= 'Failed in mcs_fact_sla_workorders_update '||' ~'||@@error.statement_text;
+			  
+			CALL `cobundu-bi-playground.dataform_sd_procedure.Execution_log`(p_dataset_name, strProcName, 'E', strRemarks);
+			CALL `cobundu-bi-playground.dataform_sd_procedure.Error_log`(p_dataset_name, strErrorMessage, error_txt);
+
+		END;
+
+		--##############################
+		--FACT_SLA_WORKORDERS --INSERT
+		--##############################
+
+		BEGIN	
+			SET mcs_fact_sla_workorders_insert = FORMAT("""
+														MERGE INTO `%s` d
+														using
+															(
+															SELECT 
+																SLA_EVALUATION_ID 						AS 	sla_wo_evaluation_id,
+																SLA_EVAL_STATUS 						AS 	sla_wo_eval_status,
+																SLA_OBJECT_ID			 				AS 	sla_wo_object_id,
+																SLA_OBJECT_CODE 						AS 	sla_wo_object_code,
+																SLA_OBJECT_REF 							AS 	sla_wo_object_ref,
+																SLA_OBJECT_METRIC_ID 					AS 	sla_wo_object_metric_id,
+																METRIC_NAME 							AS 	sla_wo_metric_name,
+																METRIC_LABEL 							AS 	sla_wo_metric_label,
+																cast(HIGH_TARGET as numeric) 			AS 	sla_wo_high_target,
+																cast(LOW_TARGET as numeric) 			AS 	sla_wo_low_target,
+																START_STATUS_ID 						AS  sla_wo_start_status_id,
+																START_STATUS_NAME 						AS  sla_wo_start_status_name,
+																END_STATUS_ID 							AS  sla_wo_end_status_id,
+																END_STATUS_NAME 						AS  sla_wo_end_status_name,
+																WORKORDER_ID 							AS  sla_wo_workorder_id,
+																cast(METRIC_VALUE as numeric) 			AS 	sla_wo_metric_value,
+																CHRONO 									AS 	sla_wo_chrono,
+																METRIC_EVALUATION_SCORE 				AS 	sla_wo_metric_evaluation_score,
+																METRIC_EVALUATION_LABEL 				AS 	sla_wo_metric_evaluation_label,
+																cast(HIGH_TARGET_DEVIATION as numeric) 	AS 	sla_wo_high_target_deviation,
+																cast(LOW_TARGET_DEVIATION as numeric) 	AS 	sla_wo_low_target_deviation,
+																WORKORDER_REFERENCE 					AS 	sla_wo_workorder_reference,
+																WORKORDER_TYPE 							AS 	sla_wo_workorder_type,
+																WORKORDER_PRIORITY 						AS 	sla_wo_workorder_priority,
+																WORKORDER_SEVERITY 						AS 	sla_wo_workorder_severity,
+																WORKORDER_COMPLIANCE_LEVEL 				AS 	sla_wo_workorder_compliance_level,
+																WORKORDER_CLASS 						AS 	sla_wo_workorder_class,
+																MAINTENANCE_PLAN 						AS 	sla_wo_maintenance_plan,
+																--CAST(TO_TIMESTAMP(DATE_REGISTERED,'DD-MON-YY HH12.MI.SS.US AM') 	AS TIMESTAMP WITHOUT TIME ZONE) AS DATE_REGISTERED,
+																--CAST(TO_TIMESTAMP(DATE_WISHED,'DD-MON-YY HH12.MI.SS.US AM') 		AS TIMESTAMP WITHOUT TIME ZONE) AS DATE_WISHED,
+																--CAST(TO_TIMESTAMP(DATE_FINISHED,'DD-MON-YY HH12.MI.SS.US AM') 	AS TIMESTAMP WITHOUT TIME ZONE) AS DATE_FINISHED,
+																TIMESTAMP_TRUNC(datetime(DATE_REGISTERED,"CET"), SECOND) 	AS 	sla_wo_date_registered,
+																TIMESTAMP_TRUNC(datetime(DATE_WISHED,"CET"), SECOND) 		AS 	sla_wo_date_wished,
+																TIMESTAMP_TRUNC(datetime(DATE_FINISHED,"CET"), SECOND) 		AS 	sla_wo_date_finished,
+																NATURE_CODE 					AS  sla_wo_nature_code,
+																NATURE_REFERENCE 				AS  sla_wo_nature_reference,
+																NATURE_LVL1 					AS  sla_wo_nature_lvl1,
+																NATURE_LVL2 					AS  sla_wo_nature_lvl2,
+																NATURE_LVL3 					AS  sla_wo_nature_lvl3,
+																--NATURE_LVL1_1 -- TO BE INVESTIGATED,
+																--NATURE_LVL2_1 -- TO BE INVESTIGATED,
+																--NATURE_LVL3_1 -- TO BE INVESTIGATED,
+																REGISTERED_BY_NAME 				AS  sla_wo_registered_by_name,
+																REGISTERED_BY_CODE 				AS  sla_wo_registered_by_code,
+																REGISTERED_BY_DEPARTMENT_NAME 	AS  sla_wo_registered_by_department_name,
+																REGISTERED_BY_DEPARTMENT_CODE 	AS  sla_wo_registered_by_department_code,
+																REGISTERED_BY_COMPANY_NAME 		AS  sla_wo_registered_by_company_name,
+																REGISTERED_BY_COMPANY_CODE 		AS  sla_wo_registered_by_company_code,
+																REQUESTED_BY_NAME 				AS  sla_wo_requested_by_name,
+																REQUESTED_BY_CODE 				AS  sla_wo_requested_by_code,
+																REQUESTED_BY_DEPARTMENT_NAME 	AS  sla_wo_requested_by_department_name,
+																REQUESTED_BY_DEPARTMENT_CODE 	AS  sla_wo_requested_by_department_code,
+																REQUESTED_BY_COMPANY_NAME 		AS  sla_wo_requested_by_company_name,
+																REQUESTED_BY_COMPANY_CODE 		AS  sla_wo_requested_by_company_code,
+																CUSTOMER_NAME 					AS  sla_wo_customer_name,
+																CUSTOMER_CODE 					AS  sla_wo_customer_code,
+																ASSIGNED_PERS_NAME 				AS  sla_wo_assigned_pers_name,
+																ASSIGNED_PERS_CODE 				AS  sla_wo_assigned_pers_code,
+																ASSIGNED_PERS_DEPARTMENT_NAME 	AS  sla_wo_assigned_pers_department_name,
+																ASSIGNED_PERS_DEPARTMENT_CODE 	AS  sla_wo_assigned_pers_department_code,
+																ASSIGNED_PERS_COMPANY_NAME 		AS  sla_wo_assigned_pers_company_name,
+																ASSIGNED_PERS_COMPANY_CODE 		AS  sla_wo_assigned_pers_company_code,
+																PLANNER_NAME 					AS  sla_wo_planner_name,
+																PLANNER_CODE 					AS  sla_wo_planner_code,
+																TASKFORCE_NAME 					AS  sla_wo_taskforce_name,
+																TASKFORCE_CODE 					AS  sla_wo_taskforce_code,
+																SUPPLIER_NAME 					AS  sla_wo_supplier_name,
+																SUPPLIER_CODE 					AS  sla_wo_supplier_code,
+																LOCATION_ID 					AS  sla_wo_location_id,
+																AREA_CODE 						AS  sla_wo_area_code,
+																AREA_REFERENCE 					AS  sla_wo_area_reference,
+																SITE_CODE 						AS  sla_wo_site_code,
+																SITE_REFERENCE 					AS  sla_wo_site_reference,
+																BUILDING_CODE 					AS  sla_wo_building_code,
+																BUILDING_REFERENCE 				AS  sla_wo_building_reference,
+																FLOOR_CODE 						AS  sla_wo_floor_code,
+																FLOOR_REFERENCE 				AS  sla_wo_floor_reference,
+																ROOM_CODE 						AS  sla_wo_room_code,
+																ROOM_REFERENCE 					AS  sla_wo_room_reference,
+																EXTERIOR_LOCATION_CODE 			AS  sla_wo_exterior_location_code,
+																EXTERIOR_LOCATION_REF 			AS  sla_wo_exterior_location_ref,
+																WORKORDER_STATUS 				AS  sla_wo_workorder_status,
+																WORKORDER_STATUS_CLASS 			AS  sla_wo_workorder_status_class,
+																cast(creation_timestamp as datetime) as  creation_timestamp,
+																cast(modification_timestamp as datetime) as modification_timestamp 
+															from `%s` 
+															) s 
+															ON s.sla_wo_evaluation_id = d.sla_wo_evaluation_id
+															AND is_deleted = 'N'
+															WHEN not matched THEN
+															INSERT
+															(
+																sla_wo_evaluation_id,
+																sla_wo_eval_status,
+																sla_wo_object_id,
+																sla_wo_object_code,
+																sla_wo_object_ref,
+																sla_wo_object_metric_id,
+																sla_wo_metric_name,
+																sla_wo_metric_label,
+																sla_wo_high_target,
+																sla_wo_low_target,
+																sla_wo_start_status_id,
+																sla_wo_start_status_name,
+																sla_wo_end_status_id,
+																sla_wo_end_status_name,
+																sla_wo_workorder_id,
+																sla_wo_metric_value,
+																sla_wo_chrono,
+																sla_wo_metric_evaluation_score,
+																sla_wo_metric_evaluation_label,
+																sla_wo_high_target_deviation,
+																sla_wo_low_target_deviation,
+																sla_wo_workorder_reference,
+																sla_wo_workorder_type,
+																sla_wo_workorder_priority,
+																sla_wo_workorder_severity,
+																sla_wo_workorder_compliance_level,
+																sla_wo_workorder_class,
+																sla_wo_maintenance_plan,
+																sla_wo_date_registered,
+																sla_wo_date_wished,
+																sla_wo_date_finished,
+																sla_wo_nature_code,
+																sla_wo_nature_reference,
+																sla_wo_nature_lvl1,
+																sla_wo_nature_lvl2,
+																sla_wo_nature_lvl3,
+																sla_wo_registered_by_name,
+																sla_wo_registered_by_code,
+																sla_wo_registered_by_department_name,
+																sla_wo_registered_by_department_code,
+																sla_wo_registered_by_company_name,
+																sla_wo_registered_by_company_code,
+																sla_wo_requested_by_name,
+																sla_wo_requested_by_code,
+																sla_wo_requested_by_department_name,
+																sla_wo_requested_by_department_code,
+																sla_wo_requested_by_company_name,
+																sla_wo_requested_by_company_code,
+																sla_wo_customer_name,
+																sla_wo_customer_code,
+																sla_wo_assigned_pers_name,
+																sla_wo_assigned_pers_code,
+																sla_wo_assigned_pers_department_name,
+																sla_wo_assigned_pers_department_code,
+																sla_wo_assigned_pers_company_name,
+																sla_wo_assigned_pers_company_code,
+																sla_wo_planner_name,
+																sla_wo_planner_code,
+																sla_wo_taskforce_name,
+																sla_wo_taskforce_code,
+																sla_wo_supplier_name,
+																sla_wo_supplier_code,
+																sla_wo_location_id,
+																sla_wo_area_code,
+																sla_wo_area_reference,
+																sla_wo_site_code,
+																sla_wo_site_reference,
+																sla_wo_building_code,
+																sla_wo_building_reference,
+																sla_wo_floor_code,
+																sla_wo_floor_reference,
+																sla_wo_room_code,
+																sla_wo_room_reference,
+																sla_wo_exterior_location_code,
+																sla_wo_exterior_location_ref,
+																sla_wo_workorder_status,
+																sla_wo_workorder_status_class,
+																creation_timestamp,
+																modification_timestamp,
+																is_deleted,
+																last_modified_timestamp
+															)
+															VALUES
+															(
+																sla_wo_evaluation_id,
+																sla_wo_eval_status,
+																sla_wo_object_id,
+																sla_wo_object_code,
+																sla_wo_object_ref,
+																sla_wo_object_metric_id,
+																sla_wo_metric_name,
+																sla_wo_metric_label,
+																sla_wo_high_target,
+																sla_wo_low_target,
+																sla_wo_start_status_id,
+																sla_wo_start_status_name,
+																sla_wo_end_status_id,
+																sla_wo_end_status_name,
+																sla_wo_workorder_id,
+																sla_wo_metric_value,
+																sla_wo_chrono,
+																sla_wo_metric_evaluation_score,
+																sla_wo_metric_evaluation_label,
+																sla_wo_high_target_deviation,
+																sla_wo_low_target_deviation,
+																sla_wo_workorder_reference,
+																sla_wo_workorder_type,
+																sla_wo_workorder_priority,
+																sla_wo_workorder_severity,
+																sla_wo_workorder_compliance_level,
+																sla_wo_workorder_class,
+																sla_wo_maintenance_plan,
+																sla_wo_date_registered,
+																sla_wo_date_wished,
+																sla_wo_date_finished,
+																sla_wo_nature_code,
+																sla_wo_nature_reference,
+																sla_wo_nature_lvl1,
+																sla_wo_nature_lvl2,
+																sla_wo_nature_lvl3,
+																sla_wo_registered_by_name,
+																sla_wo_registered_by_code,
+																sla_wo_registered_by_department_name,
+																sla_wo_registered_by_department_code,
+																sla_wo_registered_by_company_name,
+																sla_wo_registered_by_company_code,
+																sla_wo_requested_by_name,
+																sla_wo_requested_by_code,
+																sla_wo_requested_by_department_name,
+																sla_wo_requested_by_department_code,
+																sla_wo_requested_by_company_name,
+																sla_wo_requested_by_company_code,
+																sla_wo_customer_name,
+																sla_wo_customer_code,
+																sla_wo_assigned_pers_name,
+																sla_wo_assigned_pers_code,
+																sla_wo_assigned_pers_department_name,
+																sla_wo_assigned_pers_department_code,
+																sla_wo_assigned_pers_company_name,
+																sla_wo_assigned_pers_company_code,
+																sla_wo_planner_name,
+																sla_wo_planner_code,
+																sla_wo_taskforce_name,
+																sla_wo_taskforce_code,
+																sla_wo_supplier_name,
+																sla_wo_supplier_code,
+																sla_wo_location_id,
+																sla_wo_area_code,
+																sla_wo_area_reference,
+																sla_wo_site_code,
+																sla_wo_site_reference,
+																sla_wo_building_code,
+																sla_wo_building_reference,
+																sla_wo_floor_code,
+																sla_wo_floor_reference,
+																sla_wo_room_code,
+																sla_wo_room_reference,
+																sla_wo_exterior_location_code,
+																sla_wo_exterior_location_ref,
+																sla_wo_workorder_status,
+																sla_wo_workorder_status_class,
+																creation_timestamp,
+																modification_timestamp,
+																'N',
+																TIMESTAMP_TRUNC(datetime(current_timestamp(),"CET"), SECOND)
+															)"""
+														,FACT_SLA_WORKORDERS,MV_REP_SLA_WO);
+
+				EXECUTE IMMEDIATE mcs_fact_sla_workorders_insert;
+			
+		EXCEPTION WHEN ERROR THEN
+			
+			SET strRemarks 			= 'Failed in '||strProcName||', check error_log table for more info';
+			SET strErrorMessage 	= @@error.message;
+			SET error_txt		  	= 'Failed in mcs_fact_sla_workorders_insert '||' ~'||@@error.statement_text;
+			  
+			CALL `cobundu-bi-playground.dataform_sd_procedure.Execution_log`(p_dataset_name, strProcName, 'E', strRemarks);
+			CALL `cobundu-bi-playground.dataform_sd_procedure.Error_log`(p_dataset_name, strErrorMessage, error_txt);
+
+		END;
+	ELSE
+		SET MV_REP_SLA_WO 		= `cobundu-bi-playground.dataform_sd_procedure.get_variable_name`(p_project_id, p_dataset_name, 'MV_REP_SLA_WO_'||p_num);
+		
+		IF MV_REP_SLA_WO IS NOT NULL
+		THEN
+			--##############################
+			--FACT_SLA_WORKORDERS --UPDATE
+			--##############################
+
+			BEGIN	
+				SET mcs_fact_sla_workorders_update = FORMAT("""
+															MERGE INTO `%s` d
+																using
+																(
+																	SELECT 
+																		SLA_EVALUATION_ID 						AS 	sla_wo_evaluation_id,
+																		SLA_EVAL_STATUS 						AS 	sla_wo_eval_status,
+																		SLA_OBJECT_ID 							AS 	sla_wo_object_id,
+																		SLA_OBJECT_CODE 						AS 	sla_wo_object_code,
+																		SLA_OBJECT_REF 							AS 	sla_wo_object_ref,
+																		SLA_OBJECT_METRIC_ID 					AS 	sla_wo_object_metric_id,
+																		METRIC_NAME 							AS 	sla_wo_metric_name,
+																		METRIC_LABEL 							AS 	sla_wo_metric_label,
+																		cast(HIGH_TARGET as numeric) 			as 	sla_wo_high_target,
+																		cast(LOW_TARGET as numeric) 			as 	sla_wo_low_target,
+																		START_STATUS_ID 						AS  sla_wo_start_status_id,
+																		START_STATUS_NAME 						AS  sla_wo_start_status_name,
+																		END_STATUS_ID 							AS  sla_wo_end_status_id,
+																		END_STATUS_NAME 						AS  sla_wo_end_status_name,
+																		WORKORDER_ID 							AS  sla_wo_workorder_id,
+																		cast(METRIC_VALUE as numeric) 			as 	sla_wo_metric_value,
+																		CHRONO 									AS 	sla_wo_chrono,
+																		METRIC_EVALUATION_SCORE 				AS 	sla_wo_metric_evaluation_score,
+																		METRIC_EVALUATION_LABEL 				AS 	sla_wo_metric_evaluation_label,
+																		cast(HIGH_TARGET_DEVIATION as numeric) 	as 	sla_wo_high_target_deviation,
+																		cast(LOW_TARGET_DEVIATION as numeric) 	as 	sla_wo_low_target_deviation,
+																		WORKORDER_REFERENCE 					AS 	sla_wo_workorder_reference,
+																		WORKORDER_TYPE 							AS 	sla_wo_workorder_type,
+																		WORKORDER_PRIORITY 						AS 	sla_wo_workorder_priority,
+																		WORKORDER_SEVERITY 						AS 	sla_wo_workorder_severity,
+																		WORKORDER_COMPLIANCE_LEVEL 				AS 	sla_wo_workorder_compliance_level,
+																		WORKORDER_CLASS 						AS 	sla_wo_workorder_class,
+																		MAINTENANCE_PLAN 						AS 	sla_wo_maintenance_plan,
+																		--CAST(TO_TIMESTAMP(DATE_REGISTERED,'DD-MON-YY HH12.MI.SS.US AM') AS TIMESTAMP WITHOUT TIME ZONE) 	AS DATE_REGISTERED,
+																		--CAST(TO_TIMESTAMP(DATE_WISHED,'DD-MON-YY HH12.MI.SS.US AM') AS TIMESTAMP WITHOUT TIME ZONE) 		AS DATE_WISHED,
+																		--CAST(TO_TIMESTAMP(DATE_FINISHED,'DD-MON-YY HH12.MI.SS.US AM') AS TIMESTAMP WITHOUT TIME ZONE) 	AS DATE_FINISHED,
+																		TIMESTAMP_TRUNC(datetime(DATE_REGISTERED,"CET"), SECOND) 	AS sla_wo_date_registered,
+																		TIMESTAMP_TRUNC(datetime(DATE_WISHED,"CET"), SECOND) 		AS sla_wo_date_wished,
+																		TIMESTAMP_TRUNC(datetime(DATE_FINISHED,"CET"), SECOND) 		AS sla_wo_date_finished,
+																		NATURE_CODE 								AS  sla_wo_nature_code,
+																		NATURE_REFERENCE 							AS  sla_wo_nature_reference,
+																		NATURE_LVL1 								AS  sla_wo_nature_lvl1,
+																		NATURE_LVL2 								AS  sla_wo_nature_lvl2,
+																		NATURE_LVL3 								AS  sla_wo_nature_lvl3,
+																		--NATURE_LVL1_1 -- TO BE INVESTIGATED,	
+																		--NATURE_LVL2_1 -- TO BE INVESTIGATED,	
+																		--NATURE_LVL3_1 -- TO BE INVESTIGATED,	
+																		REGISTERED_BY_NAME 							AS  sla_wo_registered_by_name,
+																		REGISTERED_BY_CODE 							AS  sla_wo_registered_by_code,
+																		REGISTERED_BY_DEPARTMENT_NAME 				AS  sla_wo_registered_by_department_name,
+																		REGISTERED_BY_DEPARTMENT_CODE 				AS  sla_wo_registered_by_department_code,
+																		REGISTERED_BY_COMPANY_NAME 					AS  sla_wo_registered_by_company_name,
+																		REGISTERED_BY_COMPANY_CODE 					AS  sla_wo_registered_by_company_code,
+																		REQUESTED_BY_NAME 							AS  sla_wo_requested_by_name,
+																		REQUESTED_BY_CODE 							AS  sla_wo_requested_by_code,
+																		REQUESTED_BY_DEPARTMENT_NAME 				AS  sla_wo_requested_by_department_name,
+																		REQUESTED_BY_DEPARTMENT_CODE 				AS  sla_wo_requested_by_department_code,
+																		REQUESTED_BY_COMPANY_NAME 					AS  sla_wo_requested_by_company_name,
+																		REQUESTED_BY_COMPANY_CODE 					AS  sla_wo_requested_by_company_code,
+																		CUSTOMER_NAME 								AS  sla_wo_customer_name,
+																		CUSTOMER_CODE 								AS  sla_wo_customer_code,
+																		ASSIGNED_PERS_NAME 							AS  sla_wo_assigned_pers_name,
+																		ASSIGNED_PERS_CODE 							AS  sla_wo_assigned_pers_code,
+																		ASSIGNED_PERS_DEPARTMENT_NAME 				AS  sla_wo_assigned_pers_department_name,
+																		ASSIGNED_PERS_DEPARTMENT_CODE 				AS  sla_wo_assigned_pers_department_code,
+																		ASSIGNED_PERS_COMPANY_NAME 					AS  sla_wo_assigned_pers_company_name,
+																		ASSIGNED_PERS_COMPANY_CODE 					AS  sla_wo_assigned_pers_company_code,
+																		PLANNER_NAME 								AS  sla_wo_planner_name,
+																		PLANNER_CODE 								AS  sla_wo_planner_code,
+																		TASKFORCE_NAME 								AS  sla_wo_taskforce_name,
+																		TASKFORCE_CODE 								AS  sla_wo_taskforce_code,
+																		SUPPLIER_NAME 								AS  sla_wo_supplier_name,
+																		SUPPLIER_CODE 								AS  sla_wo_supplier_code,
+																		LOCATION_ID 								AS  sla_wo_location_id,
+																		AREA_CODE 									AS  sla_wo_area_code,
+																		AREA_REFERENCE 								AS  sla_wo_area_reference,
+																		SITE_CODE 									AS  sla_wo_site_code,
+																		SITE_REFERENCE 								AS  sla_wo_site_reference,
+																		BUILDING_CODE 								AS  sla_wo_building_code,
+																		BUILDING_REFERENCE 							AS  sla_wo_building_reference,
+																		FLOOR_CODE 									AS  sla_wo_floor_code,
+																		FLOOR_REFERENCE 							AS  sla_wo_floor_reference,
+																		ROOM_CODE 									AS  sla_wo_room_code,
+																		ROOM_REFERENCE 								AS  sla_wo_room_reference,
+																		EXTERIOR_LOCATION_CODE 						AS  sla_wo_exterior_location_code,
+																		EXTERIOR_LOCATION_REF 						AS  sla_wo_exterior_location_ref,
+																		WORKORDER_STATUS 							AS  sla_wo_workorder_status,
+																		WORKORDER_STATUS_CLASS 						AS  sla_wo_workorder_status_class,
+																		cast(creation_timestamp as datetime) 		as  creation_timestamp,
+																		cast(modification_timestamp as datetime) 	as 	modification_timestamp 
+																	FROM `%s` 
+																	WHERE TIMESTAMP_TRUNC(TIMESTAMP_MILLIS(CAST(datastream_metadata.source_timestamp AS INT64)),DAY) = TIMESTAMP_TRUNC(CURRENT_TIMESTAMP(),DAY)
+																	) s 
+																ON s.sla_wo_evaluation_id = d.sla_wo_evaluation_id
+																AND is_deleted = 'N'
+																WHEN MATCHED AND 
+																	s.sla_wo_evaluation_id 					<> 		d.sla_wo_evaluation_id OR
+																	s.sla_wo_eval_status 					<> 		d.sla_wo_eval_status OR
+																	s.sla_wo_object_id 						<> 		d.sla_wo_object_id OR
+																	s.sla_wo_object_code 					<> 		d.sla_wo_object_code OR
+																	s.sla_wo_object_ref 					<> 		d.sla_wo_object_ref OR
+																	s.sla_wo_object_metric_id 				<> 		d.sla_wo_object_metric_id OR
+																	s.sla_wo_metric_name 					<> 		d.sla_wo_metric_name OR
+																	s.sla_wo_metric_label 					<> 		d.sla_wo_metric_label OR
+																	s.sla_wo_high_target 					<> 		d.sla_wo_high_target OR
+																	s.sla_wo_low_target 					<> 		d.sla_wo_low_target OR
+																	s.sla_wo_start_status_id 				<> 		d.sla_wo_start_status_id OR
+																	s.sla_wo_start_status_name 				<> 		d.sla_wo_start_status_name OR
+																	s.sla_wo_end_status_id 					<> 		d.sla_wo_end_status_id OR
+																	s.sla_wo_end_status_name 				<> 		d.sla_wo_end_status_name OR
+																	s.sla_wo_workorder_id 					<> 		d.sla_wo_workorder_id OR
+																	s.sla_wo_metric_value 					<> 		d.sla_wo_metric_value OR
+																	s.sla_wo_chrono 						<> 		d.sla_wo_chrono OR
+																	s.sla_wo_metric_evaluation_score 		<> 		d.sla_wo_metric_evaluation_score OR
+																	s.sla_wo_metric_evaluation_label 		<> 		d.sla_wo_metric_evaluation_label OR
+																	s.sla_wo_high_target_deviation 			<> 		d.sla_wo_high_target_deviation OR
+																	s.sla_wo_low_target_deviation 			<> 		d.sla_wo_low_target_deviation OR
+																	s.sla_wo_workorder_reference 			<> 		d.sla_wo_workorder_reference OR
+																	s.sla_wo_workorder_type 				<> 		d.sla_wo_workorder_type OR
+																	s.sla_wo_workorder_priority 			<> 		d.sla_wo_workorder_priority OR
+																	s.sla_wo_workorder_severity 			<> 		d.sla_wo_workorder_severity OR
+																	s.sla_wo_workorder_compliance_level 	<> 		d.sla_wo_workorder_compliance_level OR
+																	s.sla_wo_workorder_class 				<> 		d.sla_wo_workorder_class OR
+																	s.sla_wo_maintenance_plan 				<> 		d.sla_wo_maintenance_plan OR
+																	s.sla_wo_date_registered 				<> 		d.sla_wo_date_registered OR
+																	s.sla_wo_date_wished 					<> 		d.sla_wo_date_wished OR
+																	s.sla_wo_date_finished 					<> 		d.sla_wo_date_finished OR
+																	s.sla_wo_nature_code 					<> 		d.sla_wo_nature_code OR
+																	s.sla_wo_nature_reference 				<> 		d.sla_wo_nature_reference OR
+																	s.sla_wo_nature_lvl1 					<> 		d.sla_wo_nature_lvl1 OR
+																	s.sla_wo_nature_lvl2 					<> 		d.sla_wo_nature_lvl2 OR
+																	s.sla_wo_nature_lvl3 					<> 		d.sla_wo_nature_lvl3 OR
+																	s.sla_wo_registered_by_name 			<> 		d.sla_wo_registered_by_name OR
+																	s.sla_wo_registered_by_code 			<> 		d.sla_wo_registered_by_code OR
+																	s.sla_wo_registered_by_department_name 	<> 		d.sla_wo_registered_by_department_name OR
+																	s.sla_wo_registered_by_department_code 	<> 		d.sla_wo_registered_by_department_code OR
+																	s.sla_wo_registered_by_company_name 	<> 		d.sla_wo_registered_by_company_name OR
+																	s.sla_wo_registered_by_company_code 	<> 		d.sla_wo_registered_by_company_code OR
+																	s.sla_wo_requested_by_name 				<> 		d.sla_wo_requested_by_name OR
+																	s.sla_wo_requested_by_code 				<> 		d.sla_wo_requested_by_code OR
+																	s.sla_wo_requested_by_department_name 	<> 		d.sla_wo_requested_by_department_name OR
+																	s.sla_wo_requested_by_department_code 	<> 		d.sla_wo_requested_by_department_code OR
+																	s.sla_wo_requested_by_company_name 		<> 		d.sla_wo_requested_by_company_name OR
+																	s.sla_wo_requested_by_company_code 		<> 		d.sla_wo_requested_by_company_code OR
+																	s.sla_wo_customer_name 					<> 		d.sla_wo_customer_name OR
+																	s.sla_wo_customer_code 					<> 		d.sla_wo_customer_code OR
+																	s.sla_wo_assigned_pers_name 			<> 		d.sla_wo_assigned_pers_name OR
+																	s.sla_wo_assigned_pers_code 			<> 		d.sla_wo_assigned_pers_code OR
+																	s.sla_wo_assigned_pers_department_name 	<> 		d.sla_wo_assigned_pers_department_name OR
+																	s.sla_wo_assigned_pers_department_code 	<> 		d.sla_wo_assigned_pers_department_code OR
+																	s.sla_wo_assigned_pers_company_name 	<> 		d.sla_wo_assigned_pers_company_name OR
+																	s.sla_wo_assigned_pers_company_code 	<> 		d.sla_wo_assigned_pers_company_code OR
+																	s.sla_wo_planner_name 					<> 		d.sla_wo_planner_name OR
+																	s.sla_wo_planner_code 					<> 		d.sla_wo_planner_code OR
+																	s.sla_wo_taskforce_name 				<> 		d.sla_wo_taskforce_name OR
+																	s.sla_wo_taskforce_code 				<> 		d.sla_wo_taskforce_code OR
+																	s.sla_wo_supplier_name 					<> 		d.sla_wo_supplier_name OR
+																	s.sla_wo_supplier_code 					<> 		d.sla_wo_supplier_code OR
+																	s.sla_wo_location_id 					<> 		d.sla_wo_location_id OR
+																	s.sla_wo_area_code 						<> 		d.sla_wo_area_code OR
+																	s.sla_wo_area_reference 				<> 		d.sla_wo_area_reference OR
+																	s.sla_wo_site_code 						<> 		d.sla_wo_site_code OR
+																	s.sla_wo_site_reference 				<> 		d.sla_wo_site_reference OR
+																	s.sla_wo_building_code 					<> 		d.sla_wo_building_code OR
+																	s.sla_wo_building_reference 			<> 		d.sla_wo_building_reference OR
+																	s.sla_wo_floor_code 					<> 		d.sla_wo_floor_code OR
+																	s.sla_wo_floor_reference 				<> 		d.sla_wo_floor_reference OR
+																	s.sla_wo_room_code 						<> 		d.sla_wo_room_code OR
+																	s.sla_wo_room_reference 				<> 		d.sla_wo_room_reference OR
+																	s.sla_wo_exterior_location_code 		<> 		d.sla_wo_exterior_location_code OR
+																	s.sla_wo_exterior_location_ref 			<> 		d.sla_wo_exterior_location_ref OR
+																	s.sla_wo_workorder_status 				<> 		d.sla_wo_workorder_status OR
+																	s.sla_wo_workorder_status_class 		<> 		d.sla_wo_workorder_status_class OR
+																	s.creation_timestamp 					<> 		d.creation_timestamp OR
+																	s.modification_timestamp 				<> 		d.modification_timestamp
+																THEN UPDATE SET 
+																		is_deleted = 'Y',
+																		last_modified_timestamp = TIMESTAMP_TRUNC(datetime(current_timestamp(),"CET"), SECOND)"""
+															,FACT_SLA_WORKORDERS,MV_REP_SLA_WO);
+
+					EXECUTE IMMEDIATE mcs_fact_sla_workorders_update;
+				
+			EXCEPTION WHEN ERROR THEN
+				
+				SET strRemarks 			= 'Failed in '||strProcName||', check error_log table for more info';
+				SET strErrorMessage 	= @@error.message;
+				SET error_txt		  	= 'Failed in mcs_fact_sla_workorders_update for current day load '||CURRENT_DATE||' ~'||@@error.statement_text;
+
+				CALL `cobundu-bi-playground.dataform_sd_procedure.Execution_log`(p_dataset_name, strProcName, 'E', strRemarks);
+				CALL `cobundu-bi-playground.dataform_sd_procedure.Error_log`(p_dataset_name, strErrorMessage, error_txt);
+
+			END;
+
+			--##############################
+			--FACT_SLA_WORKORDERS --INSERT
+			--##############################
+
+			BEGIN	
+				SET mcs_fact_sla_workorders_insert = FORMAT("""
+															MERGE INTO `%s` d
+															using
+																(
+																SELECT 
+																	SLA_EVALUATION_ID 						AS 	sla_wo_evaluation_id,
+																	SLA_EVAL_STATUS 						AS 	sla_wo_eval_status,
+																	SLA_OBJECT_ID			 				AS 	sla_wo_object_id,
+																	SLA_OBJECT_CODE 						AS 	sla_wo_object_code,
+																	SLA_OBJECT_REF 							AS 	sla_wo_object_ref,
+																	SLA_OBJECT_METRIC_ID 					AS 	sla_wo_object_metric_id,
+																	METRIC_NAME 							AS 	sla_wo_metric_name,
+																	METRIC_LABEL 							AS 	sla_wo_metric_label,
+																	cast(HIGH_TARGET as numeric) 			AS 	sla_wo_high_target,
+																	cast(LOW_TARGET as numeric) 			AS 	sla_wo_low_target,
+																	START_STATUS_ID 						AS  sla_wo_start_status_id,
+																	START_STATUS_NAME 						AS  sla_wo_start_status_name,
+																	END_STATUS_ID 							AS  sla_wo_end_status_id,
+																	END_STATUS_NAME 						AS  sla_wo_end_status_name,
+																	WORKORDER_ID 							AS  sla_wo_workorder_id,
+																	cast(METRIC_VALUE as numeric) 			AS 	sla_wo_metric_value,
+																	CHRONO 									AS 	sla_wo_chrono,
+																	METRIC_EVALUATION_SCORE 				AS 	sla_wo_metric_evaluation_score,
+																	METRIC_EVALUATION_LABEL 				AS 	sla_wo_metric_evaluation_label,
+																	cast(HIGH_TARGET_DEVIATION as numeric) 	AS 	sla_wo_high_target_deviation,
+																	cast(LOW_TARGET_DEVIATION as numeric) 	AS 	sla_wo_low_target_deviation,
+																	WORKORDER_REFERENCE 					AS 	sla_wo_workorder_reference,
+																	WORKORDER_TYPE 							AS 	sla_wo_workorder_type,
+																	WORKORDER_PRIORITY 						AS 	sla_wo_workorder_priority,
+																	WORKORDER_SEVERITY 						AS 	sla_wo_workorder_severity,
+																	WORKORDER_COMPLIANCE_LEVEL 				AS 	sla_wo_workorder_compliance_level,
+																	WORKORDER_CLASS 						AS 	sla_wo_workorder_class,
+																	MAINTENANCE_PLAN 						AS 	sla_wo_maintenance_plan,
+																	--CAST(TO_TIMESTAMP(DATE_REGISTERED,'DD-MON-YY HH12.MI.SS.US AM') 	AS TIMESTAMP WITHOUT TIME ZONE) AS DATE_REGISTERED,
+																	--CAST(TO_TIMESTAMP(DATE_WISHED,'DD-MON-YY HH12.MI.SS.US AM') 		AS TIMESTAMP WITHOUT TIME ZONE) AS DATE_WISHED,
+																	--CAST(TO_TIMESTAMP(DATE_FINISHED,'DD-MON-YY HH12.MI.SS.US AM') 	AS TIMESTAMP WITHOUT TIME ZONE) AS DATE_FINISHED,
+																	TIMESTAMP_TRUNC(datetime(DATE_REGISTERED,"CET"), SECOND) 	AS 	sla_wo_date_registered,
+																	TIMESTAMP_TRUNC(datetime(DATE_WISHED,"CET"), SECOND) 		AS 	sla_wo_date_wished,
+																	TIMESTAMP_TRUNC(datetime(DATE_FINISHED,"CET"), SECOND) 		AS 	sla_wo_date_finished,
+																	NATURE_CODE 					AS  sla_wo_nature_code,
+																	NATURE_REFERENCE 				AS  sla_wo_nature_reference,
+																	NATURE_LVL1 					AS  sla_wo_nature_lvl1,
+																	NATURE_LVL2 					AS  sla_wo_nature_lvl2,
+																	NATURE_LVL3 					AS  sla_wo_nature_lvl3,
+																	--NATURE_LVL1_1 -- TO BE INVESTIGATED,
+																	--NATURE_LVL2_1 -- TO BE INVESTIGATED,
+																	--NATURE_LVL3_1 -- TO BE INVESTIGATED,
+																	REGISTERED_BY_NAME 				AS  sla_wo_registered_by_name,
+																	REGISTERED_BY_CODE 				AS  sla_wo_registered_by_code,
+																	REGISTERED_BY_DEPARTMENT_NAME 	AS  sla_wo_registered_by_department_name,
+																	REGISTERED_BY_DEPARTMENT_CODE 	AS  sla_wo_registered_by_department_code,
+																	REGISTERED_BY_COMPANY_NAME 		AS  sla_wo_registered_by_company_name,
+																	REGISTERED_BY_COMPANY_CODE 		AS  sla_wo_registered_by_company_code,
+																	REQUESTED_BY_NAME 				AS  sla_wo_requested_by_name,
+																	REQUESTED_BY_CODE 				AS  sla_wo_requested_by_code,
+																	REQUESTED_BY_DEPARTMENT_NAME 	AS  sla_wo_requested_by_department_name,
+																	REQUESTED_BY_DEPARTMENT_CODE 	AS  sla_wo_requested_by_department_code,
+																	REQUESTED_BY_COMPANY_NAME 		AS  sla_wo_requested_by_company_name,
+																	REQUESTED_BY_COMPANY_CODE 		AS  sla_wo_requested_by_company_code,
+																	CUSTOMER_NAME 					AS  sla_wo_customer_name,
+																	CUSTOMER_CODE 					AS  sla_wo_customer_code,
+																	ASSIGNED_PERS_NAME 				AS  sla_wo_assigned_pers_name,
+																	ASSIGNED_PERS_CODE 				AS  sla_wo_assigned_pers_code,
+																	ASSIGNED_PERS_DEPARTMENT_NAME 	AS  sla_wo_assigned_pers_department_name,
+																	ASSIGNED_PERS_DEPARTMENT_CODE 	AS  sla_wo_assigned_pers_department_code,
+																	ASSIGNED_PERS_COMPANY_NAME 		AS  sla_wo_assigned_pers_company_name,
+																	ASSIGNED_PERS_COMPANY_CODE 		AS  sla_wo_assigned_pers_company_code,
+																	PLANNER_NAME 					AS  sla_wo_planner_name,
+																	PLANNER_CODE 					AS  sla_wo_planner_code,
+																	TASKFORCE_NAME 					AS  sla_wo_taskforce_name,
+																	TASKFORCE_CODE 					AS  sla_wo_taskforce_code,
+																	SUPPLIER_NAME 					AS  sla_wo_supplier_name,
+																	SUPPLIER_CODE 					AS  sla_wo_supplier_code,
+																	LOCATION_ID 					AS  sla_wo_location_id,
+																	AREA_CODE 						AS  sla_wo_area_code,
+																	AREA_REFERENCE 					AS  sla_wo_area_reference,
+																	SITE_CODE 						AS  sla_wo_site_code,
+																	SITE_REFERENCE 					AS  sla_wo_site_reference,
+																	BUILDING_CODE 					AS  sla_wo_building_code,
+																	BUILDING_REFERENCE 				AS  sla_wo_building_reference,
+																	FLOOR_CODE 						AS  sla_wo_floor_code,
+																	FLOOR_REFERENCE 				AS  sla_wo_floor_reference,
+																	ROOM_CODE 						AS  sla_wo_room_code,
+																	ROOM_REFERENCE 					AS  sla_wo_room_reference,
+																	EXTERIOR_LOCATION_CODE 			AS  sla_wo_exterior_location_code,
+																	EXTERIOR_LOCATION_REF 			AS  sla_wo_exterior_location_ref,
+																	WORKORDER_STATUS 				AS  sla_wo_workorder_status,
+																	WORKORDER_STATUS_CLASS 			AS  sla_wo_workorder_status_class,
+																	cast(creation_timestamp as datetime) as  creation_timestamp,
+																	cast(modification_timestamp as datetime) as modification_timestamp 
+																FROM `%s` 
+																WHERE TIMESTAMP_TRUNC(TIMESTAMP_MILLIS(CAST(datastream_metadata.source_timestamp AS INT64)),DAY) = TIMESTAMP_TRUNC(CURRENT_TIMESTAMP(),DAY)
+																) s 
+																ON s.sla_wo_evaluation_id = d.sla_wo_evaluation_id
+																AND is_deleted = 'N'
+																WHEN not matched THEN
+																INSERT
+																(
+																	sla_wo_evaluation_id,
+																	sla_wo_eval_status,
+																	sla_wo_object_id,
+																	sla_wo_object_code,
+																	sla_wo_object_ref,
+																	sla_wo_object_metric_id,
+																	sla_wo_metric_name,
+																	sla_wo_metric_label,
+																	sla_wo_high_target,
+																	sla_wo_low_target,
+																	sla_wo_start_status_id,
+																	sla_wo_start_status_name,
+																	sla_wo_end_status_id,
+																	sla_wo_end_status_name,
+																	sla_wo_workorder_id,
+																	sla_wo_metric_value,
+																	sla_wo_chrono,
+																	sla_wo_metric_evaluation_score,
+																	sla_wo_metric_evaluation_label,
+																	sla_wo_high_target_deviation,
+																	sla_wo_low_target_deviation,
+																	sla_wo_workorder_reference,
+																	sla_wo_workorder_type,
+																	sla_wo_workorder_priority,
+																	sla_wo_workorder_severity,
+																	sla_wo_workorder_compliance_level,
+																	sla_wo_workorder_class,
+																	sla_wo_maintenance_plan,
+																	sla_wo_date_registered,
+																	sla_wo_date_wished,
+																	sla_wo_date_finished,
+																	sla_wo_nature_code,
+																	sla_wo_nature_reference,
+																	sla_wo_nature_lvl1,
+																	sla_wo_nature_lvl2,
+																	sla_wo_nature_lvl3,
+																	sla_wo_registered_by_name,
+																	sla_wo_registered_by_code,
+																	sla_wo_registered_by_department_name,
+																	sla_wo_registered_by_department_code,
+																	sla_wo_registered_by_company_name,
+																	sla_wo_registered_by_company_code,
+																	sla_wo_requested_by_name,
+																	sla_wo_requested_by_code,
+																	sla_wo_requested_by_department_name,
+																	sla_wo_requested_by_department_code,
+																	sla_wo_requested_by_company_name,
+																	sla_wo_requested_by_company_code,
+																	sla_wo_customer_name,
+																	sla_wo_customer_code,
+																	sla_wo_assigned_pers_name,
+																	sla_wo_assigned_pers_code,
+																	sla_wo_assigned_pers_department_name,
+																	sla_wo_assigned_pers_department_code,
+																	sla_wo_assigned_pers_company_name,
+																	sla_wo_assigned_pers_company_code,
+																	sla_wo_planner_name,
+																	sla_wo_planner_code,
+																	sla_wo_taskforce_name,
+																	sla_wo_taskforce_code,
+																	sla_wo_supplier_name,
+																	sla_wo_supplier_code,
+																	sla_wo_location_id,
+																	sla_wo_area_code,
+																	sla_wo_area_reference,
+																	sla_wo_site_code,
+																	sla_wo_site_reference,
+																	sla_wo_building_code,
+																	sla_wo_building_reference,
+																	sla_wo_floor_code,
+																	sla_wo_floor_reference,
+																	sla_wo_room_code,
+																	sla_wo_room_reference,
+																	sla_wo_exterior_location_code,
+																	sla_wo_exterior_location_ref,
+																	sla_wo_workorder_status,
+																	sla_wo_workorder_status_class,
+																	creation_timestamp,
+																	modification_timestamp,
+																	is_deleted,
+																	last_modified_timestamp
+																)
+																VALUES
+																(
+																	sla_wo_evaluation_id,
+																	sla_wo_eval_status,
+																	sla_wo_object_id,
+																	sla_wo_object_code,
+																	sla_wo_object_ref,
+																	sla_wo_object_metric_id,
+																	sla_wo_metric_name,
+																	sla_wo_metric_label,
+																	sla_wo_high_target,
+																	sla_wo_low_target,
+																	sla_wo_start_status_id,
+																	sla_wo_start_status_name,
+																	sla_wo_end_status_id,
+																	sla_wo_end_status_name,
+																	sla_wo_workorder_id,
+																	sla_wo_metric_value,
+																	sla_wo_chrono,
+																	sla_wo_metric_evaluation_score,
+																	sla_wo_metric_evaluation_label,
+																	sla_wo_high_target_deviation,
+																	sla_wo_low_target_deviation,
+																	sla_wo_workorder_reference,
+																	sla_wo_workorder_type,
+																	sla_wo_workorder_priority,
+																	sla_wo_workorder_severity,
+																	sla_wo_workorder_compliance_level,
+																	sla_wo_workorder_class,
+																	sla_wo_maintenance_plan,
+																	sla_wo_date_registered,
+																	sla_wo_date_wished,
+																	sla_wo_date_finished,
+																	sla_wo_nature_code,
+																	sla_wo_nature_reference,
+																	sla_wo_nature_lvl1,
+																	sla_wo_nature_lvl2,
+																	sla_wo_nature_lvl3,
+																	sla_wo_registered_by_name,
+																	sla_wo_registered_by_code,
+																	sla_wo_registered_by_department_name,
+																	sla_wo_registered_by_department_code,
+																	sla_wo_registered_by_company_name,
+																	sla_wo_registered_by_company_code,
+																	sla_wo_requested_by_name,
+																	sla_wo_requested_by_code,
+																	sla_wo_requested_by_department_name,
+																	sla_wo_requested_by_department_code,
+																	sla_wo_requested_by_company_name,
+																	sla_wo_requested_by_company_code,
+																	sla_wo_customer_name,
+																	sla_wo_customer_code,
+																	sla_wo_assigned_pers_name,
+																	sla_wo_assigned_pers_code,
+																	sla_wo_assigned_pers_department_name,
+																	sla_wo_assigned_pers_department_code,
+																	sla_wo_assigned_pers_company_name,
+																	sla_wo_assigned_pers_company_code,
+																	sla_wo_planner_name,
+																	sla_wo_planner_code,
+																	sla_wo_taskforce_name,
+																	sla_wo_taskforce_code,
+																	sla_wo_supplier_name,
+																	sla_wo_supplier_code,
+																	sla_wo_location_id,
+																	sla_wo_area_code,
+																	sla_wo_area_reference,
+																	sla_wo_site_code,
+																	sla_wo_site_reference,
+																	sla_wo_building_code,
+																	sla_wo_building_reference,
+																	sla_wo_floor_code,
+																	sla_wo_floor_reference,
+																	sla_wo_room_code,
+																	sla_wo_room_reference,
+																	sla_wo_exterior_location_code,
+																	sla_wo_exterior_location_ref,
+																	sla_wo_workorder_status,
+																	sla_wo_workorder_status_class,
+																	creation_timestamp,
+																	modification_timestamp,
+																	'N',
+																	TIMESTAMP_TRUNC(datetime(current_timestamp(),"CET"), SECOND)
+																)"""
+															,FACT_SLA_WORKORDERS,MV_REP_SLA_WO);
+
+					EXECUTE IMMEDIATE mcs_fact_sla_workorders_insert;
+				
+			EXCEPTION WHEN ERROR THEN
+				
+				SET strRemarks 			= 'Failed in '||strProcName||', check error_log table for more info';
+				SET strErrorMessage 	= @@error.message;
+				SET error_txt		  	= 'Failed in mcs_fact_sla_workorders_insert for current day load '||CURRENT_DATE||' ~'||@@error.statement_text;
+
+				CALL `cobundu-bi-playground.dataform_sd_procedure.Execution_log`(p_dataset_name, strProcName, 'E', strRemarks);
+				CALL `cobundu-bi-playground.dataform_sd_procedure.Error_log`(p_dataset_name, strErrorMessage, error_txt);
+
+			END;
+		END IF;
+	END IF;
+	
+	SET strRemarks = 'Completed Successfully';
+	CALL `cobundu-bi-playground.dataform_sd_procedure.Execution_log`(p_dataset_name, strProcName, 'E', strRemarks);
+	
+EXCEPTION WHEN ERROR THEN
+
+	CALL `cobundu-bi-playground.dataform_sd_procedure.Execution_log`(p_dataset_name, 'pr_fact_sla_workorders', 'E', 'Failed');
+	CALL `cobundu-bi-playground.dataform_sd_procedure.Error_log`(p_dataset_name, @@error.message, @@error.statement_text);
+
+END;

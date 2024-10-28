@@ -1,0 +1,954 @@
+CREATE OR REPLACE PROCEDURE `cobundu-bi-playground.dataform_sd_procedure.pr_fact_workorders`(IN p_project_id STRING, IN p_dataset_name STRING, IN p_num INT64)
+BEGIN
+	DECLARE 	nCount								INT64;
+	DECLARE		strSqlSnt							STRING;
+	DECLARE 	MV_REP_WO							STRING;
+	DECLARE 	mcs_fact_workorders_update		 	STRING;
+	DECLARE		mcs_fact_workorders_insert			STRING;
+	DECLARE		FACT_WORKORDERS						STRING;
+	DECLARE		strRemarks							STRING;
+	DECLARE 	error_txt							STRING;
+	DECLARE 	strErrorMessage         			STRING;
+	DECLARE		strProcName							STRING;
+	
+	SET strProcName 				= 'pr_fact_workorders';
+	SET strRemarks					= '';
+	SET FACT_WORKORDERS  			= p_project_id||'.'||p_dataset_name||'.FACT_WORKORDERS';
+	
+	CALL `cobundu-bi-playground.dataform_sd_procedure.Execution_log`(p_dataset_name, strProcName, 'S', strRemarks);
+	
+	SET strSqlSnt = FORMAT("""SELECT COUNT(*) FROM `%s` """,FACT_WORKORDERS);
+	
+	EXECUTE IMMEDIATE strSqlSnt INTO nCount;
+				
+	IF nCount <= 1
+	THEN
+		SET MV_REP_WO 		= 	p_project_id||'.'||p_dataset_name||'.MV_REP_WO_'||p_num;															
+		--##############################
+		--FACT_WORKORDERS --UPDATE
+		--##############################
+
+		BEGIN	
+			SET mcs_fact_workorders_update = FORMAT("""
+														MERGE INTO `%s` d
+														using (
+																SELECT
+																	 workorder_id   				AS  wo_workorder_id
+																	, guid   						AS  wo_guid
+																	, reference   					AS  wo_reference
+																	, wo_type 						AS  wo_type 
+																	, priority 						AS 	wo_priority 
+																	, severity 						AS  wo_severity 
+																	, compliance_level  			AS  wo_compliance_level
+																	, "class" 						AS  wo_class
+																	, maintenance_plan  			AS  wo_maintenance_plan,
+																	TIMESTAMP_TRUNC(datetime(date_registered,"CET"), SECOND) 	AS wo_date_registered,
+																	TIMESTAMP_TRUNC(datetime(due_date,"CET"), SECOND) 			AS wo_due_date,   --
+																	TIMESTAMP_TRUNC(datetime(date_finished,"CET"), SECOND) 		AS wo_date_finished
+																	, nature_code 					AS  wo_nature_code
+																	, nature_reference  			AS  wo_nature_reference
+																	, nature_lvl1 					AS  wo_nature_lvl1
+																	, nature_lvl2 					AS  wo_nature_lvl2
+																	, nature_lvl3 					AS  wo_nature_lvl3
+																	, registered_by_name  			AS  wo_registered_by_name
+																	, registered_by_code  			AS  wo_registered_by_code
+																	, registered_by_department_name AS  wo_registered_by_department_name
+																	, registered_by_department_code AS  wo_registered_by_department_code
+																	, registered_by_company_name  	AS  wo_registered_by_company_name
+																	, registered_by_company_code  	AS  wo_registered_by_company_code
+																	, requested_by_name 			AS  wo_requested_by_name
+																	, requested_by_code 			AS  wo_requested_by_code
+																	, requested_by_department_name  AS  wo_requested_by_department_name
+																	, requested_by_department_code  AS  wo_requested_by_department_code
+																	, requested_by_company_name 	AS  wo_requested_by_company_name
+																	, requested_by_company_code 	AS  wo_requested_by_company_code
+																	, customer_name 				AS  wo_customer_name
+																	, customer_code 				AS  wo_customer_code
+																	, assigned_pers_name  			AS  wo_assigned_pers_name
+																	, assigned_pers_code  			AS  wo_assigned_pers_code
+																	, assigned_pers_department_name AS  wo_assigned_pers_department_name
+																	, assigned_pers_department_code AS  wo_assigned_pers_department_code
+																	, assigned_pers_company_name  	AS  wo_assigned_pers_company_name
+																	, assigned_pers_company_code  	AS  wo_assigned_pers_company_code
+																	, planner_name  				AS  wo_planner_name
+																	, planner_code  				AS  wo_planner_code
+																	, taskforce_name  				AS  wo_taskforce_name
+																	, taskforce_code  				AS  wo_taskforce_code
+																	, supplier_name 				AS  wo_supplier_name
+																	, supplier_code 				AS  wo_supplier_code
+																	, area_code 					AS  wo_area_code
+																	, area_reference  				AS  wo_area_reference
+																	, site_code 					AS  wo_site_code
+																	, site_reference  				AS  wo_site_reference
+																	, building_code 				AS  wo_building_code
+																	, building_reference  			AS  wo_building_reference
+																	, floor_code  					AS  wo_floor_code
+																	, floor_reference 				AS  wo_floor_reference
+																	, room_code 					AS  wo_room_code
+																	, room_reference  				AS  wo_room_reference
+																	, exterior_location_code  		AS  wo_exterior_location_code
+																	, exterior_location_ref 		AS  wo_exterior_location_ref
+																	, status  						AS  wo_status
+																	, status_class  				AS  wo_status_class
+																	, elapsed_time  				AS  wo_elapsed_time
+																	, cast(estimated_work as numeric) 	AS  wo_estimated_work
+																	, cast(actual_work as numeric)  	AS  wo_actual_work
+																	, call_id 							AS  wo_call_id
+																	, project_id  						AS  wo_project_id
+																	, project_code  					AS  wo_project_code
+																	, parent_id 						AS  wo_parent_id,
+
+																	/*
+																	case when cast(substring(date_registered,1,9) as date) <=current_date then
+																	case when cast(elapsed_time as int) =0 then '0d'
+																	when cast(elapsed_time as int) =1 then '1d'
+																	when cast(elapsed_time as int) BETWEEN 2 AND 7 then '2-7d'
+																	when cast(elapsed_time as int) between 8 and 14 then '8-14d'
+																	when cast(elapsed_time as int) BETWEEN 15 AND 30 then '15-30d'
+																	when cast(elapsed_time as int) > 30 then '>30d' 
+																	END
+																	ELSE NULL
+																	END AS wo_elapsed_time_slices ,*/
+																	location_id as wo_location_id,
+																	Client_Organization_ID 						AS wo_Client_Organization_ID,
+																	Client_Organization_Code 					AS wo_Client_Organization_Code,
+																	Client_Organization_Name 					AS wo_Client_Organization_Name,
+																	cast(creation_timestamp as datetime) 		AS creation_timestamp, 
+																	cast(modification_timestamp as datetime) 	AS modification_timestamp 
+																FROM `%s` 
+															) s 
+															ON s.wo_workorder_id = d.wo_workorder_id 
+															AND is_deleted = 'N'
+															WHEN MATCHED AND 
+															s.wo_workorder_id					<> 	d.wo_workorder_id OR
+															s.wo_guid 							<> 	d.wo_guid OR
+															s.wo_reference 						<> 	d.wo_reference OR
+															s.wo_type 							<> 	d.wo_type OR
+															s.wo_priority 						<> 	d.wo_priority OR
+															s.wo_severity 						<> 	d.wo_severity OR
+															s.wo_compliance_level 				<> 	d.wo_compliance_level OR
+															s.wo_class 							<> 	d.wo_class OR
+															s.wo_maintenance_plan 				<> 	d.wo_maintenance_plan OR
+															s.wo_date_registered 				<> 	d.wo_date_registered OR
+															s.wo_due_date 						<> 	d.wo_due_date OR
+															s.wo_date_finished 					<> 	d.wo_date_finished OR
+															s.wo_nature_code 					<> 	d.wo_nature_code OR
+															s.wo_nature_reference 				<> 	d.wo_nature_reference OR
+															s.wo_nature_lvl1 					<> 	d.wo_nature_lvl1 OR
+															s.wo_nature_lvl2 					<> 	d.wo_nature_lvl2 OR
+															s.wo_nature_lvl3 					<> 	d.wo_nature_lvl3 OR
+															s.wo_registered_by_name 			<> 	d.wo_registered_by_name OR
+															s.wo_registered_by_code 			<> 	d.wo_registered_by_code OR
+															s.wo_registered_by_department_name 	<> 	d.wo_registered_by_department_name OR
+															s.wo_registered_by_department_code 	<> 	d.wo_registered_by_department_code OR
+															s.wo_registered_by_company_name 	<> 	d.wo_registered_by_company_name OR
+															s.wo_registered_by_company_code 	<> 	d.wo_registered_by_company_code OR
+															s.wo_requested_by_name 				<> 	d.wo_requested_by_name OR
+															s.wo_requested_by_code 				<> 	d.wo_requested_by_code OR
+															s.wo_requested_by_department_name 	<> 	d.wo_requested_by_department_name OR
+															s.wo_requested_by_department_code 	<> 	d.wo_requested_by_department_code OR
+															s.wo_requested_by_company_name 		<> 	d.wo_requested_by_company_name OR
+															s.wo_customer_name 					<> 	d.wo_customer_name OR
+															s.wo_customer_code 					<> 	d.wo_customer_code OR
+															s.wo_assigned_pers_name 			<> 	d.wo_assigned_pers_name OR
+															s.wo_assigned_pers_code 			<> 	d.wo_assigned_pers_code OR
+															s.wo_assigned_pers_department_name 	<> 	d.wo_assigned_pers_department_name OR
+															s.wo_assigned_pers_department_code 	<> 	d.wo_assigned_pers_department_code OR
+															s.wo_assigned_pers_company_name 	<> 	d.wo_assigned_pers_company_name OR
+															s.wo_assigned_pers_company_code 	<> 	d.wo_assigned_pers_company_code OR
+															s.wo_planner_name 					<> 	d.wo_planner_name OR
+															s.wo_planner_code 					<> 	d.wo_planner_code OR
+															s.wo_taskforce_name 				<> 	d.wo_taskforce_name OR
+															s.wo_taskforce_code 				<> 	d.wo_taskforce_code OR
+															s.wo_supplier_name 					<> 	d.wo_supplier_name OR
+															s.wo_supplier_code 					<> 	d.wo_supplier_code OR
+															s.wo_area_code 						<> 	d.wo_area_code OR
+															s.wo_area_reference 				<> 	d.wo_area_reference OR
+															s.wo_site_code 						<> 	d.wo_site_code OR
+															s.wo_site_reference 				<> 	d.wo_site_reference OR
+															s.wo_building_code 					<> 	d.wo_building_code OR
+															s.wo_building_reference 			<> 	d.wo_building_reference OR
+															s.wo_floor_code 					<> 	d.wo_floor_code OR
+															s.wo_floor_reference 				<> 	d.wo_floor_reference OR
+															s.wo_room_code 						<> 	d.wo_room_code OR
+															s.wo_room_reference					<> 	d.wo_room_reference OR
+															s.wo_exterior_location_code 		<> 	d.wo_exterior_location_code OR
+															s.wo_exterior_location_ref 			<> 	d.wo_exterior_location_ref OR
+															s.wo_status 						<> 	d.wo_status OR
+															s.wo_status_class 					<> 	d.wo_status_class OR
+															s.wo_elapsed_time 					<> 	d.wo_elapsed_time OR
+															s.wo_estimated_work 				<> 	d.wo_estimated_work OR
+															s.wo_actual_work 					<> 	d.wo_actual_work OR
+															s.wo_call_id 						<> 	d.wo_call_id OR
+															s.wo_project_id 					<> 	d.wo_project_id OR
+															s.wo_project_code 					<> 	d.wo_project_code OR
+															s.wo_parent_id 						<> 	d.wo_parent_id OR
+															s.wo_requested_by_company_code 		<> 	d.wo_requested_by_company_code OR
+															s.wo_location_id 					<> 	d.wo_location_id OR
+															--s.wo_elapsed_time_slices 			<> 	d.wo_elapsed_time_slices OR
+															s.wo_client_organization_id 		<> 	d.wo_client_organization_id OR
+															s.wo_client_organization_code 		<> 	d.wo_client_organization_code OR
+															s.wo_client_organization_name 		<> 	d.wo_client_organization_name OR
+															s.creation_timestamp 				<> 	d.creation_timestamp OR
+															s.modification_timestamp 			<> 	d.modification_timestamp 
+															then update set is_deleted = 'Y',
+																			last_modified_timestamp = TIMESTAMP_TRUNC(datetime(current_timestamp(),"CET"), SECOND)"""
+													,FACT_WORKORDERS,MV_REP_WO);
+
+				EXECUTE IMMEDIATE mcs_fact_workorders_update;
+			
+		EXCEPTION WHEN ERROR THEN
+
+			SET error_txt = 'Failed at mcs_fact_workorders_update ';
+			
+			INSERT INTO `cobundu-bi-playground.dataform_sd_procedure.error_log` (tenant, 
+																				 message, 
+																				 sql_text,
+																				 insert_time) 
+																		VALUES (dataset_name, 
+																				@@error.message,
+																				error_txt||'~'||@@error.statement_text, 
+																				TIMESTAMP_TRUNC(datetime(current_timestamp(),"CET"), SECOND) );
+
+		END;
+
+		--##############################
+		--FACT_WORKORDERS --INSERT
+		--##############################
+
+		BEGIN	
+			SET mcs_fact_workorders_insert = FORMAT("""
+													MERGE INTO `%s` d
+													using (
+															SELECT
+																 workorder_id   					AS  wo_workorder_id
+																, guid   							AS  wo_guid
+																, reference   						AS  wo_reference
+																, wo_type 							AS  wo_type 
+																, priority 							AS 	wo_priority 
+																, severity 							AS  wo_severity 
+																, compliance_level  				AS  wo_compliance_level
+																, "class" 							AS  wo_class
+																, maintenance_plan  				AS  wo_maintenance_plan,
+																TIMESTAMP_TRUNC(datetime(date_registered,"CET"), SECOND) 	AS wo_date_registered,
+																TIMESTAMP_TRUNC(datetime(due_date,"CET"), SECOND) 			AS wo_due_date,   --
+																TIMESTAMP_TRUNC(datetime(date_finished,"CET"), SECOND) 		AS wo_date_finished
+																, nature_code 						AS  wo_nature_code
+																, nature_reference  				AS  wo_nature_reference
+																, nature_lvl1 						AS  wo_nature_lvl1
+																, nature_lvl2 						AS  wo_nature_lvl2
+																, nature_lvl3 						AS  wo_nature_lvl3
+																, registered_by_name  				AS  wo_registered_by_name
+																, registered_by_code  				AS  wo_registered_by_code
+																, registered_by_department_name 	AS  wo_registered_by_department_name
+																, registered_by_department_code 	AS  wo_registered_by_department_code
+																, registered_by_company_name  		AS  wo_registered_by_company_name
+																, registered_by_company_code  		AS  wo_registered_by_company_code
+																, requested_by_name 				AS  wo_requested_by_name
+																, requested_by_code 				AS  wo_requested_by_code
+																, requested_by_department_name  	AS  wo_requested_by_department_name
+																, requested_by_department_code  	AS  wo_requested_by_department_code
+																, requested_by_company_name 		AS  wo_requested_by_company_name
+																, requested_by_company_code 		AS  wo_requested_by_company_code
+																, customer_name 					AS  wo_customer_name
+																, customer_code 					AS  wo_customer_code
+																, assigned_pers_name  				AS  wo_assigned_pers_name
+																, assigned_pers_code  				AS  wo_assigned_pers_code
+																, assigned_pers_department_name 	AS  wo_assigned_pers_department_name
+																, assigned_pers_department_code 	AS  wo_assigned_pers_department_code
+																, assigned_pers_company_name  		AS  wo_assigned_pers_company_name
+																, assigned_pers_company_code  		AS  wo_assigned_pers_company_code
+																, planner_name  					AS  wo_planner_name
+																, planner_code  					AS  wo_planner_code
+																, taskforce_name  					AS  wo_taskforce_name
+																, taskforce_code  					AS  wo_taskforce_code
+																, supplier_name 					AS  wo_supplier_name
+																, supplier_code 					AS  wo_supplier_code
+																, area_code 						AS  wo_area_code
+																, area_reference  					AS  wo_area_reference
+																, site_code 						AS  wo_site_code
+																, site_reference  					AS  wo_site_reference
+																, building_code 					AS  wo_building_code
+																, building_reference  				AS  wo_building_reference
+																, floor_code  						AS  wo_floor_code
+																, floor_reference 					AS  wo_floor_reference
+																, room_code 						AS  wo_room_code
+																, room_reference  					AS  wo_room_reference
+																, exterior_location_code  			AS  wo_exterior_location_code
+																, exterior_location_ref 			AS  wo_exterior_location_ref
+																, status  							AS  wo_status
+																, status_class  					AS  wo_status_class
+																, elapsed_time  					AS  wo_elapsed_time
+																, cast(estimated_work as numeric) 	AS  wo_estimated_work
+																, cast(actual_work as numeric)  	AS  wo_actual_work
+																, call_id 							AS  wo_call_id
+																, project_id  						AS  wo_project_id
+																, project_code  					AS  wo_project_code
+																, parent_id							AS  wo_parent_id,
+
+																/*
+																case when cast(substring(date_registered,1,9) as date) <=current_date then
+																case when cast(elapsed_time as int) =0 then '0d'
+																when cast(elapsed_time as int) =1 then '1d'
+																when cast(elapsed_time as int) BETWEEN 2 AND 7 then '2-7d'
+																when cast(elapsed_time as int) between 8 and 14 then '8-14d'
+																when cast(elapsed_time as int) BETWEEN 15 AND 30 then '15-30d'
+																when cast(elapsed_time as int) > 30 then '>30d' 
+																END
+																ELSE NULL
+																END AS wo_elapsed_time_slices ,*/
+																location_id 								AS wo_location_id,
+																Client_Organization_ID 						AS wo_Client_Organization_ID,
+																Client_Organization_Code 					AS wo_Client_Organization_Code,
+																Client_Organization_Name 					AS wo_Client_Organization_Name,
+																cast(creation_timestamp as datetime) 		AS creation_timestamp, 
+																cast(modification_timestamp as datetime) 	AS modification_timestamp 
+
+															FROM `%s` 
+														) s 
+														ON s.wo_workorder_id = d.wo_workorder_id 
+														AND	is_deleted = 'N'
+														WHEN NOT MATCHED THEN
+														INSERT
+														(
+															wo_workorder_id,
+															wo_guid,
+															wo_reference,
+															wo_type,
+															wo_priority,
+															wo_severity,
+															wo_compliance_level,
+															wo_class,
+															wo_maintenance_plan,
+															wo_date_registered,
+															wo_due_date,
+															wo_date_finished,
+															wo_nature_code,
+															wo_nature_reference,
+															wo_nature_lvl1,
+															wo_nature_lvl2,
+															wo_nature_lvl3,
+															wo_registered_by_name,
+															wo_registered_by_code,
+															wo_registered_by_department_name,
+															wo_registered_by_department_code,
+															wo_registered_by_company_name,
+															wo_registered_by_company_code,
+															wo_requested_by_name,
+															wo_requested_by_code,
+															wo_requested_by_department_name,
+															wo_requested_by_department_code,
+															wo_requested_by_company_name,
+															wo_customer_name,
+															wo_customer_code,
+															wo_assigned_pers_name,
+															wo_assigned_pers_code,
+															wo_assigned_pers_department_name,
+															wo_assigned_pers_department_code,
+															wo_assigned_pers_company_name,
+															wo_assigned_pers_company_code,
+															wo_planner_name,
+															wo_planner_code,
+															wo_taskforce_name,
+															wo_taskforce_code,
+															wo_supplier_name,
+															wo_supplier_code,
+															wo_area_code,
+															wo_area_reference,
+															wo_site_code,
+															wo_site_reference,
+															wo_building_code,
+															wo_building_reference,
+															wo_floor_code,
+															wo_floor_reference,
+															wo_room_code,
+															wo_room_reference,
+															wo_exterior_location_code,
+															wo_exterior_location_ref,
+															wo_status,
+															wo_status_class,
+															wo_elapsed_time,
+															wo_estimated_work,
+															wo_actual_work,
+															wo_call_id,
+															wo_project_id,
+															wo_project_code,
+															wo_parent_id,
+															wo_requested_by_company_code,
+															wo_location_id,
+															--wo_elapsed_time_slices,
+															wo_client_organization_id,
+															wo_client_organization_code,
+															wo_client_organization_name,
+															creation_timestamp,
+															modification_timestamp,
+															is_deleted,
+															last_modified_timestamp
+														)
+														VALUES
+														(
+															wo_workorder_id,
+															wo_guid,
+															wo_reference,
+															wo_type,
+															wo_priority,
+															wo_severity,
+															wo_compliance_level,
+															wo_class,
+															wo_maintenance_plan,
+															wo_date_registered,
+															wo_due_date,
+															wo_date_finished,
+															wo_nature_code,
+															wo_nature_reference,
+															wo_nature_lvl1,
+															wo_nature_lvl2,
+															wo_nature_lvl3,
+															wo_registered_by_name,
+															wo_registered_by_code,
+															wo_registered_by_department_name,
+															wo_registered_by_department_code,
+															wo_registered_by_company_name,
+															wo_registered_by_company_code,
+															wo_requested_by_name,
+															wo_requested_by_code,
+															wo_requested_by_department_name,
+															wo_requested_by_department_code,
+															wo_requested_by_company_name,
+															wo_customer_name,
+															wo_customer_code,
+															wo_assigned_pers_name,
+															wo_assigned_pers_code,
+															wo_assigned_pers_department_name,
+															wo_assigned_pers_department_code,
+															wo_assigned_pers_company_name,
+															wo_assigned_pers_company_code,
+															wo_planner_name,
+															wo_planner_code,
+															wo_taskforce_name,
+															wo_taskforce_code,
+															wo_supplier_name,
+															wo_supplier_code,
+															wo_area_code,
+															wo_area_reference,
+															wo_site_code,
+															wo_site_reference,
+															wo_building_code,
+															wo_building_reference,
+															wo_floor_code,
+															wo_floor_reference,
+															wo_room_code,
+															wo_room_reference,
+															wo_exterior_location_code,
+															wo_exterior_location_ref,
+															wo_status,
+															wo_status_class,
+															wo_elapsed_time,
+															wo_estimated_work,
+															wo_actual_work,
+															wo_call_id,
+															wo_project_id,
+															wo_project_code,
+															wo_parent_id,
+															wo_requested_by_company_code,
+															wo_location_id,
+															--wo_elapsed_time_slices,
+															wo_client_organization_id,
+															wo_client_organization_code,
+															wo_client_organization_name,
+															creation_timestamp,
+															modification_timestamp,
+															'N',
+															TIMESTAMP_TRUNC(datetime(current_timestamp(),"CET"), SECOND)
+														)"""
+													,FACT_WORKORDERS,MV_REP_WO);
+
+				EXECUTE IMMEDIATE mcs_fact_workorders_insert;
+			
+		EXCEPTION WHEN ERROR THEN
+
+			SET error_txt = 'Failed at mcs_fact_workorders_insert ';
+			
+			INSERT INTO `cobundu-bi-playground.dataform_sd_procedure.error_log` (tenant, 
+																				 message, 
+																				 sql_text,
+																				 insert_time) 
+																		VALUES (dataset_name, 
+																				@@error.message,
+																				error_txt||'~'||@@error.statement_text, 
+																				TIMESTAMP_TRUNC(datetime(current_timestamp(),"CET"), SECOND) );
+
+		END;
+	ELSE
+		SET MV_REP_WO 		= `cobundu-bi-playground.dataform_sd_procedure.get_variable_name`(p_project_id, p_dataset_name, 'MV_REP_WO_'||p_num);
+		
+		IF MV_REP_WO IS NOT NULL
+		THEN
+			--##############################
+			--FACT_WORKORDERS --UPDATE
+			--##############################
+
+			BEGIN	
+				SET mcs_fact_workorders_update = FORMAT("""
+															MERGE INTO `%s` d
+															using (
+																	SELECT
+																		 workorder_id   					AS  wo_workorder_id
+																		, guid   							AS  wo_guid
+																		, reference   						AS  wo_reference
+																		, wo_type 							AS  wo_type 
+																		, priority 							AS 	wo_priority 
+																		, severity 							AS  wo_severity 
+																		, compliance_level  				AS  wo_compliance_level
+																		, "class" 							AS  wo_class
+																		, maintenance_plan  				AS  wo_maintenance_plan,
+																		TIMESTAMP_TRUNC(datetime(date_registered,"CET"), SECOND) 	AS wo_date_registered,
+																		TIMESTAMP_TRUNC(datetime(due_date,"CET"), SECOND) 			AS wo_due_date,   --
+																		TIMESTAMP_TRUNC(datetime(date_finished,"CET"), SECOND) 		AS wo_date_finished
+																		, nature_code 						AS  wo_nature_code
+																		, nature_reference  				AS  wo_nature_reference
+																		, nature_lvl1 						AS  wo_nature_lvl1
+																		, nature_lvl2 						AS  wo_nature_lvl2
+																		, nature_lvl3 						AS  wo_nature_lvl3
+																		, registered_by_name  				AS  wo_registered_by_name
+																		, registered_by_code  				AS  wo_registered_by_code
+																		, registered_by_department_name 	AS  wo_registered_by_department_name
+																		, registered_by_department_code 	AS  wo_registered_by_department_code
+																		, registered_by_company_name  		AS  wo_registered_by_company_name
+																		, registered_by_company_code  		AS  wo_registered_by_company_code
+																		, requested_by_name 				AS  wo_requested_by_name
+																		, requested_by_code 				AS  wo_requested_by_code
+																		, requested_by_department_name  	AS  wo_requested_by_department_name
+																		, requested_by_department_code  	AS  wo_requested_by_department_code
+																		, requested_by_company_name 		AS  wo_requested_by_company_name
+																		, requested_by_company_code 		AS  wo_requested_by_company_code
+																		, customer_name 					AS  wo_customer_name
+																		, customer_code 					AS  wo_customer_code
+																		, assigned_pers_name  				AS  wo_assigned_pers_name
+																		, assigned_pers_code  				AS  wo_assigned_pers_code
+																		, assigned_pers_department_name 	AS  wo_assigned_pers_department_name
+																		, assigned_pers_department_code 	AS  wo_assigned_pers_department_code
+																		, assigned_pers_company_name  		AS  wo_assigned_pers_company_name
+																		, assigned_pers_company_code  		AS  wo_assigned_pers_company_code
+																		, planner_name  					AS  wo_planner_name
+																		, planner_code  					AS  wo_planner_code
+																		, taskforce_name  					AS  wo_taskforce_name
+																		, taskforce_code  					AS  wo_taskforce_code
+																		, supplier_name 					AS  wo_supplier_name
+																		, supplier_code 					AS  wo_supplier_code
+																		, area_code 						AS  wo_area_code
+																		, area_reference  					AS  wo_area_reference
+																		, site_code 						AS  wo_site_code
+																		, site_reference  					AS  wo_site_reference
+																		, building_code 					AS  wo_building_code
+																		, building_reference  				AS  wo_building_reference
+																		, floor_code  						AS  wo_floor_code
+																		, floor_reference 					AS  wo_floor_reference
+																		, room_code 						AS  wo_room_code
+																		, room_reference  					AS  wo_room_reference
+																		, exterior_location_code  			AS  wo_exterior_location_code
+																		, exterior_location_ref 			AS  wo_exterior_location_ref
+																		, status  							AS  wo_status
+																		, status_class  					AS  wo_status_class
+																		, elapsed_time  					AS  wo_elapsed_time
+																		, cast(estimated_work as numeric) 	AS  wo_estimated_work
+																		, cast(actual_work as numeric)  	AS  wo_actual_work
+																		, call_id 							AS  wo_call_id
+																		, project_id  						AS  wo_project_id
+																		, project_code  					AS  wo_project_code
+																		, parent_id 						AS  wo_parent_id,
+
+																		/*
+																		case when cast(substring(date_registered,1,9) as date) <=current_date then
+																		case when cast(elapsed_time as int) =0 then '0d'
+																		when cast(elapsed_time as int) =1 then '1d'
+																		when cast(elapsed_time as int) BETWEEN 2 AND 7 then '2-7d'
+																		when cast(elapsed_time as int) between 8 and 14 then '8-14d'
+																		when cast(elapsed_time as int) BETWEEN 15 AND 30 then '15-30d'
+																		when cast(elapsed_time as int) > 30 then '>30d' 
+																		END
+																		ELSE NULL
+																		END AS wo_elapsed_time_slices ,*/
+																		location_id as wo_location_id,
+																		Client_Organization_ID 						AS wo_Client_Organization_ID,
+																		Client_Organization_Code 					AS wo_Client_Organization_Code,
+																		Client_Organization_Name 					AS wo_Client_Organization_Name,
+																		cast(creation_timestamp as datetime) 		AS creation_timestamp, 
+																		cast(modification_timestamp as datetime) 	AS modification_timestamp 
+																	FROM `%s` 
+																	WHERE TIMESTAMP_TRUNC(TIMESTAMP_MILLIS(CAST(datastream_metadata.source_timestamp AS INT64)),DAY) = TIMESTAMP_TRUNC(CURRENT_TIMESTAMP(),DAY)
+																) s 
+																ON s.wo_workorder_id = d.wo_workorder_id 
+																AND is_deleted = 'N'
+																WHEN MATCHED AND 
+																s.wo_workorder_id					<> 	d.wo_workorder_id OR
+																s.wo_guid 							<> 	d.wo_guid OR
+																s.wo_reference 						<> 	d.wo_reference OR
+																s.wo_type 							<> 	d.wo_type OR
+																s.wo_priority 						<> 	d.wo_priority OR
+																s.wo_severity 						<> 	d.wo_severity OR
+																s.wo_compliance_level 				<> 	d.wo_compliance_level OR
+																s.wo_class 							<> 	d.wo_class OR
+																s.wo_maintenance_plan 				<> 	d.wo_maintenance_plan OR
+																s.wo_date_registered 				<> 	d.wo_date_registered OR
+																s.wo_due_date 						<> 	d.wo_due_date OR
+																s.wo_date_finished 					<> 	d.wo_date_finished OR
+																s.wo_nature_code 					<> 	d.wo_nature_code OR
+																s.wo_nature_reference 				<> 	d.wo_nature_reference OR
+																s.wo_nature_lvl1 					<> 	d.wo_nature_lvl1 OR
+																s.wo_nature_lvl2 					<> 	d.wo_nature_lvl2 OR
+																s.wo_nature_lvl3 					<> 	d.wo_nature_lvl3 OR
+																s.wo_registered_by_name 			<> 	d.wo_registered_by_name OR
+																s.wo_registered_by_code 			<> 	d.wo_registered_by_code OR
+																s.wo_registered_by_department_name 	<> 	d.wo_registered_by_department_name OR
+																s.wo_registered_by_department_code 	<> 	d.wo_registered_by_department_code OR
+																s.wo_registered_by_company_name 	<> 	d.wo_registered_by_company_name OR
+																s.wo_registered_by_company_code 	<> 	d.wo_registered_by_company_code OR
+																s.wo_requested_by_name 				<> 	d.wo_requested_by_name OR
+																s.wo_requested_by_code 				<> 	d.wo_requested_by_code OR
+																s.wo_requested_by_department_name 	<> 	d.wo_requested_by_department_name OR
+																s.wo_requested_by_department_code 	<> 	d.wo_requested_by_department_code OR
+																s.wo_requested_by_company_name 		<> 	d.wo_requested_by_company_name OR
+																s.wo_customer_name 					<> 	d.wo_customer_name OR
+																s.wo_customer_code 					<> 	d.wo_customer_code OR
+																s.wo_assigned_pers_name 			<> 	d.wo_assigned_pers_name OR
+																s.wo_assigned_pers_code 			<> 	d.wo_assigned_pers_code OR
+																s.wo_assigned_pers_department_name 	<> 	d.wo_assigned_pers_department_name OR
+																s.wo_assigned_pers_department_code 	<> 	d.wo_assigned_pers_department_code OR
+																s.wo_assigned_pers_company_name 	<> 	d.wo_assigned_pers_company_name OR
+																s.wo_assigned_pers_company_code 	<> 	d.wo_assigned_pers_company_code OR
+																s.wo_planner_name 					<> 	d.wo_planner_name OR
+																s.wo_planner_code 					<> 	d.wo_planner_code OR
+																s.wo_taskforce_name 				<> 	d.wo_taskforce_name OR
+																s.wo_taskforce_code 				<> 	d.wo_taskforce_code OR
+																s.wo_supplier_name 					<> 	d.wo_supplier_name OR
+																s.wo_supplier_code 					<> 	d.wo_supplier_code OR
+																s.wo_area_code 						<> 	d.wo_area_code OR
+																s.wo_area_reference 				<> 	d.wo_area_reference OR
+																s.wo_site_code 						<> 	d.wo_site_code OR
+																s.wo_site_reference 				<> 	d.wo_site_reference OR
+																s.wo_building_code 					<> 	d.wo_building_code OR
+																s.wo_building_reference 			<> 	d.wo_building_reference OR
+																s.wo_floor_code 					<> 	d.wo_floor_code OR
+																s.wo_floor_reference 				<> 	d.wo_floor_reference OR
+																s.wo_room_code 						<> 	d.wo_room_code OR
+																s.wo_room_reference					<> 	d.wo_room_reference OR
+																s.wo_exterior_location_code 		<> 	d.wo_exterior_location_code OR
+																s.wo_exterior_location_ref 			<> 	d.wo_exterior_location_ref OR
+																s.wo_status 						<> 	d.wo_status OR
+																s.wo_status_class 					<> 	d.wo_status_class OR
+																s.wo_elapsed_time 					<> 	d.wo_elapsed_time OR
+																s.wo_estimated_work 				<> 	d.wo_estimated_work OR
+																s.wo_actual_work 					<> 	d.wo_actual_work OR
+																s.wo_call_id 						<> 	d.wo_call_id OR
+																s.wo_project_id 					<> 	d.wo_project_id OR
+																s.wo_project_code 					<> 	d.wo_project_code OR
+																s.wo_parent_id 						<> 	d.wo_parent_id OR
+																s.wo_requested_by_company_code 		<> 	d.wo_requested_by_company_code OR
+																s.wo_location_id 					<> 	d.wo_location_id OR
+																--s.wo_elapsed_time_slices 			<> 	d.wo_elapsed_time_slices OR
+																s.wo_client_organization_id 		<> 	d.wo_client_organization_id OR
+																s.wo_client_organization_code 		<> 	d.wo_client_organization_code OR
+																s.wo_client_organization_name 		<> 	d.wo_client_organization_name OR
+																s.creation_timestamp 				<> 	d.creation_timestamp OR
+																s.modification_timestamp 			<> 	d.modification_timestamp 
+																then update set is_deleted = 'Y',
+																				last_modified_timestamp = TIMESTAMP_TRUNC(datetime(current_timestamp(),"CET"), SECOND)"""
+														,FACT_WORKORDERS,MV_REP_WO);
+
+					EXECUTE IMMEDIATE mcs_fact_workorders_update;
+				
+			EXCEPTION WHEN ERROR THEN
+
+				SET error_txt = 'Failed at mcs_fact_workorders_update ';
+				
+				INSERT INTO `cobundu-bi-playground.dataform_sd_procedure.error_log` (tenant, 
+																					 message, 
+																					 sql_text,
+																					 insert_time) 
+																			VALUES (dataset_name, 
+																					@@error.message,
+																					error_txt||'~'||@@error.statement_text, 
+																					TIMESTAMP_TRUNC(datetime(current_timestamp(),"CET"), SECOND) );
+
+			END;
+
+			--##############################
+			--FACT_WORKORDERS --INSERT
+			--##############################
+
+			BEGIN	
+				SET mcs_fact_workorders_insert = FORMAT("""
+														MERGE INTO `%s` d
+														using (
+																SELECT
+																	 workorder_id   					AS  wo_workorder_id
+																	, guid   							AS  wo_guid
+																	, reference   						AS  wo_reference
+																	, wo_type 							AS  wo_type 
+																	, priority 							AS 	wo_priority 
+																	, severity 							AS  wo_severity 
+																	, compliance_level  				AS  wo_compliance_level
+																	, "class" 							AS  wo_class
+																	, maintenance_plan  				AS  wo_maintenance_plan,
+																	TIMESTAMP_TRUNC(datetime(date_registered,"CET"), SECOND) 	AS wo_date_registered,
+																	TIMESTAMP_TRUNC(datetime(due_date,"CET"), SECOND) 			AS wo_due_date,   --
+																	TIMESTAMP_TRUNC(datetime(date_finished,"CET"), SECOND) 		AS wo_date_finished
+																	, nature_code 						AS  wo_nature_code
+																	, nature_reference  				AS  wo_nature_reference
+																	, nature_lvl1 						AS  wo_nature_lvl1
+																	, nature_lvl2 						AS  wo_nature_lvl2
+																	, nature_lvl3 						AS  wo_nature_lvl3
+																	, registered_by_name  				AS  wo_registered_by_name
+																	, registered_by_code  				AS  wo_registered_by_code
+																	, registered_by_department_name 	AS  wo_registered_by_department_name
+																	, registered_by_department_code 	AS  wo_registered_by_department_code
+																	, registered_by_company_name  		AS  wo_registered_by_company_name
+																	, registered_by_company_code  		AS  wo_registered_by_company_code
+																	, requested_by_name 				AS  wo_requested_by_name
+																	, requested_by_code 				AS  wo_requested_by_code
+																	, requested_by_department_name  	AS  wo_requested_by_department_name
+																	, requested_by_department_code  	AS  wo_requested_by_department_code
+																	, requested_by_company_name 		AS  wo_requested_by_company_name
+																	, requested_by_company_code 		AS  wo_requested_by_company_code
+																	, customer_name 					AS  wo_customer_name
+																	, customer_code 					AS  wo_customer_code
+																	, assigned_pers_name  				AS  wo_assigned_pers_name
+																	, assigned_pers_code  				AS  wo_assigned_pers_code
+																	, assigned_pers_department_name 	AS  wo_assigned_pers_department_name
+																	, assigned_pers_department_code 	AS  wo_assigned_pers_department_code
+																	, assigned_pers_company_name  		AS  wo_assigned_pers_company_name
+																	, assigned_pers_company_code  		AS  wo_assigned_pers_company_code
+																	, planner_name  					AS  wo_planner_name
+																	, planner_code  					AS  wo_planner_code
+																	, taskforce_name  					AS  wo_taskforce_name
+																	, taskforce_code  					AS  wo_taskforce_code
+																	, supplier_name 					AS  wo_supplier_name
+																	, supplier_code 					AS  wo_supplier_code
+																	, area_code 						AS  wo_area_code
+																	, area_reference  					AS  wo_area_reference
+																	, site_code 						AS  wo_site_code
+																	, site_reference  					AS  wo_site_reference
+																	, building_code 					AS  wo_building_code
+																	, building_reference  				AS  wo_building_reference
+																	, floor_code  						AS  wo_floor_code
+																	, floor_reference 					AS  wo_floor_reference
+																	, room_code 						AS  wo_room_code
+																	, room_reference  					AS  wo_room_reference
+																	, exterior_location_code  			AS  wo_exterior_location_code
+																	, exterior_location_ref 			AS  wo_exterior_location_ref
+																	, status  							AS  wo_status
+																	, status_class  					AS  wo_status_class
+																	, elapsed_time  					AS  wo_elapsed_time
+																	, cast(estimated_work as numeric) 	AS  wo_estimated_work
+																	, cast(actual_work as numeric)  	AS  wo_actual_work
+																	, call_id 							AS  wo_call_id
+																	, project_id  						AS  wo_project_id
+																	, project_code  					AS  wo_project_code
+																	, parent_id							AS  wo_parent_id,
+
+																	/*
+																	case when cast(substring(date_registered,1,9) as date) <=current_date then
+																	case when cast(elapsed_time as int) =0 then '0d'
+																	when cast(elapsed_time as int) =1 then '1d'
+																	when cast(elapsed_time as int) BETWEEN 2 AND 7 then '2-7d'
+																	when cast(elapsed_time as int) between 8 and 14 then '8-14d'
+																	when cast(elapsed_time as int) BETWEEN 15 AND 30 then '15-30d'
+																	when cast(elapsed_time as int) > 30 then '>30d' 
+																	END
+																	ELSE NULL
+																	END AS wo_elapsed_time_slices ,*/
+																	location_id 								AS wo_location_id,
+																	Client_Organization_ID 						AS wo_Client_Organization_ID,
+																	Client_Organization_Code 					AS wo_Client_Organization_Code,
+																	Client_Organization_Name 					AS wo_Client_Organization_Name,
+																	cast(creation_timestamp as datetime) 		AS creation_timestamp, 
+																	cast(modification_timestamp as datetime) 	AS modification_timestamp 
+																FROM `%s` 
+																WHERE TIMESTAMP_TRUNC(TIMESTAMP_MILLIS(CAST(datastream_metadata.source_timestamp AS INT64)),DAY) = TIMESTAMP_TRUNC(CURRENT_TIMESTAMP(),DAY)
+															) s 
+															ON s.wo_workorder_id = d.wo_workorder_id 
+															AND	is_deleted = 'N'
+															WHEN NOT MATCHED THEN
+															INSERT
+															(
+																wo_workorder_id,
+																wo_guid,
+																wo_reference,
+																wo_type,
+																wo_priority,
+																wo_severity,
+																wo_compliance_level,
+																wo_class,
+																wo_maintenance_plan,
+																wo_date_registered,
+																wo_due_date,
+																wo_date_finished,
+																wo_nature_code,
+																wo_nature_reference,
+																wo_nature_lvl1,
+																wo_nature_lvl2,
+																wo_nature_lvl3,
+																wo_registered_by_name,
+																wo_registered_by_code,
+																wo_registered_by_department_name,
+																wo_registered_by_department_code,
+																wo_registered_by_company_name,
+																wo_registered_by_company_code,
+																wo_requested_by_name,
+																wo_requested_by_code,
+																wo_requested_by_department_name,
+																wo_requested_by_department_code,
+																wo_requested_by_company_name,
+																wo_customer_name,
+																wo_customer_code,
+																wo_assigned_pers_name,
+																wo_assigned_pers_code,
+																wo_assigned_pers_department_name,
+																wo_assigned_pers_department_code,
+																wo_assigned_pers_company_name,
+																wo_assigned_pers_company_code,
+																wo_planner_name,
+																wo_planner_code,
+																wo_taskforce_name,
+																wo_taskforce_code,
+																wo_supplier_name,
+																wo_supplier_code,
+																wo_area_code,
+																wo_area_reference,
+																wo_site_code,
+																wo_site_reference,
+																wo_building_code,
+																wo_building_reference,
+																wo_floor_code,
+																wo_floor_reference,
+																wo_room_code,
+																wo_room_reference,
+																wo_exterior_location_code,
+																wo_exterior_location_ref,
+																wo_status,
+																wo_status_class,
+																wo_elapsed_time,
+																wo_estimated_work,
+																wo_actual_work,
+																wo_call_id,
+																wo_project_id,
+																wo_project_code,
+																wo_parent_id,
+																wo_requested_by_company_code,
+																wo_location_id,
+																--wo_elapsed_time_slices,
+																wo_client_organization_id,
+																wo_client_organization_code,
+																wo_client_organization_name,
+																creation_timestamp,
+																modification_timestamp,
+																is_deleted,
+																last_modified_timestamp
+															)
+															VALUES
+															(
+																wo_workorder_id,
+																wo_guid,
+																wo_reference,
+																wo_type,
+																wo_priority,
+																wo_severity,
+																wo_compliance_level,
+																wo_class,
+																wo_maintenance_plan,
+																wo_date_registered,
+																wo_due_date,
+																wo_date_finished,
+																wo_nature_code,
+																wo_nature_reference,
+																wo_nature_lvl1,
+																wo_nature_lvl2,
+																wo_nature_lvl3,
+																wo_registered_by_name,
+																wo_registered_by_code,
+																wo_registered_by_department_name,
+																wo_registered_by_department_code,
+																wo_registered_by_company_name,
+																wo_registered_by_company_code,
+																wo_requested_by_name,
+																wo_requested_by_code,
+																wo_requested_by_department_name,
+																wo_requested_by_department_code,
+																wo_requested_by_company_name,
+																wo_customer_name,
+																wo_customer_code,
+																wo_assigned_pers_name,
+																wo_assigned_pers_code,
+																wo_assigned_pers_department_name,
+																wo_assigned_pers_department_code,
+																wo_assigned_pers_company_name,
+																wo_assigned_pers_company_code,
+																wo_planner_name,
+																wo_planner_code,
+																wo_taskforce_name,
+																wo_taskforce_code,
+																wo_supplier_name,
+																wo_supplier_code,
+																wo_area_code,
+																wo_area_reference,
+																wo_site_code,
+																wo_site_reference,
+																wo_building_code,
+																wo_building_reference,
+																wo_floor_code,
+																wo_floor_reference,
+																wo_room_code,
+																wo_room_reference,
+																wo_exterior_location_code,
+																wo_exterior_location_ref,
+																wo_status,
+																wo_status_class,
+																wo_elapsed_time,
+																wo_estimated_work,
+																wo_actual_work,
+																wo_call_id,
+																wo_project_id,
+																wo_project_code,
+																wo_parent_id,
+																wo_requested_by_company_code,
+																wo_location_id,
+																--wo_elapsed_time_slices,
+																wo_client_organization_id,
+																wo_client_organization_code,
+																wo_client_organization_name,
+																creation_timestamp,
+																modification_timestamp,
+																'N',
+																TIMESTAMP_TRUNC(datetime(current_timestamp(),"CET"), SECOND)
+															)"""
+														,FACT_WORKORDERS,MV_REP_WO);
+
+					EXECUTE IMMEDIATE mcs_fact_workorders_insert;
+				
+			EXCEPTION WHEN ERROR THEN
+
+				SET error_txt = 'Failed at mcs_fact_workorders_insert ';
+				
+				INSERT INTO `cobundu-bi-playground.dataform_sd_procedure.error_log` (tenant, 
+																					 message, 
+																					 sql_text,
+																					 insert_time) 
+																			VALUES (dataset_name, 
+																					@@error.message,
+																					error_txt||'~'||@@error.statement_text, 
+																					TIMESTAMP_TRUNC(datetime(current_timestamp(),"CET"), SECOND) );
+
+			END;
+		END IF;
+	END IF;
+	
+	SET strRemarks = 'Completed Successfully';
+	CALL `cobundu-bi-playground.dataform_sd_procedure.Execution_log`(p_dataset_name, strProcName, 'E', strRemarks);
+	
+EXCEPTION WHEN ERROR THEN
+
+	CALL `cobundu-bi-playground.dataform_sd_procedure.Execution_log`(p_dataset_name, 'pr_fact_workorders', 'E', 'Failed');
+	CALL `cobundu-bi-playground.dataform_sd_procedure.Error_log`(p_dataset_name, @@error.message, @@error.statement_text);
+
+END;

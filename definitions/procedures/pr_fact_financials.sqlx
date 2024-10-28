@@ -1,0 +1,1623 @@
+CREATE OR REPLACE PROCEDURE `cobundu-bi-playground.dataform_sd_procedure.pr_fact_financials`(IN p_project_id STRING, IN p_dataset_name STRING, IN p_num INT64)
+BEGIN
+	DECLARE 	nCount						INT64;
+	DECLARE		strSqlSnt					STRING;
+	DECLARE 	MV_REP_COSTITEMS			STRING;
+	DECLARE 	mcs_fact_financials_update 	STRING;
+	DECLARE		mcs_fact_financials_insert	STRING;
+	DECLARE		fact_financials				STRING;
+	DECLARE		strRemarks					STRING;
+	DECLARE 	error_txt					STRING;
+	DECLARE 	strErrorMessage         	STRING;
+	DECLARE		strProcName					STRING;
+	
+	SET strProcName 	= 'pr_fact_financials';
+	SET strRemarks		= '';
+	SET fact_financials = p_project_id||'.'||p_dataset_name||'.FACT_FINANCIALS';
+	
+	CALL `cobundu-bi-playground.dataform_sd_procedure.Execution_log`(p_dataset_name, strProcName, 'S', strRemarks);
+	
+	SET strSqlSnt = FORMAT("""SELECT COUNT(*) FROM `%s` """,fact_financials);
+	
+	EXECUTE IMMEDIATE strSqlSnt INTO nCount;
+				
+	IF nCount <= 1
+	THEN
+		SET MV_REP_COSTITEMS 		= p_project_id||'.'||p_dataset_name||'.MV_REP_COSTITEMS_'||p_num;															
+		--##############################
+		--FACT_FINANCIALS -- UPDATE
+		--##############################
+
+		BEGIN
+			SET mcs_fact_financials_update = FORMAT("""MERGE INTO `%s` f
+														using
+															(
+																SELECT
+																   COST_ITEM_ID                                   	AS      fin_cost_item_id
+																   ,MASTER_COST_ITEM_ID                             AS      fin_master_cost_item_id
+																   ,COST_DATE                                       AS      fin_cost_date
+																   ,DESCRIPTION 									AS      fin_description
+																   ,CAST(EXPENSE_AMOUNT AS NUMERIC) 				AS      fin_expense_amount
+																   ,CAST(REVENUE_AMOUNT AS NUMERIC) 				AS      fin_revenue_amount
+																   ,TAX_CODE_ID 									AS 		fin_tax_code_id
+																   ,TAX_CODE_CODE 									AS 		fin_tax_code_code
+																   ,TAX_CODE_REFERENCE 								AS 		fin_tax_code_reference
+																   ,CAST(TAX_CODE_PERCENTAGE AS NUMERIC) 			AS 		fin_tax_code_percentage
+																   ,CAST(REVENUE_TAX_AMOUNT AS NUMERIC) 			AS 		fin_revenue_tax_amount
+																   ,CURRENCY_ID 									AS      fin_currency_id
+																   ,COST_CLASS_ID 									AS      fin_cost_class_id
+																   ,COST_CATEGORY_ID 								AS      fin_cost_category_id
+																   ,COST_CATEGORY_CODE 								AS      fin_cost_category_code
+																   ,COST_CATEGORY_REFERENCE 						AS      fin_cost_category_reference
+																   ,COST_CARRIER_ID 								AS      fin_cost_carrier_id
+																   ,COST_CARRIER_CODE 								AS      fin_cost_carrier_code
+																   ,COST_CARRIER_REFERENCE					 		AS      fin_cost_carrier_reference
+																   ,COST_GENERATOR_ID 								AS      fin_cost_generator_id
+																   ,COST_GENERATOR_TYPE 							AS      fin_cost_generator_type
+																   ,COST_GENERATOR_CODE 							AS      fin_cost_generator_code
+																   ,COST_GENERATOR_REFERENCE 						AS      fin_cost_generator_reference
+																   ,COST_CENTER_ID 									AS      fin_cost_center_id
+																   ,COST_CENTER_CODE 								AS      fin_cost_center_code
+																   ,COST_CENTER_DESCRIPTION 						AS      fin_cost_center_description
+																   ,GL_ACCOUNT_ID 									AS      fin_gl_account_id
+																   ,GL_ACCOUNT_CODE 								AS      fin_gl_account_code
+																   ,GL_ACCOUNT_REFERENCE 							AS      fin_gl_account_reference
+																   ,CONTRACT_ID 									AS      fin_contract_id
+																   ,CONTRACT_CODE 									AS      fin_contract_code
+																   ,CONTRACT_REFERENCE 								AS      fin_contract_reference
+																   ,LOCATION_ID 									AS      fin_location_id
+																   ,LOCATION_CODE 									AS      fin_location_code
+																   ,LOCATION_REF 									AS      fin_location_ref
+																   ,SUPPLIER_ID 									AS      fin_supplier_id
+																   ,SUPPLIER_CODE 									AS      fin_supplier_code
+																   ,SUPPLIER_NAME 									AS      fin_supplier_name
+																   ,BILLING 										AS      fin_billing
+																   ,COMM_OR_ACTUAL 									AS      fin_comm_or_actual
+																   ,BILLING_REQUISITION_ID 							AS      fin_billing_requisition_id
+																   ,FISCAL_ENTITY_ID 								AS      fin_fiscal_entity_id
+																   ,FISCAL_ENTITY_CODE 								AS      fin_fiscal_entity_code
+																   ,FISCAL_ENTITY_NAME 								AS      fin_fiscal_entity_name
+																   ,FIN_KEY_1 										AS      fin_fin_key_1
+																   ,FIN_KEY_2 										AS      fin_fin_key_2
+																   ,FIN_KEY_3 										AS      fin_fin_key_3
+																   ,FIN_KEY_4 										AS      fin_fin_key_4
+																   ,FIN_KEY_5 										AS      fin_fin_key_5
+																   ,FIN_KEY_6 										AS      fin_fin_key_6
+																   ,FIN_KEY_7 										AS      fin_fin_key_7
+																   ,FIN_KEY_8 										AS      fin_fin_key_8
+																   ,PRICE_LIST_DETAIL_ID 							AS      fin_price_list_detail_id
+																   ,EXP_LIST_DETAIL_ID 								AS      fin_exp_list_detail_id
+																   ,CAST(QUANTITY AS INT64) 						AS      fin_quantity
+																   ,UOM_ID 											AS      fin_uom_id
+																   ,UOM_CODE 										AS      fin_uom_code
+																   ,UOM_REF 										AS      fin_uom_ref
+																   ,CUSTOMER_ID 									AS      fin_customer_id
+																   ,CUSTOMER_CODE 									AS      fin_customer_code
+																   ,CUSTOMER_NAME 									AS      fin_customer_name
+																   ,COST_CARRIER_TYPE 								AS      fin_cost_carrier_type
+																   ,START_DATE 										AS      fin_start_date
+																   ,END_DATE 										AS      fin_end_date
+																   ,CAST(INTERVAL_VALUE AS INT64) 					AS      fin_interval_value
+																   ,INTERVAL_UNIT 									AS      fin_interval_unit
+																   ,MATERIAL_NUMBER_ID 								AS      fin_material_integer_id
+																   ,MATERIAL_NUMBER_CODE 							AS      fin_material_integer_code
+																   ,MATERIAL_NUMBER_REF 							AS      fin_material_integer_ref
+																   ,EXTERNAL_PROP_REF 								AS      fin_external_prop_ref
+																   ,CAST(UNIT_PRICE AS  NUMERIC) 					AS 		fin_unit_price
+																   ,REU_ID 											AS      fin_reu_id
+																   ,REU_CODE 										AS      fin_reu_code
+																   ,REU_REF 										AS      fin_reu_ref
+																   ,EXTERNAL_PROP_REF_ID 							AS      fin_external_prop_ref_id
+																   ,FIN_KEY_1_VALUE 								AS      fin_fin_key_1_value
+																   ,FIN_KEY_2_VALUE 								AS      fin_fin_key_2_value
+																   ,FIN_KEY_3_VALUE 								AS      fin_fin_key_3_value
+																   ,FIN_KEY_4_VALUE 								AS      fin_fin_key_4_value
+																   ,FIN_KEY_5_VALUE 								AS      fin_fin_key_5_value
+																   ,FIN_KEY_6_VALUE 								AS      fin_fin_key_6_value
+																   ,FIN_KEY_7_VALUE 								AS      fin_fin_key_7_value
+																   ,FIN_KEY_8_VALUE 								AS      fin_fin_key_8_value
+																   ,CAST(REVENUE_FACTOR AS NUMERIC) 				AS 		fin_revenue_factor
+																   ,CREATION_ACCOUNT_ID 							AS       fin_creation_account_id
+																   ,LATEST_MOD_ACCOUNT_ID 							AS       fin_latest_mod_account_id
+																   ,PRODUCT_CATEGORY_REF 							AS       fin_product_category_ref
+																   ,PRODUCT_CLASS_NAME 								AS       fin_product_class_name
+																   ,COST_CARRIER_FIN_STAT 							AS       fin_cost_carrier_fin_stat
+																   ,PERIOD_TYPE 									AS       fin_period_type
+																   ,PRODUCT_SERVICE_ID 								AS       fin_product_service_id
+																   ,PRODUCT_CODE 									AS       fin_product_code
+																   ,PRODUCT_REFERENCE 								AS       fin_product_reference
+																   ,CTR_VERSION_ID 									AS       fin_ctr_version_id
+																   ,CAST(CTR_VERSION_NR AS INT64) 					AS       fin_ctr_version_nr
+																   ,IS_ADVANCE_PAYMENT 								AS       fin_is_advance_payment
+																   ,PROPERTY_ID 									AS       fin_property_id
+																   ,PROPERTY_CODE 									AS       fin_property_code
+																   ,PROPERTY_REF 									AS       fin_property_ref
+																   ,COST_CARRIER_STATUS 							AS       fin_cost_carrier_status
+																   ,PARENT_COST_CARRIER_TYPE 						AS       fin_parent_cost_carrier_type
+																   ,PARENT_COST_CARRIER_CODE 						AS       fin_parent_cost_carrier_code
+																   ,PARENT_COST_CARRIER_REFERENCE 					AS       fin_parent_cost_carrier_reference
+																   ,PARENT_COST_CARRIER_STATUS 						AS       fin_parent_cost_carrier_status
+																   ,PARENT_COST_CARRIER_ID 							AS       fin_parent_cost_carrier_id
+																   ,TOP_COST_CARRIER_TYPE 							AS       fin_top_cost_carrier_type
+																   ,TOP_COST_CARRIER_CODE 							AS       fin_top_cost_carrier_code
+																   ,TOP_COST_CARRIER_REFERENCE 						AS       fin_top_cost_carrier_reference
+																   ,TOP_COST_CARRIER_STATUS 						AS       fin_top_cost_carrier_status
+																   ,TOP_COST_CARRIER_ID 							AS       fin_top_cost_carrier_id
+																   ,APPORT_SCHEDULE_ID 								AS       fin_apport_schedule_id
+																   ,CAST(EXPENSE_FACTOR AS INT64) 					AS       fin_expense_factor
+																   ,HIST_IDX_DETAIL_ID 								AS       fin_hist_idx_detail_id
+																   ,COST_DISTR_KEY_ID 								AS       fin_cost_distr_key_id
+																   ,COST_DISTR_KEY_CODE 							AS       fin_cost_distr_key_code
+																   ,COST_DISTR_KEY_REF 								AS       fin_cost_distr_key_ref
+																   ,CAST(COST_DISTR_KEY_PCT AS NUMERIC) 			AS 		 fin_cost_distr_key_pct
+																   ,BASE_COST_ITEM_ID 								AS       fin_base_cost_item_id
+																   --,CAST(CREATION_DATE AS DATETIME) 				AS       fin_creation_date
+																   --,CAST(LATEST_MOD_DATE AS DATETIME) 			AS       fin_latest_mod_date
+																   ,CAST(CREATION_TIMESTAMP AS DATETIME) 			AS       fin_creation_date
+																   ,CAST(MODIFICATION_TIMESTAMP AS DATETIME) 		AS       fin_latest_mod_date
+																   ,CAST(BILLING_DATE AS DATETIME) 					AS       fin_billing_date
+																   ,COST_GENERATOR_DETAIL_ID 						AS       fin_cost_generator_detail_id
+																   ,PRICE_ORIGIN 									AS       fin_price_origin
+																   ,CAST(SESSION_ID AS STRING) 						AS       fin_session_id
+																   ,CAST(SETTLEMENT_FACTOR AS INT64) 				AS 		 fin_settlement_factor
+																   ,CAST(CALC_OBJECT_ID AS INT64) 					AS       fin_calc_object_id
+																   ,CAST(CALC_OBJECT_DETAIL_ID AS INT64) 			AS       fin_calc_object_detail_id
+																   ,BASED_ON_INDEXED_PRICE 							AS       fin_based_on_indexed_price
+																   ,ACCOUNTING_DATE 								AS       fin_accounting_date
+																   ,CAST(BENEFICIARY_FACTOR AS INT64) 				AS       fin_beneficiary_factor
+																   ,CAST(CALC_OBJECT_METER_ID AS INT64)  			AS 		 fin_calc_object_meter_id
+																   ,CAST(IS_HISTORICAL AS  INT64) 					AS 		 fin_is_historical
+																   ,CURRENCY 										AS        fin_currency
+																   ,COST_CLASS_NAME 								AS        fin_cost_class_name
+																   ,CONTRACT_TYPE 									AS        fin_contract_type
+																   ,CONTRACT_STATUS 								AS        fin_contract_status
+																   ,CONTRACT_STATUS_CLASS 							AS        fin_contract_status_class
+																   ,CONTRACT_STARTDATE 								AS        fin_contract_startdate
+																   ,CONTRACT_ENDDATE 								AS        fin_contract_enddate
+																   ,'NULL' 											AS        start_by
+																   ,client_organization_id 							AS        fin_client_organization_id
+																   ,client_organization_code 						AS        fin_client_organization_code
+																   ,client_organization_name 						AS        fin_client_organization_name
+																   FROM `%s`
+																   ) s
+														ON s.fin_cost_item_id = f.fin_cost_item_id 
+														AND s.fin_master_cost_item_id = f.fin_master_cost_item_id
+														AND f.is_deleted = 'N'
+														WHEN matched AND
+															s.fin_cost_date                			<> 		f.fin_cost_date OR 
+															s.fin_description               		<> 		f.fin_description OR 
+															s.fin_expense_amount    				<> 		f.fin_expense_amount OR 
+															s.fin_revenue_amount    				<> 		f.fin_revenue_amount OR 
+															s.fin_tax_code_id             			<> 		f.fin_tax_code_id OR 
+															s.fin_tax_code_code       				<> 		f.fin_tax_code_code OR 
+															s.fin_tax_code_reference        		<> 		f.fin_tax_code_reference OR 
+															s.fin_tax_code_percentage       		<> 		f.fin_tax_code_percentage OR 
+															s.fin_revenue_tax_amount        		<> 		f.fin_revenue_tax_amount OR 
+															s.fin_currency_id               		<> 		f.fin_currency_id OR 
+															s.fin_cost_class_id             		<> 		f.fin_cost_class_id OR 
+															s.fin_cost_category_id          		<> 		f.fin_cost_category_id OR 
+															s.fin_cost_category_code        		<> 		f.fin_cost_category_code OR 
+															s.fin_cost_category_reference   		<> 		f.fin_cost_category_reference OR 
+															s.fin_cost_carrier_id        			<> 		f.fin_cost_carrier_id OR 
+															s.fin_cost_carrier_code  				<> 		f.fin_cost_carrier_code OR 
+															s.fin_cost_carrier_reference    		<> 		f.fin_cost_carrier_reference OR 
+															s.fin_cost_generator_id  				<> 		f.fin_cost_generator_id OR 
+															s.fin_cost_generator_type       		<> 		f.fin_cost_generator_type OR 
+															s.fin_cost_generator_code       		<> 		f.fin_cost_generator_code OR 
+															s.fin_cost_generator_reference  		<> 		f.fin_cost_generator_reference OR 
+															s.fin_cost_center_id        			<> 		f.fin_cost_center_id OR 
+															s.fin_cost_center_code   				<> 		f.fin_cost_center_code OR 
+															s.fin_cost_center_description   		<> 		f.fin_cost_center_description OR 
+															s.fin_gl_account_id          			<> 		f.fin_gl_account_id OR 
+															s.fin_gl_account_code    				<> 		f.fin_gl_account_code OR 
+															s.fin_gl_account_reference      		<> 		f.fin_gl_account_reference OR 
+															s.fin_contract_id              			<> 		f.fin_contract_id OR 
+															s.fin_contract_code         			<> 		f.fin_contract_code OR 
+															s.fin_contract_reference        		<> 		f.fin_contract_reference OR 
+															s.fin_location_id               		<> 		f.fin_location_id OR 
+															s.fin_location_code          			<> 		f.fin_location_code OR 
+															s.fin_location_ref             			<> 		f.fin_location_ref OR 
+															s.fin_supplier_id               		<> 		f.fin_supplier_id OR 
+															s.fin_supplier_code          			<> 		f.fin_supplier_code OR 
+															s.fin_supplier_name        				<> 		f.fin_supplier_name OR 
+															s.fin_billing          					<> 		f.fin_billing OR 
+															s.fin_comm_or_actual    				<> 		f.fin_comm_or_actual OR 
+															s.fin_billing_requisition_id    		<> 		f.fin_billing_requisition_id OR 
+															s.fin_fiscal_entity_id       			<> 		f.fin_fiscal_entity_id OR 
+															s.fin_fiscal_entity_code  				<> 		f.fin_fiscal_entity_code OR 
+															s.fin_fiscal_entity_name        		<> 		f.fin_fiscal_entity_name OR 
+															s.fin_fin_key_1  						<> 		f.fin_fin_key_1 OR 
+															s.fin_fin_key_2  						<> 		f.fin_fin_key_2 OR 
+															s.fin_fin_key_3  						<> 		f.fin_fin_key_3 OR 
+															s.fin_fin_key_4  						<> 		f.fin_fin_key_4 OR 
+															s.fin_fin_key_5  						<> 		f.fin_fin_key_5 OR 
+															s.fin_fin_key_6  						<> 		f.fin_fin_key_6 OR 
+															s.fin_fin_key_7  						<> 		f.fin_fin_key_7 OR 
+															s.fin_fin_key_8  						<> 		f.fin_fin_key_8 OR 
+															s.fin_price_list_detail_id      		<> 		f.fin_price_list_detail_id OR 
+															s.fin_exp_list_detail_id        		<> 		f.fin_exp_list_detail_id OR 
+															s.fin_quantity     						<> 		f.fin_quantity OR 
+															s.fin_uom_id       						<> 		f.fin_uom_id OR 
+															s.fin_uom_code 							<> 		f.fin_uom_code OR 
+															s.fin_uom_ref     						<> 		f.fin_uom_ref OR 
+															s.fin_customer_id             			<> 		f.fin_customer_id OR 
+															s.fin_customer_code       				<> 		f.fin_customer_code OR 
+															s.fin_customer_name      				<> 		f.fin_customer_name OR 
+															s.fin_cost_carrier_type   				<> 		f.fin_cost_carrier_type OR 
+															s.fin_start_date 						<> 		f.fin_start_date OR 
+															s.fin_end_date   						<> 		f.fin_end_date OR 
+															s.fin_interval_value         			<> 		f.fin_interval_value OR 
+															s.fin_interval_unit            			<> 		f.fin_interval_unit OR 
+															s.fin_material_integer_id       		<> 		f.fin_material_integer_id OR 
+															s.fin_material_integer_code     		<> 		f.fin_material_integer_code OR 
+															s.fin_material_integer_ref      		<> 		f.fin_material_integer_ref OR 
+															s.fin_external_prop_ref  				<> 		f.fin_external_prop_ref OR 
+															s.fin_unit_price  						<> 		f.fin_unit_price OR 
+															s.fin_reu_id         					<> 		f.fin_reu_id OR 
+															s.fin_reu_code   						<> 		f.fin_reu_code OR 
+															s.fin_reu_ref       					<> 		f.fin_reu_ref OR 
+															s.fin_external_prop_ref_id      		<> 		f.fin_external_prop_ref_id OR 
+															s.fin_fin_key_1_value     				<> 		f.fin_fin_key_1_value OR 
+															s.fin_fin_key_2_value     				<> 		f.fin_fin_key_2_value OR 
+															s.fin_fin_key_3_value     				<> 		f.fin_fin_key_3_value OR 
+															s.fin_fin_key_4_value     				<> 		f.fin_fin_key_4_value OR 
+															s.fin_fin_key_5_value     				<> 		f.fin_fin_key_5_value OR 
+															s.fin_fin_key_6_value     				<> 		f.fin_fin_key_6_value OR 
+															s.fin_fin_key_7_value     				<> 		f.fin_fin_key_7_value OR 
+															s.fin_fin_key_8_value     				<> 		f.fin_fin_key_8_value OR 
+															s.fin_revenue_factor       				<> 		f.fin_revenue_factor OR 
+															s.fin_creation_account_id       		<> 		f.fin_creation_account_id OR 
+															s.fin_latest_mod_account_id     		<> 		f.fin_latest_mod_account_id OR 
+															s.fin_product_category_ref      		<> 		f.fin_product_category_ref OR 
+															s.fin_product_class_name        		<> 		f.fin_product_class_name OR 
+															s.fin_cost_carrier_fin_stat     		<> 		f.fin_cost_carrier_fin_stat OR 
+															s.fin_period_type               		<> 		f.fin_period_type OR 
+															s.fin_product_service_id        		<> 		f.fin_product_service_id OR 
+															s.fin_product_code              		<> 		f.fin_product_code OR 
+															s.fin_product_reference         		<> 		f.fin_product_reference OR 
+															s.fin_ctr_version_id         			<> 		f.fin_ctr_version_id OR 
+															s.fin_ctr_version_nr         			<> 		f.fin_ctr_version_nr OR 
+															s.fin_is_advance_payment        		<> 		f.fin_is_advance_payment OR 
+															s.fin_property_id              			<> 		f.fin_property_id OR 
+															s.fin_property_code         			<> 		f.fin_property_code OR 
+															s.fin_property_ref            			<> 		f.fin_property_ref OR 
+															s.fin_cost_carrier_status       		<> 		f.fin_cost_carrier_status OR 
+															s.fin_parent_cost_carrier_type  		<> 		f.fin_parent_cost_carrier_type OR 
+															s.fin_parent_cost_carrier_code  		<> 		f.fin_parent_cost_carrier_code OR 
+															s.fin_parent_cost_carrier_reference     <> 		f.fin_parent_cost_carrier_reference OR 
+															s.fin_parent_cost_carrier_status        <> 		f.fin_parent_cost_carrier_status OR 
+															s.fin_parent_cost_carrier_id         	<> 		f.fin_parent_cost_carrier_id OR 
+															s.fin_top_cost_carrier_type          	<> 		f.fin_top_cost_carrier_type OR 
+															s.fin_top_cost_carrier_code         	<> 		f.fin_top_cost_carrier_code OR 
+															s.fin_top_cost_carrier_reference        <> 		f.fin_top_cost_carrier_reference OR 
+															s.fin_top_cost_carrier_status       	<> 		f.fin_top_cost_carrier_status OR 
+															s.fin_top_cost_carrier_id               <> 		f.fin_top_cost_carrier_id OR 
+															s.fin_apport_schedule_id              	<> 		f.fin_apport_schedule_id OR 
+															s.fin_expense_factor       				<> 		f.fin_expense_factor OR 
+															s.fin_hist_idx_detail_id   				<> 		f.fin_hist_idx_detail_id OR 
+															s.fin_cost_distr_key_id   				<> 		f.fin_cost_distr_key_id OR 
+															s.fin_cost_distr_key_code             	<> 		f.fin_cost_distr_key_code OR 
+															s.fin_cost_distr_key_ref  				<> 		f.fin_cost_distr_key_ref OR 
+															s.fin_cost_distr_key_pct                <> 		f.fin_cost_distr_key_pct OR 
+															s.fin_base_cost_item_id                	<> 		f.fin_base_cost_item_id OR 
+															s.fin_creation_date          			<> 		f.fin_creation_date OR 
+															s.fin_latest_mod_date    				<> 		f.fin_latest_mod_date OR 
+															s.fin_billing_date              		<> 		f.fin_billing_date OR 
+															s.fin_cost_generator_detail_id    		<> 		f.fin_cost_generator_detail_id OR 
+															s.fin_price_origin              		<> 		f.fin_price_origin OR 
+															s.fin_session_id  						<> 		f.fin_session_id OR 
+															s.fin_settlement_factor   				<> 		f.fin_settlement_factor OR 
+															s.fin_calc_object_id         			<> 		f.fin_calc_object_id OR 
+															s.fin_calc_object_detail_id           	<> 		f.fin_calc_object_detail_id OR 
+															s.fin_based_on_indexed_price    		<> 		f.fin_based_on_indexed_price OR 
+															s.fin_accounting_date     				<> 		f.fin_accounting_date OR 
+															s.fin_beneficiary_factor  				<> 		f.fin_beneficiary_factor OR 
+															s.fin_calc_object_meter_id           	<> 		f.fin_calc_object_meter_id OR 
+															s.fin_is_historical              		<> 		f.fin_is_historical OR 
+															s.fin_currency    						<> 		f.fin_currency OR 
+															s.fin_cost_class_name    				<> 		f.fin_cost_class_name OR 
+															s.fin_contract_type          			<> 		f.fin_contract_type OR 
+															s.fin_contract_status       			<> 		f.fin_contract_status OR 
+															s.fin_contract_status_class           	<> 		f.fin_contract_status_class OR 
+															s.fin_contract_startdate                <> 		f.fin_contract_startdate OR 
+															s.fin_contract_enddate   				<> 		f.fin_contract_enddate OR 
+															s.start_by            					<> 		f.start_by OR 
+															s.fin_client_organization_id          	<> 		f.fin_client_organization_id OR 
+															s.fin_client_organization_code    		<> 		f.fin_client_organization_code OR 
+															s.fin_client_organization_name   		<> 		f.fin_client_organization_name 
+													 THEN UPDATE SET is_deleted = 'Y',  last_modified_timestamp = CURRENT_DATETIME;
+													 """
+													 ,fact_financials,MV_REP_COSTITEMS);
+
+			EXECUTE IMMEDIATE mcs_fact_financials_update;
+		
+		EXCEPTION WHEN ERROR THEN
+		
+			SET strRemarks 			= 'Failed in '||strProcName||', check error_log table for more info';
+			SET strErrorMessage 	= @@error.message;
+			SET error_txt		  	= 'Failed in mcs_fact_financials_update '||' ~'||@@error.statement_text;
+			  
+			CALL `cobundu-bi-playground.dataform_sd_procedure.Execution_log`(p_dataset_name, strProcName, 'E', strRemarks);
+			CALL `cobundu-bi-playground.dataform_sd_procedure.Error_log`(p_dataset_name, strErrorMessage, error_txt);
+
+		END;
+		
+		--##############################
+		--FACT_FINANCIALS -- INSERT
+		--##############################
+
+		BEGIN	
+			SET mcs_fact_financials_insert = FORMAT("""
+													MERGE INTO `%s`  f
+													USING
+															   (
+																SELECT
+																COST_ITEM_ID                                    AS      fin_cost_item_id
+															   ,MASTER_COST_ITEM_ID                             AS      fin_master_cost_item_id
+															   ,COST_DATE                                       AS      fin_cost_date
+															   ,DESCRIPTION 									AS      fin_description
+															   ,CAST(EXPENSE_AMOUNT AS NUMERIC) 				AS      fin_expense_amount
+															   ,CAST(REVENUE_AMOUNT AS NUMERIC) 				AS      fin_revenue_amount
+															   ,TAX_CODE_ID 									AS 		fin_tax_code_id
+															   ,TAX_CODE_CODE 									AS 		fin_tax_code_code
+															   ,TAX_CODE_REFERENCE 								AS 		fin_tax_code_reference
+															   ,CAST(TAX_CODE_PERCENTAGE AS NUMERIC) 			AS 		fin_tax_code_percentage
+															   ,CAST(REVENUE_TAX_AMOUNT AS NUMERIC) 			AS 		fin_revenue_tax_amount
+															   ,CURRENCY_ID 									AS      fin_currency_id
+															   ,COST_CLASS_ID 									AS      fin_cost_class_id
+															   ,COST_CATEGORY_ID 								AS      fin_cost_category_id
+															   ,COST_CATEGORY_CODE 								AS      fin_cost_category_code
+															   ,COST_CATEGORY_REFERENCE 						AS      fin_cost_category_reference
+															   ,COST_CARRIER_ID 								AS      fin_cost_carrier_id
+															   ,COST_CARRIER_CODE 								AS      fin_cost_carrier_code
+															   ,COST_CARRIER_REFERENCE 							AS      fin_cost_carrier_reference
+															   ,COST_GENERATOR_ID 								AS      fin_cost_generator_id
+															   ,COST_GENERATOR_TYPE 							AS      fin_cost_generator_type
+															   ,COST_GENERATOR_CODE 							AS      fin_cost_generator_code
+															   ,COST_GENERATOR_REFERENCE 						AS      fin_cost_generator_reference
+															   ,COST_CENTER_ID 									AS      fin_cost_center_id
+															   ,COST_CENTER_CODE 								AS      fin_cost_center_code
+															   ,COST_CENTER_DESCRIPTION 						AS      fin_cost_center_description
+															   ,GL_ACCOUNT_ID 									AS      fin_gl_account_id
+															   ,GL_ACCOUNT_CODE 								AS      fin_gl_account_code
+															   ,GL_ACCOUNT_REFERENCE 							AS      fin_gl_account_reference
+															   ,CONTRACT_ID 									AS      fin_contract_id
+															   ,CONTRACT_CODE 									AS      fin_contract_code
+															   ,CONTRACT_REFERENCE 								AS      fin_contract_reference
+															   ,LOCATION_ID 									AS      fin_location_id
+															   ,LOCATION_CODE 									AS      fin_location_code
+															   ,LOCATION_REF 									AS      fin_location_ref
+															   ,SUPPLIER_ID 									AS      fin_supplier_id
+															   ,SUPPLIER_CODE 									AS      fin_supplier_code
+															   ,SUPPLIER_NAME 									AS      fin_supplier_name
+															   ,BILLING 										AS      fin_billing
+															   ,COMM_OR_ACTUAL 									AS      fin_comm_or_actual
+															   ,BILLING_REQUISITION_ID 							AS      fin_billing_requisition_id
+															   ,FISCAL_ENTITY_ID 								AS      fin_fiscal_entity_id
+															   ,FISCAL_ENTITY_CODE 								AS      fin_fiscal_entity_code
+															   ,FISCAL_ENTITY_NAME 								AS      fin_fiscal_entity_name
+															   ,FIN_KEY_1 										AS      fin_fin_key_1
+															   ,FIN_KEY_2 										AS      fin_fin_key_2
+															   ,FIN_KEY_3 										AS      fin_fin_key_3
+															   ,FIN_KEY_4 										AS      fin_fin_key_4
+															   ,FIN_KEY_5 										AS      fin_fin_key_5
+															   ,FIN_KEY_6 										AS      fin_fin_key_6
+															   ,FIN_KEY_7 										AS      fin_fin_key_7
+															   ,FIN_KEY_8 										AS      fin_fin_key_8
+															   ,PRICE_LIST_DETAIL_ID 							AS      fin_price_list_detail_id
+															   ,EXP_LIST_DETAIL_ID 								AS      fin_exp_list_detail_id
+															   ,CAST(QUANTITY AS NUMERIC) 						AS      fin_quantity
+															   ,UOM_ID 											AS      fin_uom_id
+															   ,UOM_CODE 										AS      fin_uom_code
+															   ,UOM_REF 										AS      fin_uom_ref
+															   ,CUSTOMER_ID	 									AS      fin_customer_id
+															   ,CUSTOMER_CODE 									AS      fin_customer_code
+															   ,CUSTOMER_NAME 									AS      fin_customer_name
+															   ,COST_CARRIER_TYPE 								AS      fin_cost_carrier_type
+															   ,START_DATE 										AS      fin_start_date
+															   ,END_DATE 										AS      fin_end_date
+															   ,CAST(INTERVAL_VALUE AS NUMERIC) 				AS      fin_interval_value
+															   ,INTERVAL_UNIT 									AS      fin_interval_unit
+															   ,MATERIAL_NUMBER_ID 								AS      fin_material_integer_id
+															   ,MATERIAL_NUMBER_CODE 							AS      fin_material_integer_code
+															   ,MATERIAL_NUMBER_REF 							AS      fin_material_integer_ref
+															   ,EXTERNAL_PROP_REF 								AS      fin_external_prop_ref
+															   ,CAST(UNIT_PRICE AS  NUMERIC) 					AS 		fin_unit_price
+															   ,REU_ID 											AS      fin_reu_id
+															   ,REU_CODE 										AS      fin_reu_code
+															   ,REU_REF 										AS      fin_reu_ref
+															   ,EXTERNAL_PROP_REF_ID 							AS      fin_external_prop_ref_id
+															   ,FIN_KEY_1_VALUE 								AS      fin_fin_key_1_value
+															   ,FIN_KEY_2_VALUE 								AS      fin_fin_key_2_value
+															   ,FIN_KEY_3_VALUE 								AS      fin_fin_key_3_value
+															   ,FIN_KEY_4_VALUE 								AS      fin_fin_key_4_value
+															   ,FIN_KEY_5_VALUE 								AS      fin_fin_key_5_value
+															   ,FIN_KEY_6_VALUE 								AS      fin_fin_key_6_value
+															   ,FIN_KEY_7_VALUE 								AS      fin_fin_key_7_value
+															   ,FIN_KEY_8_VALUE 								AS      fin_fin_key_8_value
+															   ,CAST(REVENUE_FACTOR AS NUMERIC) 				AS 		fin_revenue_factor
+															   ,CREATION_ACCOUNT_ID 							AS      fin_creation_account_id
+															   ,LATEST_MOD_ACCOUNT_ID 							AS      fin_latest_mod_account_id
+															   ,PRODUCT_CATEGORY_REF 							AS      fin_product_category_ref
+															   ,PRODUCT_CLASS_NAME 								AS      fin_product_class_name
+															   ,COST_CARRIER_FIN_STAT 							AS      fin_cost_carrier_fin_stat
+															   ,PERIOD_TYPE 									AS      fin_period_type
+															   ,PRODUCT_SERVICE_ID 								AS      fin_product_service_id
+															   ,PRODUCT_CODE 									AS      fin_product_code
+															   ,PRODUCT_REFERENCE 								AS      fin_product_reference
+															   ,CTR_VERSION_ID 									AS      fin_ctr_version_id
+															   ,CAST(CTR_VERSION_NR AS NUMERIC) 				AS      fin_ctr_version_nr
+															   ,IS_ADVANCE_PAYMENT	 							AS      fin_is_advance_payment
+															   ,PROPERTY_ID 									AS      fin_property_id
+															   ,PROPERTY_CODE 									AS      fin_property_code
+															   ,PROPERTY_REF 									AS      fin_property_ref
+															   ,COST_CARRIER_STATUS 							AS      fin_cost_carrier_status
+															   ,PARENT_COST_CARRIER_TYPE 						AS      fin_parent_cost_carrier_type
+															   ,PARENT_COST_CARRIER_CODE 						AS      fin_parent_cost_carrier_code
+															   ,PARENT_COST_CARRIER_REFERENCE 					AS      fin_parent_cost_carrier_reference
+															   ,PARENT_COST_CARRIER_STATUS 						AS      fin_parent_cost_carrier_status
+															   ,PARENT_COST_CARRIER_ID 							AS      fin_parent_cost_carrier_id
+															   ,TOP_COST_CARRIER_TYPE 							AS      fin_top_cost_carrier_type
+															   ,TOP_COST_CARRIER_CODE 							AS      fin_top_cost_carrier_code
+															   ,TOP_COST_CARRIER_REFERENCE 						AS      fin_top_cost_carrier_reference
+															   ,TOP_COST_CARRIER_STATUS 						AS      fin_top_cost_carrier_status
+															   ,TOP_COST_CARRIER_ID 							AS      fin_top_cost_carrier_id
+															   ,APPORT_SCHEDULE_ID 								AS      fin_apport_schedule_id
+															   ,CAST(EXPENSE_FACTOR AS NUMERIC ) 				AS      fin_expense_factor
+															   ,HIST_IDX_DETAIL_ID 								AS      fin_hist_idx_detail_id
+															   ,COST_DISTR_KEY_ID 								AS      fin_cost_distr_key_id
+															   ,COST_DISTR_KEY_CODE 							AS      fin_cost_distr_key_code
+															   ,COST_DISTR_KEY_REF 								AS      fin_cost_distr_key_ref
+															   ,CAST(COST_DISTR_KEY_PCT AS NUMERIC) 			AS 		fin_cost_distr_key_pct
+															   ,BASE_COST_ITEM_ID 								AS      fin_base_cost_item_id
+															   --,CAST(CREATION_DATE AS DATETIME) 				AS      fin_creation_date
+															   --,CAST(LATEST_MOD_DATE AS DATETIME) 			AS      fin_latest_mod_date
+															   ,CAST(CREATION_TIMESTAMP AS DATETIME) 			AS      fin_creation_date
+															   ,CAST(MODIFICATION_TIMESTAMP AS DATETIME) 		AS      fin_latest_mod_date
+															   ,CAST(BILLING_DATE AS DATETIME) 					AS      fin_billing_date
+															   ,COST_GENERATOR_DETAIL_ID 						AS      fin_cost_generator_detail_id
+															   ,PRICE_ORIGIN 									AS      fin_price_origin
+															   ,CAST(SESSION_ID AS STRING) 						AS      fin_session_id
+															   ,CAST(SETTLEMENT_FACTOR AS NUMERIC) 				AS 		fin_settlement_factor
+															   ,CAST(CALC_OBJECT_ID AS NUMERIC) 				AS      fin_calc_object_id
+															   ,CAST(CALC_OBJECT_DETAIL_ID AS NUMERIC) 			AS      fin_calc_object_detail_id
+															   ,BASED_ON_INDEXED_PRICE 							AS      fin_based_on_indexed_price
+															   ,ACCOUNTING_DATE 								AS      fin_accounting_date
+															   ,CAST(BENEFICIARY_FACTOR AS NUMERIC) 			AS      fin_beneficiary_factor
+															   ,CAST(CALC_OBJECT_METER_ID AS NUMERIC)  			AS 		fin_calc_object_meter_id
+															   ,CAST(IS_HISTORICAL AS  INT64) 					AS 		fin_is_historical
+															   ,CURRENCY 										AS      fin_currency
+															   ,COST_CLASS_NAME 								AS      fin_cost_class_name
+															   ,CONTRACT_TYPE 									AS      fin_contract_type
+															   ,CONTRACT_STATUS 								AS      fin_contract_status
+															   ,CONTRACT_STATUS_CLASS 							AS      fin_contract_status_class
+															   ,CONTRACT_STARTDATE 								AS      fin_contract_startdate
+															   ,CONTRACT_ENDDATE 								AS      fin_contract_enddate
+															   ,'NULL' 											AS      start_by
+															   ,client_organization_id 							AS      fin_client_organization_id
+															   ,client_organization_code 						AS      fin_client_organization_code
+															   ,client_organization_name 						AS      fin_client_organization_name
+															   FROM `%s`
+
+															   ) s
+															   ON s.fin_cost_item_id = f.fin_cost_item_id 
+															   AND s.fin_master_cost_item_id = f.fin_master_cost_item_id
+															   AND f.is_deleted = 'N'
+														WHEN NOT matched THEN
+														INSERT
+															(             
+															   fin_cost_item_id,
+															   fin_master_cost_item_id,
+															   fin_cost_date,
+															   fin_description,
+															   fin_expense_amount,
+															   fin_revenue_amount,
+															   fin_tax_code_id,
+															   fin_tax_code_code,
+															   fin_tax_code_reference,
+															   fin_tax_code_percentage,
+															   fin_revenue_tax_amount,
+															   fin_currency_id,
+															   fin_cost_class_id,
+															   fin_cost_category_id,
+															   fin_cost_category_code,
+															   fin_cost_category_reference,
+															   fin_cost_carrier_id,
+															   fin_cost_carrier_code,
+															   fin_cost_carrier_reference,
+															   fin_cost_generator_id,
+															   fin_cost_generator_type,
+															   fin_cost_generator_code,
+															   fin_cost_generator_reference,
+															   fin_cost_center_id,
+															   fin_cost_center_code,
+															   fin_cost_center_description,
+															   fin_gl_account_id,
+															   fin_gl_account_code,
+															   fin_gl_account_reference,
+															   fin_contract_id,
+															   fin_contract_code,
+															   fin_contract_reference,
+															   fin_location_id,
+															   fin_location_code,
+															   fin_location_ref,
+															   fin_supplier_id,
+															   fin_supplier_code,
+															   fin_supplier_name,
+															   fin_billing,
+															   fin_comm_or_actual,
+															   fin_billing_requisition_id,
+															   fin_fiscal_entity_id,
+															   fin_fiscal_entity_code,
+															   fin_fiscal_entity_name,
+															   fin_fin_key_1,
+															   fin_fin_key_2,
+															   fin_fin_key_3,
+															   fin_fin_key_4,
+															   fin_fin_key_5,
+															   fin_fin_key_6,
+															   fin_fin_key_7,
+															   fin_fin_key_8,
+															   fin_price_list_detail_id,
+															   fin_exp_list_detail_id,
+															   fin_quantity,
+															   fin_uom_id,
+															   fin_uom_code,
+															   fin_uom_ref,
+															   fin_customer_id,
+															   fin_customer_code,
+															   fin_customer_name,
+															   fin_cost_carrier_type,
+															   fin_start_date,
+															   fin_end_date,
+															   fin_interval_value,
+															   fin_interval_unit,
+															   fin_material_integer_id,
+															   fin_material_integer_code,
+															   fin_material_integer_ref,
+															   fin_external_prop_ref,
+															   fin_unit_price,
+															   fin_reu_id,
+															   fin_reu_code,
+															   fin_reu_ref,
+															   fin_external_prop_ref_id,
+															   fin_fin_key_1_value,
+															   fin_fin_key_2_value,
+															   fin_fin_key_3_value,
+															   fin_fin_key_4_value,
+															   fin_fin_key_5_value,
+															   fin_fin_key_6_value,
+															   fin_fin_key_7_value,
+															   fin_fin_key_8_value,
+															   fin_revenue_factor,
+															   fin_creation_account_id,
+															   fin_latest_mod_account_id,
+															   fin_product_category_ref,
+															   fin_product_class_name,
+															   fin_cost_carrier_fin_stat,
+															   fin_period_type,
+															   fin_product_service_id,
+															   fin_product_code,
+															   fin_product_reference,
+															   fin_ctr_version_id,
+															   fin_ctr_version_nr,
+															   fin_is_advance_payment,
+															   fin_property_id,
+															   fin_property_code,
+															   fin_property_ref,
+															   fin_cost_carrier_status,
+															   fin_parent_cost_carrier_type,
+															   fin_parent_cost_carrier_code,
+															   fin_parent_cost_carrier_reference,
+															   fin_parent_cost_carrier_status,
+															   fin_parent_cost_carrier_id,
+															   fin_top_cost_carrier_type,
+															   fin_top_cost_carrier_code,
+															   fin_top_cost_carrier_reference,
+															   fin_top_cost_carrier_status,
+															   fin_top_cost_carrier_id,
+															   fin_apport_schedule_id,
+															   fin_expense_factor,
+															   fin_hist_idx_detail_id,
+															   fin_cost_distr_key_id,
+															   fin_cost_distr_key_code,
+															   fin_cost_distr_key_ref,
+															   fin_cost_distr_key_pct,
+															   fin_base_cost_item_id,
+															   fin_creation_date,
+															   fin_latest_mod_date,
+															   fin_billing_date,
+															   fin_cost_generator_detail_id,
+															   fin_price_origin,
+															   fin_session_id,
+															   fin_settlement_factor,
+															   fin_calc_object_id,
+															   fin_calc_object_detail_id,
+															   fin_based_on_indexed_price,
+															   fin_accounting_date,
+															   fin_beneficiary_factor,
+															   fin_calc_object_meter_id,
+															   fin_is_historical,
+															   fin_currency,
+															   fin_cost_class_name,
+															   fin_contract_type,
+															   fin_contract_status,
+															   fin_contract_status_class,
+															   fin_contract_startdate,
+															   fin_contract_enddate,
+															   start_date,
+															   start_by,
+															   fin_client_organization_id,
+															   fin_client_organization_code,
+															   fin_client_organization_name,
+															   is_deleted
+															   )  
+														VALUES
+															(             
+															   fin_cost_item_id,
+															   fin_master_cost_item_id,
+															   fin_cost_date,
+															   fin_description,
+															   fin_expense_amount,
+															   fin_revenue_amount,
+															   fin_tax_code_id,
+															   fin_tax_code_code,
+															   fin_tax_code_reference,
+															   fin_tax_code_percentage,
+															   fin_revenue_tax_amount,
+															   fin_currency_id,
+															   fin_cost_class_id,
+															   fin_cost_category_id,
+															   fin_cost_category_code,
+															   fin_cost_category_reference,
+															   fin_cost_carrier_id,
+															   fin_cost_carrier_code,
+															   fin_cost_carrier_reference,
+															   fin_cost_generator_id,
+															   fin_cost_generator_type,
+															   fin_cost_generator_code,
+															   fin_cost_generator_reference,
+															   fin_cost_center_id,
+															   fin_cost_center_code,
+															   fin_cost_center_description,
+															   fin_gl_account_id,
+															   fin_gl_account_code,
+															   fin_gl_account_reference,
+															   fin_contract_id,
+															   fin_contract_code,
+															   fin_contract_reference,
+															   fin_location_id,
+															   fin_location_code,
+															   fin_location_ref,
+															   fin_supplier_id,
+															   fin_supplier_code,
+															   fin_supplier_name,
+															   fin_billing,
+															   fin_comm_or_actual,
+															   fin_billing_requisition_id,
+															   fin_fiscal_entity_id,
+															   fin_fiscal_entity_code,
+															   fin_fiscal_entity_name,
+															   fin_fin_key_1,
+															   fin_fin_key_2,
+															   fin_fin_key_3,
+															   fin_fin_key_4,
+															   fin_fin_key_5,
+															   fin_fin_key_6,
+															   fin_fin_key_7,
+															   fin_fin_key_8,
+															   fin_price_list_detail_id,
+															   fin_exp_list_detail_id,
+															   fin_quantity,
+															   fin_uom_id,
+															   fin_uom_code,
+															   fin_uom_ref,
+															   fin_customer_id,
+															   fin_customer_code,
+															   fin_customer_name,
+															   fin_cost_carrier_type,
+															   fin_start_date,
+															   fin_end_date,
+															   fin_interval_value,
+															   fin_interval_unit,
+															   fin_material_integer_id,
+															   fin_material_integer_code,
+															   fin_material_integer_ref,
+															   fin_external_prop_ref,
+															   fin_unit_price,
+															   fin_reu_id,
+															   fin_reu_code,
+															   fin_reu_ref,
+															   fin_external_prop_ref_id,
+															   fin_fin_key_1_value,
+															   fin_fin_key_2_value,
+															   fin_fin_key_3_value,
+															   fin_fin_key_4_value,
+															   fin_fin_key_5_value,
+															   fin_fin_key_6_value,
+															   fin_fin_key_7_value,
+															   fin_fin_key_8_value,
+															   fin_revenue_factor,
+															   fin_creation_account_id,
+															   fin_latest_mod_account_id,
+															   fin_product_category_ref,
+															   fin_product_class_name,
+															   fin_cost_carrier_fin_stat,
+															   fin_period_type,
+															   fin_product_service_id,
+															   fin_product_code,
+															   fin_product_reference,
+															   fin_ctr_version_id,
+															   fin_ctr_version_nr,
+															   fin_is_advance_payment,
+															   fin_property_id,
+															   fin_property_code,
+															   fin_property_ref,
+															   fin_cost_carrier_status,
+															   fin_parent_cost_carrier_type,
+															   fin_parent_cost_carrier_code,
+															   fin_parent_cost_carrier_reference,
+															   fin_parent_cost_carrier_status,
+															   fin_parent_cost_carrier_id,
+															   fin_top_cost_carrier_type,
+															   fin_top_cost_carrier_code,
+															   fin_top_cost_carrier_reference,
+															   fin_top_cost_carrier_status,
+															   fin_top_cost_carrier_id,
+															   fin_apport_schedule_id,
+															   fin_expense_factor,
+															   fin_hist_idx_detail_id,
+															   fin_cost_distr_key_id,
+															   fin_cost_distr_key_code,
+															   fin_cost_distr_key_ref,
+															   fin_cost_distr_key_pct,
+															   fin_base_cost_item_id,
+															   fin_creation_date,
+															   fin_latest_mod_date,
+															   fin_billing_date,
+															   fin_cost_generator_detail_id,
+															   fin_price_origin,
+															   fin_session_id,
+															   fin_settlement_factor,
+															   fin_calc_object_id,
+															   fin_calc_object_detail_id,
+															   fin_based_on_indexed_price,
+															   fin_accounting_date,
+															   fin_beneficiary_factor,
+															   fin_calc_object_meter_id,
+															   fin_is_historical,
+															   fin_currency,
+															   fin_cost_class_name,
+															   fin_contract_type,
+															   fin_contract_status,
+															   fin_contract_status_class,
+															   fin_contract_startdate,
+															   fin_contract_enddate,
+															   CURRENT_DATETIME(),
+															   start_by,
+															   fin_client_organization_id,
+															   fin_client_organization_code,
+															   fin_client_organization_name,
+															   'N'
+															   )
+												""",fact_financials,MV_REP_COSTITEMS);
+
+				EXECUTE IMMEDIATE mcs_fact_financials_insert;
+			
+		EXCEPTION WHEN ERROR THEN
+
+			SET strRemarks 			= 'Failed in '||strProcName||', check error_log table for more info';
+			SET strErrorMessage 	= @@error.message;
+			SET error_txt		  	= 'Failed in mcs_fact_financials_insert '||' ~'||@@error.statement_text;
+			  
+			CALL `cobundu-bi-playground.dataform_sd_procedure.Execution_log`(p_dataset_name, strProcName, 'E', strRemarks);
+			CALL `cobundu-bi-playground.dataform_sd_procedure.Error_log`(p_dataset_name, strErrorMessage, error_txt);
+
+		END;
+	ELSE
+		SET MV_REP_COSTITEMS	=	`cobundu-bi-playground.dataform_sd_procedure.get_variable_name`(p_project_id, p_dataset_name, 'MV_REP_COSTITEMS_'||p_num);
+		
+		IF MV_REP_COSTITEMS IS NOT NULL 
+		THEN
+			--##############################
+			--FACT_FINANCIALS -- UPDATE
+			--##############################
+			BEGIN
+				SET mcs_fact_financials_update = FORMAT("""MERGE INTO `%s` f
+															using
+																(
+																	SELECT
+																	   COST_ITEM_ID                                   	AS      fin_cost_item_id
+																	   ,MASTER_COST_ITEM_ID                             AS      fin_master_cost_item_id
+																	   ,COST_DATE                                       AS      fin_cost_date
+																	   ,DESCRIPTION 									AS      fin_description
+																	   ,CAST(EXPENSE_AMOUNT AS NUMERIC) 				AS      fin_expense_amount
+																	   ,CAST(REVENUE_AMOUNT AS NUMERIC) 				AS      fin_revenue_amount
+																	   ,TAX_CODE_ID 									AS 		fin_tax_code_id
+																	   ,TAX_CODE_CODE 									AS 		fin_tax_code_code
+																	   ,TAX_CODE_REFERENCE 								AS 		fin_tax_code_reference
+																	   ,CAST(TAX_CODE_PERCENTAGE AS NUMERIC) 			AS 		fin_tax_code_percentage
+																	   ,CAST(REVENUE_TAX_AMOUNT AS NUMERIC) 			AS 		fin_revenue_tax_amount
+																	   ,CURRENCY_ID 									AS      fin_currency_id
+																	   ,COST_CLASS_ID 									AS      fin_cost_class_id
+																	   ,COST_CATEGORY_ID 								AS      fin_cost_category_id
+																	   ,COST_CATEGORY_CODE 								AS      fin_cost_category_code
+																	   ,COST_CATEGORY_REFERENCE 						AS      fin_cost_category_reference
+																	   ,COST_CARRIER_ID 								AS      fin_cost_carrier_id
+																	   ,COST_CARRIER_CODE 								AS      fin_cost_carrier_code
+																	   ,COST_CARRIER_REFERENCE					 		AS      fin_cost_carrier_reference
+																	   ,COST_GENERATOR_ID 								AS      fin_cost_generator_id
+																	   ,COST_GENERATOR_TYPE 							AS      fin_cost_generator_type
+																	   ,COST_GENERATOR_CODE 							AS      fin_cost_generator_code
+																	   ,COST_GENERATOR_REFERENCE 						AS      fin_cost_generator_reference
+																	   ,COST_CENTER_ID 									AS      fin_cost_center_id
+																	   ,COST_CENTER_CODE 								AS      fin_cost_center_code
+																	   ,COST_CENTER_DESCRIPTION 						AS      fin_cost_center_description
+																	   ,GL_ACCOUNT_ID 									AS      fin_gl_account_id
+																	   ,GL_ACCOUNT_CODE 								AS      fin_gl_account_code
+																	   ,GL_ACCOUNT_REFERENCE 							AS      fin_gl_account_reference
+																	   ,CONTRACT_ID 									AS      fin_contract_id
+																	   ,CONTRACT_CODE 									AS      fin_contract_code
+																	   ,CONTRACT_REFERENCE 								AS      fin_contract_reference
+																	   ,LOCATION_ID 									AS      fin_location_id
+																	   ,LOCATION_CODE 									AS      fin_location_code
+																	   ,LOCATION_REF 									AS      fin_location_ref
+																	   ,SUPPLIER_ID 									AS      fin_supplier_id
+																	   ,SUPPLIER_CODE 									AS      fin_supplier_code
+																	   ,SUPPLIER_NAME 									AS      fin_supplier_name
+																	   ,BILLING 										AS      fin_billing
+																	   ,COMM_OR_ACTUAL 									AS      fin_comm_or_actual
+																	   ,BILLING_REQUISITION_ID 							AS      fin_billing_requisition_id
+																	   ,FISCAL_ENTITY_ID 								AS      fin_fiscal_entity_id
+																	   ,FISCAL_ENTITY_CODE 								AS      fin_fiscal_entity_code
+																	   ,FISCAL_ENTITY_NAME 								AS      fin_fiscal_entity_name
+																	   ,FIN_KEY_1 										AS      fin_fin_key_1
+																	   ,FIN_KEY_2 										AS      fin_fin_key_2
+																	   ,FIN_KEY_3 										AS      fin_fin_key_3
+																	   ,FIN_KEY_4 										AS      fin_fin_key_4
+																	   ,FIN_KEY_5 										AS      fin_fin_key_5
+																	   ,FIN_KEY_6 										AS      fin_fin_key_6
+																	   ,FIN_KEY_7 										AS      fin_fin_key_7
+																	   ,FIN_KEY_8 										AS      fin_fin_key_8
+																	   ,PRICE_LIST_DETAIL_ID 							AS      fin_price_list_detail_id
+																	   ,EXP_LIST_DETAIL_ID 								AS      fin_exp_list_detail_id
+																	   ,CAST(QUANTITY AS INT64) 						AS      fin_quantity
+																	   ,UOM_ID 											AS      fin_uom_id
+																	   ,UOM_CODE 										AS      fin_uom_code
+																	   ,UOM_REF 										AS      fin_uom_ref
+																	   ,CUSTOMER_ID 									AS      fin_customer_id
+																	   ,CUSTOMER_CODE 									AS      fin_customer_code
+																	   ,CUSTOMER_NAME 									AS      fin_customer_name
+																	   ,COST_CARRIER_TYPE 								AS      fin_cost_carrier_type
+																	   ,START_DATE 										AS      fin_start_date
+																	   ,END_DATE 										AS      fin_end_date
+																	   ,CAST(INTERVAL_VALUE AS INT64) 					AS      fin_interval_value
+																	   ,INTERVAL_UNIT 									AS      fin_interval_unit
+																	   ,MATERIAL_NUMBER_ID 								AS      fin_material_integer_id
+																	   ,MATERIAL_NUMBER_CODE 							AS      fin_material_integer_code
+																	   ,MATERIAL_NUMBER_REF 							AS      fin_material_integer_ref
+																	   ,EXTERNAL_PROP_REF 								AS      fin_external_prop_ref
+																	   ,CAST(UNIT_PRICE AS  NUMERIC) 					AS 		fin_unit_price
+																	   ,REU_ID 											AS      fin_reu_id
+																	   ,REU_CODE 										AS      fin_reu_code
+																	   ,REU_REF 										AS      fin_reu_ref
+																	   ,EXTERNAL_PROP_REF_ID 							AS      fin_external_prop_ref_id
+																	   ,FIN_KEY_1_VALUE 								AS      fin_fin_key_1_value
+																	   ,FIN_KEY_2_VALUE 								AS      fin_fin_key_2_value
+																	   ,FIN_KEY_3_VALUE 								AS      fin_fin_key_3_value
+																	   ,FIN_KEY_4_VALUE 								AS      fin_fin_key_4_value
+																	   ,FIN_KEY_5_VALUE 								AS      fin_fin_key_5_value
+																	   ,FIN_KEY_6_VALUE 								AS      fin_fin_key_6_value
+																	   ,FIN_KEY_7_VALUE 								AS      fin_fin_key_7_value
+																	   ,FIN_KEY_8_VALUE 								AS      fin_fin_key_8_value
+																	   ,CAST(REVENUE_FACTOR AS NUMERIC) 				AS 		fin_revenue_factor
+																	   ,CREATION_ACCOUNT_ID 							AS       fin_creation_account_id
+																	   ,LATEST_MOD_ACCOUNT_ID 							AS       fin_latest_mod_account_id
+																	   ,PRODUCT_CATEGORY_REF 							AS       fin_product_category_ref
+																	   ,PRODUCT_CLASS_NAME 								AS       fin_product_class_name
+																	   ,COST_CARRIER_FIN_STAT 							AS       fin_cost_carrier_fin_stat
+																	   ,PERIOD_TYPE 									AS       fin_period_type
+																	   ,PRODUCT_SERVICE_ID 								AS       fin_product_service_id
+																	   ,PRODUCT_CODE 									AS       fin_product_code
+																	   ,PRODUCT_REFERENCE 								AS       fin_product_reference
+																	   ,CTR_VERSION_ID 									AS       fin_ctr_version_id
+																	   ,CAST(CTR_VERSION_NR AS INT64) 					AS       fin_ctr_version_nr
+																	   ,IS_ADVANCE_PAYMENT 								AS       fin_is_advance_payment
+																	   ,PROPERTY_ID 									AS       fin_property_id
+																	   ,PROPERTY_CODE 									AS       fin_property_code
+																	   ,PROPERTY_REF 									AS       fin_property_ref
+																	   ,COST_CARRIER_STATUS 							AS       fin_cost_carrier_status
+																	   ,PARENT_COST_CARRIER_TYPE 						AS       fin_parent_cost_carrier_type
+																	   ,PARENT_COST_CARRIER_CODE 						AS       fin_parent_cost_carrier_code
+																	   ,PARENT_COST_CARRIER_REFERENCE 					AS       fin_parent_cost_carrier_reference
+																	   ,PARENT_COST_CARRIER_STATUS 						AS       fin_parent_cost_carrier_status
+																	   ,PARENT_COST_CARRIER_ID 							AS       fin_parent_cost_carrier_id
+																	   ,TOP_COST_CARRIER_TYPE 							AS       fin_top_cost_carrier_type
+																	   ,TOP_COST_CARRIER_CODE 							AS       fin_top_cost_carrier_code
+																	   ,TOP_COST_CARRIER_REFERENCE 						AS       fin_top_cost_carrier_reference
+																	   ,TOP_COST_CARRIER_STATUS 						AS       fin_top_cost_carrier_status
+																	   ,TOP_COST_CARRIER_ID 							AS       fin_top_cost_carrier_id
+																	   ,APPORT_SCHEDULE_ID 								AS       fin_apport_schedule_id
+																	   ,CAST(EXPENSE_FACTOR AS INT64) 					AS       fin_expense_factor
+																	   ,HIST_IDX_DETAIL_ID 								AS       fin_hist_idx_detail_id
+																	   ,COST_DISTR_KEY_ID 								AS       fin_cost_distr_key_id
+																	   ,COST_DISTR_KEY_CODE 							AS       fin_cost_distr_key_code
+																	   ,COST_DISTR_KEY_REF 								AS       fin_cost_distr_key_ref
+																	   ,CAST(COST_DISTR_KEY_PCT AS NUMERIC) 			AS 		 fin_cost_distr_key_pct
+																	   ,BASE_COST_ITEM_ID 								AS       fin_base_cost_item_id
+																	   --,CAST(CREATION_DATE AS DATETIME) 				AS       fin_creation_date
+																	   --,CAST(LATEST_MOD_DATE AS DATETIME) 			AS       fin_latest_mod_date
+																	   ,CAST(CREATION_TIMESTAMP AS DATETIME) 			AS       fin_creation_date
+																	   ,CAST(MODIFICATION_TIMESTAMP AS DATETIME) 		AS       fin_latest_mod_date
+																	   ,CAST(BILLING_DATE AS DATETIME) 					AS       fin_billing_date
+																	   ,COST_GENERATOR_DETAIL_ID 						AS       fin_cost_generator_detail_id
+																	   ,PRICE_ORIGIN 									AS       fin_price_origin
+																	   ,CAST(SESSION_ID AS STRING) 						AS       fin_session_id
+																	   ,CAST(SETTLEMENT_FACTOR AS INT64) 				AS 		 fin_settlement_factor
+																	   ,CAST(CALC_OBJECT_ID AS INT64) 					AS       fin_calc_object_id
+																	   ,CAST(CALC_OBJECT_DETAIL_ID AS INT64) 			AS       fin_calc_object_detail_id
+																	   ,BASED_ON_INDEXED_PRICE 							AS       fin_based_on_indexed_price
+																	   ,ACCOUNTING_DATE 								AS       fin_accounting_date
+																	   ,CAST(BENEFICIARY_FACTOR AS INT64) 				AS       fin_beneficiary_factor
+																	   ,CAST(CALC_OBJECT_METER_ID AS INT64)  			AS 		 fin_calc_object_meter_id
+																	   ,CAST(IS_HISTORICAL AS  INT64) 					AS 		 fin_is_historical
+																	   ,CURRENCY 										AS        fin_currency
+																	   ,COST_CLASS_NAME 								AS        fin_cost_class_name
+																	   ,CONTRACT_TYPE 									AS        fin_contract_type
+																	   ,CONTRACT_STATUS 								AS        fin_contract_status
+																	   ,CONTRACT_STATUS_CLASS 							AS        fin_contract_status_class
+																	   ,CONTRACT_STARTDATE 								AS        fin_contract_startdate
+																	   ,CONTRACT_ENDDATE 								AS        fin_contract_enddate
+																	   ,'NULL' 											AS        start_by
+																	   ,client_organization_id 							AS        fin_client_organization_id
+																	   ,client_organization_code 						AS        fin_client_organization_code
+																	   ,client_organization_name 						AS        fin_client_organization_name
+																	   FROM `%s`
+																	   WHERE TIMESTAMP_TRUNC(TIMESTAMP_MILLIS(CAST(datastream_metadata.source_timestamp AS INT64)),DAY) = TIMESTAMP_TRUNC(CURRENT_TIMESTAMP(),DAY)
+																	   ) s
+															ON s.fin_cost_item_id = f.fin_cost_item_id 
+															AND s.fin_master_cost_item_id = f.fin_master_cost_item_id
+															AND f.is_deleted = 'N'
+															WHEN matched AND
+																s.fin_cost_date                			<> 		f.fin_cost_date OR 
+																s.fin_description               		<> 		f.fin_description OR 
+																s.fin_expense_amount    				<> 		f.fin_expense_amount OR 
+																s.fin_revenue_amount    				<> 		f.fin_revenue_amount OR 
+																s.fin_tax_code_id             			<> 		f.fin_tax_code_id OR 
+																s.fin_tax_code_code       				<> 		f.fin_tax_code_code OR 
+																s.fin_tax_code_reference        		<> 		f.fin_tax_code_reference OR 
+																s.fin_tax_code_percentage       		<> 		f.fin_tax_code_percentage OR 
+																s.fin_revenue_tax_amount        		<> 		f.fin_revenue_tax_amount OR 
+																s.fin_currency_id               		<> 		f.fin_currency_id OR 
+																s.fin_cost_class_id             		<> 		f.fin_cost_class_id OR 
+																s.fin_cost_category_id          		<> 		f.fin_cost_category_id OR 
+																s.fin_cost_category_code        		<> 		f.fin_cost_category_code OR 
+																s.fin_cost_category_reference   		<> 		f.fin_cost_category_reference OR 
+																s.fin_cost_carrier_id        			<> 		f.fin_cost_carrier_id OR 
+																s.fin_cost_carrier_code  				<> 		f.fin_cost_carrier_code OR 
+																s.fin_cost_carrier_reference    		<> 		f.fin_cost_carrier_reference OR 
+																s.fin_cost_generator_id  				<> 		f.fin_cost_generator_id OR 
+																s.fin_cost_generator_type       		<> 		f.fin_cost_generator_type OR 
+																s.fin_cost_generator_code       		<> 		f.fin_cost_generator_code OR 
+																s.fin_cost_generator_reference  		<> 		f.fin_cost_generator_reference OR 
+																s.fin_cost_center_id        			<> 		f.fin_cost_center_id OR 
+																s.fin_cost_center_code   				<> 		f.fin_cost_center_code OR 
+																s.fin_cost_center_description   		<> 		f.fin_cost_center_description OR 
+																s.fin_gl_account_id          			<> 		f.fin_gl_account_id OR 
+																s.fin_gl_account_code    				<> 		f.fin_gl_account_code OR 
+																s.fin_gl_account_reference      		<> 		f.fin_gl_account_reference OR 
+																s.fin_contract_id              			<> 		f.fin_contract_id OR 
+																s.fin_contract_code         			<> 		f.fin_contract_code OR 
+																s.fin_contract_reference        		<> 		f.fin_contract_reference OR 
+																s.fin_location_id               		<> 		f.fin_location_id OR 
+																s.fin_location_code          			<> 		f.fin_location_code OR 
+																s.fin_location_ref             			<> 		f.fin_location_ref OR 
+																s.fin_supplier_id               		<> 		f.fin_supplier_id OR 
+																s.fin_supplier_code          			<> 		f.fin_supplier_code OR 
+																s.fin_supplier_name        				<> 		f.fin_supplier_name OR 
+																s.fin_billing          					<> 		f.fin_billing OR 
+																s.fin_comm_or_actual    				<> 		f.fin_comm_or_actual OR 
+																s.fin_billing_requisition_id    		<> 		f.fin_billing_requisition_id OR 
+																s.fin_fiscal_entity_id       			<> 		f.fin_fiscal_entity_id OR 
+																s.fin_fiscal_entity_code  				<> 		f.fin_fiscal_entity_code OR 
+																s.fin_fiscal_entity_name        		<> 		f.fin_fiscal_entity_name OR 
+																s.fin_fin_key_1  						<> 		f.fin_fin_key_1 OR 
+																s.fin_fin_key_2  						<> 		f.fin_fin_key_2 OR 
+																s.fin_fin_key_3  						<> 		f.fin_fin_key_3 OR 
+																s.fin_fin_key_4  						<> 		f.fin_fin_key_4 OR 
+																s.fin_fin_key_5  						<> 		f.fin_fin_key_5 OR 
+																s.fin_fin_key_6  						<> 		f.fin_fin_key_6 OR 
+																s.fin_fin_key_7  						<> 		f.fin_fin_key_7 OR 
+																s.fin_fin_key_8  						<> 		f.fin_fin_key_8 OR 
+																s.fin_price_list_detail_id      		<> 		f.fin_price_list_detail_id OR 
+																s.fin_exp_list_detail_id        		<> 		f.fin_exp_list_detail_id OR 
+																s.fin_quantity     						<> 		f.fin_quantity OR 
+																s.fin_uom_id       						<> 		f.fin_uom_id OR 
+																s.fin_uom_code 							<> 		f.fin_uom_code OR 
+																s.fin_uom_ref     						<> 		f.fin_uom_ref OR 
+																s.fin_customer_id             			<> 		f.fin_customer_id OR 
+																s.fin_customer_code       				<> 		f.fin_customer_code OR 
+																s.fin_customer_name      				<> 		f.fin_customer_name OR 
+																s.fin_cost_carrier_type   				<> 		f.fin_cost_carrier_type OR 
+																s.fin_start_date 						<> 		f.fin_start_date OR 
+																s.fin_end_date   						<> 		f.fin_end_date OR 
+																s.fin_interval_value         			<> 		f.fin_interval_value OR 
+																s.fin_interval_unit            			<> 		f.fin_interval_unit OR 
+																s.fin_material_integer_id       		<> 		f.fin_material_integer_id OR 
+																s.fin_material_integer_code     		<> 		f.fin_material_integer_code OR 
+																s.fin_material_integer_ref      		<> 		f.fin_material_integer_ref OR 
+																s.fin_external_prop_ref  				<> 		f.fin_external_prop_ref OR 
+																s.fin_unit_price  						<> 		f.fin_unit_price OR 
+																s.fin_reu_id         					<> 		f.fin_reu_id OR 
+																s.fin_reu_code   						<> 		f.fin_reu_code OR 
+																s.fin_reu_ref       					<> 		f.fin_reu_ref OR 
+																s.fin_external_prop_ref_id      		<> 		f.fin_external_prop_ref_id OR 
+																s.fin_fin_key_1_value     				<> 		f.fin_fin_key_1_value OR 
+																s.fin_fin_key_2_value     				<> 		f.fin_fin_key_2_value OR 
+																s.fin_fin_key_3_value     				<> 		f.fin_fin_key_3_value OR 
+																s.fin_fin_key_4_value     				<> 		f.fin_fin_key_4_value OR 
+																s.fin_fin_key_5_value     				<> 		f.fin_fin_key_5_value OR 
+																s.fin_fin_key_6_value     				<> 		f.fin_fin_key_6_value OR 
+																s.fin_fin_key_7_value     				<> 		f.fin_fin_key_7_value OR 
+																s.fin_fin_key_8_value     				<> 		f.fin_fin_key_8_value OR 
+																s.fin_revenue_factor       				<> 		f.fin_revenue_factor OR 
+																s.fin_creation_account_id       		<> 		f.fin_creation_account_id OR 
+																s.fin_latest_mod_account_id     		<> 		f.fin_latest_mod_account_id OR 
+																s.fin_product_category_ref      		<> 		f.fin_product_category_ref OR 
+																s.fin_product_class_name        		<> 		f.fin_product_class_name OR 
+																s.fin_cost_carrier_fin_stat     		<> 		f.fin_cost_carrier_fin_stat OR 
+																s.fin_period_type               		<> 		f.fin_period_type OR 
+																s.fin_product_service_id        		<> 		f.fin_product_service_id OR 
+																s.fin_product_code              		<> 		f.fin_product_code OR 
+																s.fin_product_reference         		<> 		f.fin_product_reference OR 
+																s.fin_ctr_version_id         			<> 		f.fin_ctr_version_id OR 
+																s.fin_ctr_version_nr         			<> 		f.fin_ctr_version_nr OR 
+																s.fin_is_advance_payment        		<> 		f.fin_is_advance_payment OR 
+																s.fin_property_id              			<> 		f.fin_property_id OR 
+																s.fin_property_code         			<> 		f.fin_property_code OR 
+																s.fin_property_ref            			<> 		f.fin_property_ref OR 
+																s.fin_cost_carrier_status       		<> 		f.fin_cost_carrier_status OR 
+																s.fin_parent_cost_carrier_type  		<> 		f.fin_parent_cost_carrier_type OR 
+																s.fin_parent_cost_carrier_code  		<> 		f.fin_parent_cost_carrier_code OR 
+																s.fin_parent_cost_carrier_reference     <> 		f.fin_parent_cost_carrier_reference OR 
+																s.fin_parent_cost_carrier_status        <> 		f.fin_parent_cost_carrier_status OR 
+																s.fin_parent_cost_carrier_id         	<> 		f.fin_parent_cost_carrier_id OR 
+																s.fin_top_cost_carrier_type          	<> 		f.fin_top_cost_carrier_type OR 
+																s.fin_top_cost_carrier_code         	<> 		f.fin_top_cost_carrier_code OR 
+																s.fin_top_cost_carrier_reference        <> 		f.fin_top_cost_carrier_reference OR 
+																s.fin_top_cost_carrier_status       	<> 		f.fin_top_cost_carrier_status OR 
+																s.fin_top_cost_carrier_id               <> 		f.fin_top_cost_carrier_id OR 
+																s.fin_apport_schedule_id              	<> 		f.fin_apport_schedule_id OR 
+																s.fin_expense_factor       				<> 		f.fin_expense_factor OR 
+																s.fin_hist_idx_detail_id   				<> 		f.fin_hist_idx_detail_id OR 
+																s.fin_cost_distr_key_id   				<> 		f.fin_cost_distr_key_id OR 
+																s.fin_cost_distr_key_code             	<> 		f.fin_cost_distr_key_code OR 
+																s.fin_cost_distr_key_ref  				<> 		f.fin_cost_distr_key_ref OR 
+																s.fin_cost_distr_key_pct                <> 		f.fin_cost_distr_key_pct OR 
+																s.fin_base_cost_item_id                	<> 		f.fin_base_cost_item_id OR 
+																s.fin_creation_date          			<> 		f.fin_creation_date OR 
+																s.fin_latest_mod_date    				<> 		f.fin_latest_mod_date OR 
+																s.fin_billing_date              		<> 		f.fin_billing_date OR 
+																s.fin_cost_generator_detail_id    		<> 		f.fin_cost_generator_detail_id OR 
+																s.fin_price_origin              		<> 		f.fin_price_origin OR 
+																s.fin_session_id  						<> 		f.fin_session_id OR 
+																s.fin_settlement_factor   				<> 		f.fin_settlement_factor OR 
+																s.fin_calc_object_id         			<> 		f.fin_calc_object_id OR 
+																s.fin_calc_object_detail_id           	<> 		f.fin_calc_object_detail_id OR 
+																s.fin_based_on_indexed_price    		<> 		f.fin_based_on_indexed_price OR 
+																s.fin_accounting_date     				<> 		f.fin_accounting_date OR 
+																s.fin_beneficiary_factor  				<> 		f.fin_beneficiary_factor OR 
+																s.fin_calc_object_meter_id           	<> 		f.fin_calc_object_meter_id OR 
+																s.fin_is_historical              		<> 		f.fin_is_historical OR 
+																s.fin_currency    						<> 		f.fin_currency OR 
+																s.fin_cost_class_name    				<> 		f.fin_cost_class_name OR 
+																s.fin_contract_type          			<> 		f.fin_contract_type OR 
+																s.fin_contract_status       			<> 		f.fin_contract_status OR 
+																s.fin_contract_status_class           	<> 		f.fin_contract_status_class OR 
+																s.fin_contract_startdate                <> 		f.fin_contract_startdate OR 
+																s.fin_contract_enddate   				<> 		f.fin_contract_enddate OR 
+																s.start_by            					<> 		f.start_by OR 
+																s.fin_client_organization_id          	<> 		f.fin_client_organization_id OR 
+																s.fin_client_organization_code    		<> 		f.fin_client_organization_code OR 
+																s.fin_client_organization_name   		<> 		f.fin_client_organization_name 
+														 THEN UPDATE SET is_deleted = 'Y',  last_modified_timestamp = CURRENT_DATETIME;
+														 """
+														 ,fact_financials,MV_REP_COSTITEMS);
+
+				EXECUTE IMMEDIATE mcs_fact_financials_update;
+			
+			EXCEPTION WHEN ERROR THEN
+
+				SET strRemarks 			= 'Failed in '||strProcName||', check error_log table for more info';
+				SET strErrorMessage 	= @@error.message;
+				SET error_txt		  	= 'Failed in mcs_fact_financials_update for current day load '||CURRENT_DATE||' ~'||@@error.statement_text;
+			  
+				CALL `cobundu-bi-playground.dataform_sd_procedure.Execution_log`(p_dataset_name, strProcName, 'E', strRemarks);
+				CALL `cobundu-bi-playground.dataform_sd_procedure.Error_log`(p_dataset_name, strErrorMessage, error_txt);
+
+			END;
+			
+			--##############################
+			--FACT_FINANCIALS -- INSERT
+			--##############################
+
+			BEGIN	
+				SET mcs_fact_financials_insert = FORMAT("""
+														MERGE INTO `%s`  f
+														USING
+																  (
+																	SELECT
+																	COST_ITEM_ID                                    AS      fin_cost_item_id
+																   ,MASTER_COST_ITEM_ID                             AS      fin_master_cost_item_id
+																   ,COST_DATE                                       AS      fin_cost_date
+																   ,DESCRIPTION 									AS      fin_description
+																   ,CAST(EXPENSE_AMOUNT AS NUMERIC) 				AS      fin_expense_amount
+																   ,CAST(REVENUE_AMOUNT AS NUMERIC) 				AS      fin_revenue_amount
+																   ,TAX_CODE_ID 									AS 		fin_tax_code_id
+																   ,TAX_CODE_CODE 									AS 		fin_tax_code_code
+																   ,TAX_CODE_REFERENCE 								AS 		fin_tax_code_reference
+																   ,CAST(TAX_CODE_PERCENTAGE AS NUMERIC) 			AS 		fin_tax_code_percentage
+																   ,CAST(REVENUE_TAX_AMOUNT AS NUMERIC) 			AS 		fin_revenue_tax_amount
+																   ,CURRENCY_ID 									AS      fin_currency_id
+																   ,COST_CLASS_ID 									AS      fin_cost_class_id
+																   ,COST_CATEGORY_ID 								AS      fin_cost_category_id
+																   ,COST_CATEGORY_CODE 								AS      fin_cost_category_code
+																   ,COST_CATEGORY_REFERENCE 						AS      fin_cost_category_reference
+																   ,COST_CARRIER_ID 								AS      fin_cost_carrier_id
+																   ,COST_CARRIER_CODE 								AS      fin_cost_carrier_code
+																   ,COST_CARRIER_REFERENCE 							AS      fin_cost_carrier_reference
+																   ,COST_GENERATOR_ID 								AS      fin_cost_generator_id
+																   ,COST_GENERATOR_TYPE 							AS      fin_cost_generator_type
+																   ,COST_GENERATOR_CODE 							AS      fin_cost_generator_code
+																   ,COST_GENERATOR_REFERENCE 						AS      fin_cost_generator_reference
+																   ,COST_CENTER_ID 									AS      fin_cost_center_id
+																   ,COST_CENTER_CODE 								AS      fin_cost_center_code
+																   ,COST_CENTER_DESCRIPTION 						AS      fin_cost_center_description
+																   ,GL_ACCOUNT_ID 									AS      fin_gl_account_id
+																   ,GL_ACCOUNT_CODE 								AS      fin_gl_account_code
+																   ,GL_ACCOUNT_REFERENCE 							AS      fin_gl_account_reference
+																   ,CONTRACT_ID 									AS      fin_contract_id
+																   ,CONTRACT_CODE 									AS      fin_contract_code
+																   ,CONTRACT_REFERENCE 								AS      fin_contract_reference
+																   ,LOCATION_ID 									AS      fin_location_id
+																   ,LOCATION_CODE 									AS      fin_location_code
+																   ,LOCATION_REF 									AS      fin_location_ref
+																   ,SUPPLIER_ID 									AS      fin_supplier_id
+																   ,SUPPLIER_CODE 									AS      fin_supplier_code
+																   ,SUPPLIER_NAME 									AS      fin_supplier_name
+																   ,BILLING 										AS      fin_billing
+																   ,COMM_OR_ACTUAL 									AS      fin_comm_or_actual
+																   ,BILLING_REQUISITION_ID 							AS      fin_billing_requisition_id
+																   ,FISCAL_ENTITY_ID 								AS      fin_fiscal_entity_id
+																   ,FISCAL_ENTITY_CODE 								AS      fin_fiscal_entity_code
+																   ,FISCAL_ENTITY_NAME 								AS      fin_fiscal_entity_name
+																   ,FIN_KEY_1 										AS      fin_fin_key_1
+																   ,FIN_KEY_2 										AS      fin_fin_key_2
+																   ,FIN_KEY_3 										AS      fin_fin_key_3
+																   ,FIN_KEY_4 										AS      fin_fin_key_4
+																   ,FIN_KEY_5 										AS      fin_fin_key_5
+																   ,FIN_KEY_6 										AS      fin_fin_key_6
+																   ,FIN_KEY_7 										AS      fin_fin_key_7
+																   ,FIN_KEY_8 										AS      fin_fin_key_8
+																   ,PRICE_LIST_DETAIL_ID 							AS      fin_price_list_detail_id
+																   ,EXP_LIST_DETAIL_ID 								AS      fin_exp_list_detail_id
+																   ,CAST(QUANTITY AS NUMERIC) 						AS      fin_quantity
+																   ,UOM_ID 											AS      fin_uom_id
+																   ,UOM_CODE 										AS      fin_uom_code
+																   ,UOM_REF 										AS      fin_uom_ref
+																   ,CUSTOMER_ID	 									AS      fin_customer_id
+																   ,CUSTOMER_CODE 									AS      fin_customer_code
+																   ,CUSTOMER_NAME 									AS      fin_customer_name
+																   ,COST_CARRIER_TYPE 								AS      fin_cost_carrier_type
+																   ,START_DATE 										AS      fin_start_date
+																   ,END_DATE 										AS      fin_end_date
+																   ,CAST(INTERVAL_VALUE AS NUMERIC) 				AS      fin_interval_value
+																   ,INTERVAL_UNIT 									AS      fin_interval_unit
+																   ,MATERIAL_NUMBER_ID 								AS      fin_material_integer_id
+																   ,MATERIAL_NUMBER_CODE 							AS      fin_material_integer_code
+																   ,MATERIAL_NUMBER_REF 							AS      fin_material_integer_ref
+																   ,EXTERNAL_PROP_REF 								AS      fin_external_prop_ref
+																   ,CAST(UNIT_PRICE AS  NUMERIC) 					AS 		fin_unit_price
+																   ,REU_ID 											AS      fin_reu_id
+																   ,REU_CODE 										AS      fin_reu_code
+																   ,REU_REF 										AS      fin_reu_ref
+																   ,EXTERNAL_PROP_REF_ID 							AS      fin_external_prop_ref_id
+																   ,FIN_KEY_1_VALUE 								AS      fin_fin_key_1_value
+																   ,FIN_KEY_2_VALUE 								AS      fin_fin_key_2_value
+																   ,FIN_KEY_3_VALUE 								AS      fin_fin_key_3_value
+																   ,FIN_KEY_4_VALUE 								AS      fin_fin_key_4_value
+																   ,FIN_KEY_5_VALUE 								AS      fin_fin_key_5_value
+																   ,FIN_KEY_6_VALUE 								AS      fin_fin_key_6_value
+																   ,FIN_KEY_7_VALUE 								AS      fin_fin_key_7_value
+																   ,FIN_KEY_8_VALUE 								AS      fin_fin_key_8_value
+																   ,CAST(REVENUE_FACTOR AS NUMERIC) 				AS 		fin_revenue_factor
+																   ,CREATION_ACCOUNT_ID 							AS      fin_creation_account_id
+																   ,LATEST_MOD_ACCOUNT_ID 							AS      fin_latest_mod_account_id
+																   ,PRODUCT_CATEGORY_REF 							AS      fin_product_category_ref
+																   ,PRODUCT_CLASS_NAME 								AS      fin_product_class_name
+																   ,COST_CARRIER_FIN_STAT 							AS      fin_cost_carrier_fin_stat
+																   ,PERIOD_TYPE 									AS      fin_period_type
+																   ,PRODUCT_SERVICE_ID 								AS      fin_product_service_id
+																   ,PRODUCT_CODE 									AS      fin_product_code
+																   ,PRODUCT_REFERENCE 								AS      fin_product_reference
+																   ,CTR_VERSION_ID 									AS      fin_ctr_version_id
+																   ,CAST(CTR_VERSION_NR AS NUMERIC) 				AS      fin_ctr_version_nr
+																   ,IS_ADVANCE_PAYMENT	 							AS      fin_is_advance_payment
+																   ,PROPERTY_ID 									AS      fin_property_id
+																   ,PROPERTY_CODE 									AS      fin_property_code
+																   ,PROPERTY_REF 									AS      fin_property_ref
+																   ,COST_CARRIER_STATUS 							AS      fin_cost_carrier_status
+																   ,PARENT_COST_CARRIER_TYPE 						AS      fin_parent_cost_carrier_type
+																   ,PARENT_COST_CARRIER_CODE 						AS      fin_parent_cost_carrier_code
+																   ,PARENT_COST_CARRIER_REFERENCE 					AS      fin_parent_cost_carrier_reference
+																   ,PARENT_COST_CARRIER_STATUS 						AS      fin_parent_cost_carrier_status
+																   ,PARENT_COST_CARRIER_ID 							AS      fin_parent_cost_carrier_id
+																   ,TOP_COST_CARRIER_TYPE 							AS      fin_top_cost_carrier_type
+																   ,TOP_COST_CARRIER_CODE 							AS      fin_top_cost_carrier_code
+																   ,TOP_COST_CARRIER_REFERENCE 						AS      fin_top_cost_carrier_reference
+																   ,TOP_COST_CARRIER_STATUS 						AS      fin_top_cost_carrier_status
+																   ,TOP_COST_CARRIER_ID 							AS      fin_top_cost_carrier_id
+																   ,APPORT_SCHEDULE_ID 								AS      fin_apport_schedule_id
+																   ,CAST(EXPENSE_FACTOR AS NUMERIC ) 				AS      fin_expense_factor
+																   ,HIST_IDX_DETAIL_ID 								AS      fin_hist_idx_detail_id
+																   ,COST_DISTR_KEY_ID 								AS      fin_cost_distr_key_id
+																   ,COST_DISTR_KEY_CODE 							AS      fin_cost_distr_key_code
+																   ,COST_DISTR_KEY_REF 								AS      fin_cost_distr_key_ref
+																   ,CAST(COST_DISTR_KEY_PCT AS NUMERIC) 			AS 		fin_cost_distr_key_pct
+																   ,BASE_COST_ITEM_ID 								AS      fin_base_cost_item_id
+																   --,CAST(CREATION_DATE AS DATETIME) 				AS      fin_creation_date
+																   --,CAST(LATEST_MOD_DATE AS DATETIME) 			AS      fin_latest_mod_date
+																   ,CAST(CREATION_TIMESTAMP AS DATETIME) 			AS      fin_creation_date
+																   ,CAST(MODIFICATION_TIMESTAMP AS DATETIME) 		AS      fin_latest_mod_date
+																   ,CAST(BILLING_DATE AS DATETIME) 					AS      fin_billing_date
+																   ,COST_GENERATOR_DETAIL_ID 						AS      fin_cost_generator_detail_id
+																   ,PRICE_ORIGIN 									AS      fin_price_origin
+																   ,CAST(SESSION_ID AS STRING) 						AS      fin_session_id
+																   ,CAST(SETTLEMENT_FACTOR AS NUMERIC) 				AS 		fin_settlement_factor
+																   ,CAST(CALC_OBJECT_ID AS NUMERIC) 				AS      fin_calc_object_id
+																   ,CAST(CALC_OBJECT_DETAIL_ID AS NUMERIC) 			AS      fin_calc_object_detail_id
+																   ,BASED_ON_INDEXED_PRICE 							AS      fin_based_on_indexed_price
+																   ,ACCOUNTING_DATE 								AS      fin_accounting_date
+																   ,CAST(BENEFICIARY_FACTOR AS NUMERIC) 			AS      fin_beneficiary_factor
+																   ,CAST(CALC_OBJECT_METER_ID AS NUMERIC)  			AS 		fin_calc_object_meter_id
+																   ,CAST(IS_HISTORICAL AS  INT64) 					AS 		fin_is_historical
+																   ,CURRENCY 										AS      fin_currency
+																   ,COST_CLASS_NAME 								AS      fin_cost_class_name
+																   ,CONTRACT_TYPE 									AS      fin_contract_type
+																   ,CONTRACT_STATUS 								AS      fin_contract_status
+																   ,CONTRACT_STATUS_CLASS 							AS      fin_contract_status_class
+																   ,CONTRACT_STARTDATE 								AS      fin_contract_startdate
+																   ,CONTRACT_ENDDATE 								AS      fin_contract_enddate
+																   ,'NULL' 											AS      start_by
+																   ,client_organization_id 							AS      fin_client_organization_id
+																   ,client_organization_code 						AS      fin_client_organization_code
+																   ,client_organization_name 						AS      fin_client_organization_name
+																   FROM `%s`
+																   WHERE TIMESTAMP_TRUNC(TIMESTAMP_MILLIS(CAST(datastream_metadata.source_timestamp AS INT64)),DAY) = TIMESTAMP_TRUNC(CURRENT_TIMESTAMP(),DAY) 
+																   ) s
+																   ON s.fin_cost_item_id = f.fin_cost_item_id 
+																   AND s.fin_master_cost_item_id = f.fin_master_cost_item_id
+																   AND f.is_deleted = 'N'
+															WHEN NOT matched THEN
+															INSERT
+																(             
+																   fin_cost_item_id,
+																   fin_master_cost_item_id,
+																   fin_cost_date,
+																   fin_description,
+																   fin_expense_amount,
+																   fin_revenue_amount,
+																   fin_tax_code_id,
+																   fin_tax_code_code,
+																   fin_tax_code_reference,
+																   fin_tax_code_percentage,
+																   fin_revenue_tax_amount,
+																   fin_currency_id,
+																   fin_cost_class_id,
+																   fin_cost_category_id,
+																   fin_cost_category_code,
+																   fin_cost_category_reference,
+																   fin_cost_carrier_id,
+																   fin_cost_carrier_code,
+																   fin_cost_carrier_reference,
+																   fin_cost_generator_id,
+																   fin_cost_generator_type,
+																   fin_cost_generator_code,
+																   fin_cost_generator_reference,
+																   fin_cost_center_id,
+																   fin_cost_center_code,
+																   fin_cost_center_description,
+																   fin_gl_account_id,
+																   fin_gl_account_code,
+																   fin_gl_account_reference,
+																   fin_contract_id,
+																   fin_contract_code,
+																   fin_contract_reference,
+																   fin_location_id,
+																   fin_location_code,
+																   fin_location_ref,
+																   fin_supplier_id,
+																   fin_supplier_code,
+																   fin_supplier_name,
+																   fin_billing,
+																   fin_comm_or_actual,
+																   fin_billing_requisition_id,
+																   fin_fiscal_entity_id,
+																   fin_fiscal_entity_code,
+																   fin_fiscal_entity_name,
+																   fin_fin_key_1,
+																   fin_fin_key_2,
+																   fin_fin_key_3,
+																   fin_fin_key_4,
+																   fin_fin_key_5,
+																   fin_fin_key_6,
+																   fin_fin_key_7,
+																   fin_fin_key_8,
+																   fin_price_list_detail_id,
+																   fin_exp_list_detail_id,
+																   fin_quantity,
+																   fin_uom_id,
+																   fin_uom_code,
+																   fin_uom_ref,
+																   fin_customer_id,
+																   fin_customer_code,
+																   fin_customer_name,
+																   fin_cost_carrier_type,
+																   fin_start_date,
+																   fin_end_date,
+																   fin_interval_value,
+																   fin_interval_unit,
+																   fin_material_integer_id,
+																   fin_material_integer_code,
+																   fin_material_integer_ref,
+																   fin_external_prop_ref,
+																   fin_unit_price,
+																   fin_reu_id,
+																   fin_reu_code,
+																   fin_reu_ref,
+																   fin_external_prop_ref_id,
+																   fin_fin_key_1_value,
+																   fin_fin_key_2_value,
+																   fin_fin_key_3_value,
+																   fin_fin_key_4_value,
+																   fin_fin_key_5_value,
+																   fin_fin_key_6_value,
+																   fin_fin_key_7_value,
+																   fin_fin_key_8_value,
+																   fin_revenue_factor,
+																   fin_creation_account_id,
+																   fin_latest_mod_account_id,
+																   fin_product_category_ref,
+																   fin_product_class_name,
+																   fin_cost_carrier_fin_stat,
+																   fin_period_type,
+																   fin_product_service_id,
+																   fin_product_code,
+																   fin_product_reference,
+																   fin_ctr_version_id,
+																   fin_ctr_version_nr,
+																   fin_is_advance_payment,
+																   fin_property_id,
+																   fin_property_code,
+																   fin_property_ref,
+																   fin_cost_carrier_status,
+																   fin_parent_cost_carrier_type,
+																   fin_parent_cost_carrier_code,
+																   fin_parent_cost_carrier_reference,
+																   fin_parent_cost_carrier_status,
+																   fin_parent_cost_carrier_id,
+																   fin_top_cost_carrier_type,
+																   fin_top_cost_carrier_code,
+																   fin_top_cost_carrier_reference,
+																   fin_top_cost_carrier_status,
+																   fin_top_cost_carrier_id,
+																   fin_apport_schedule_id,
+																   fin_expense_factor,
+																   fin_hist_idx_detail_id,
+																   fin_cost_distr_key_id,
+																   fin_cost_distr_key_code,
+																   fin_cost_distr_key_ref,
+																   fin_cost_distr_key_pct,
+																   fin_base_cost_item_id,
+																   fin_creation_date,
+																   fin_latest_mod_date,
+																   fin_billing_date,
+																   fin_cost_generator_detail_id,
+																   fin_price_origin,
+																   fin_session_id,
+																   fin_settlement_factor,
+																   fin_calc_object_id,
+																   fin_calc_object_detail_id,
+																   fin_based_on_indexed_price,
+																   fin_accounting_date,
+																   fin_beneficiary_factor,
+																   fin_calc_object_meter_id,
+																   fin_is_historical,
+																   fin_currency,
+																   fin_cost_class_name,
+																   fin_contract_type,
+																   fin_contract_status,
+																   fin_contract_status_class,
+																   fin_contract_startdate,
+																   fin_contract_enddate,
+																   start_date,
+																   start_by,
+																   fin_client_organization_id,
+																   fin_client_organization_code,
+																   fin_client_organization_name,
+																   is_deleted
+																   )  
+															VALUES
+																(             
+																   fin_cost_item_id,
+																   fin_master_cost_item_id,
+																   fin_cost_date,
+																   fin_description,
+																   fin_expense_amount,
+																   fin_revenue_amount,
+																   fin_tax_code_id,
+																   fin_tax_code_code,
+																   fin_tax_code_reference,
+																   fin_tax_code_percentage,
+																   fin_revenue_tax_amount,
+																   fin_currency_id,
+																   fin_cost_class_id,
+																   fin_cost_category_id,
+																   fin_cost_category_code,
+																   fin_cost_category_reference,
+																   fin_cost_carrier_id,
+																   fin_cost_carrier_code,
+																   fin_cost_carrier_reference,
+																   fin_cost_generator_id,
+																   fin_cost_generator_type,
+																   fin_cost_generator_code,
+																   fin_cost_generator_reference,
+																   fin_cost_center_id,
+																   fin_cost_center_code,
+																   fin_cost_center_description,
+																   fin_gl_account_id,
+																   fin_gl_account_code,
+																   fin_gl_account_reference,
+																   fin_contract_id,
+																   fin_contract_code,
+																   fin_contract_reference,
+																   fin_location_id,
+																   fin_location_code,
+																   fin_location_ref,
+																   fin_supplier_id,
+																   fin_supplier_code,
+																   fin_supplier_name,
+																   fin_billing,
+																   fin_comm_or_actual,
+																   fin_billing_requisition_id,
+																   fin_fiscal_entity_id,
+																   fin_fiscal_entity_code,
+																   fin_fiscal_entity_name,
+																   fin_fin_key_1,
+																   fin_fin_key_2,
+																   fin_fin_key_3,
+																   fin_fin_key_4,
+																   fin_fin_key_5,
+																   fin_fin_key_6,
+																   fin_fin_key_7,
+																   fin_fin_key_8,
+																   fin_price_list_detail_id,
+																   fin_exp_list_detail_id,
+																   fin_quantity,
+																   fin_uom_id,
+																   fin_uom_code,
+																   fin_uom_ref,
+																   fin_customer_id,
+																   fin_customer_code,
+																   fin_customer_name,
+																   fin_cost_carrier_type,
+																   fin_start_date,
+																   fin_end_date,
+																   fin_interval_value,
+																   fin_interval_unit,
+																   fin_material_integer_id,
+																   fin_material_integer_code,
+																   fin_material_integer_ref,
+																   fin_external_prop_ref,
+																   fin_unit_price,
+																   fin_reu_id,
+																   fin_reu_code,
+																   fin_reu_ref,
+																   fin_external_prop_ref_id,
+																   fin_fin_key_1_value,
+																   fin_fin_key_2_value,
+																   fin_fin_key_3_value,
+																   fin_fin_key_4_value,
+																   fin_fin_key_5_value,
+																   fin_fin_key_6_value,
+																   fin_fin_key_7_value,
+																   fin_fin_key_8_value,
+																   fin_revenue_factor,
+																   fin_creation_account_id,
+																   fin_latest_mod_account_id,
+																   fin_product_category_ref,
+																   fin_product_class_name,
+																   fin_cost_carrier_fin_stat,
+																   fin_period_type,
+																   fin_product_service_id,
+																   fin_product_code,
+																   fin_product_reference,
+																   fin_ctr_version_id,
+																   fin_ctr_version_nr,
+																   fin_is_advance_payment,
+																   fin_property_id,
+																   fin_property_code,
+																   fin_property_ref,
+																   fin_cost_carrier_status,
+																   fin_parent_cost_carrier_type,
+																   fin_parent_cost_carrier_code,
+																   fin_parent_cost_carrier_reference,
+																   fin_parent_cost_carrier_status,
+																   fin_parent_cost_carrier_id,
+																   fin_top_cost_carrier_type,
+																   fin_top_cost_carrier_code,
+																   fin_top_cost_carrier_reference,
+																   fin_top_cost_carrier_status,
+																   fin_top_cost_carrier_id,
+																   fin_apport_schedule_id,
+																   fin_expense_factor,
+																   fin_hist_idx_detail_id,
+																   fin_cost_distr_key_id,
+																   fin_cost_distr_key_code,
+																   fin_cost_distr_key_ref,
+																   fin_cost_distr_key_pct,
+																   fin_base_cost_item_id,
+																   fin_creation_date,
+																   fin_latest_mod_date,
+																   fin_billing_date,
+																   fin_cost_generator_detail_id,
+																   fin_price_origin,
+																   fin_session_id,
+																   fin_settlement_factor,
+																   fin_calc_object_id,
+																   fin_calc_object_detail_id,
+																   fin_based_on_indexed_price,
+																   fin_accounting_date,
+																   fin_beneficiary_factor,
+																   fin_calc_object_meter_id,
+																   fin_is_historical,
+																   fin_currency,
+																   fin_cost_class_name,
+																   fin_contract_type,
+																   fin_contract_status,
+																   fin_contract_status_class,
+																   fin_contract_startdate,
+																   fin_contract_enddate,
+																   CURRENT_DATETIME(),
+																   start_by,
+																   fin_client_organization_id,
+																   fin_client_organization_code,
+																   fin_client_organization_name,
+																   'N'
+																   )
+													""",fact_financials,MV_REP_COSTITEMS);
+
+				EXECUTE IMMEDIATE mcs_fact_financials_insert;
+				
+			EXCEPTION WHEN ERROR THEN
+				
+				SET strRemarks 			= 'Failed in '||strProcName||', check error_log table for more info';
+				SET strErrorMessage 	= @@error.message;
+				SET error_txt		  	= 'Failed in mcs_fact_financials_insert for current day load '||CURRENT_DATE||' ~'||@@error.statement_text;
+			  
+				CALL `cobundu-bi-playground.dataform_sd_procedure.Execution_log`(p_dataset_name, strProcName, 'E', strRemarks);
+				CALL `cobundu-bi-playground.dataform_sd_procedure.Error_log`(p_dataset_name, strErrorMessage, error_txt);
+
+			END;
+		END IF;
+	END IF;
+	
+	SET strRemarks = 'Completed Successfully';
+	CALL `cobundu-bi-playground.dataform_sd_procedure.Execution_log`(p_dataset_name, strProcName, 'E', strRemarks);
+	
+EXCEPTION WHEN ERROR THEN
+
+	CALL `cobundu-bi-playground.dataform_sd_procedure.Execution_log`(p_dataset_name, 'pr_fact_financials', 'E', 'Failed');
+	CALL `cobundu-bi-playground.dataform_sd_procedure.Error_log`(p_dataset_name, @@error.message, @@error.statement_text);
+
+END;

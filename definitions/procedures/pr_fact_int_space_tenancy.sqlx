@@ -1,0 +1,464 @@
+CREATE OR REPLACE PROCEDURE `cobundu-bi-playground.dataform_sd_procedure.pr_fact_int_space_tenancy`(IN p_project_id STRING, IN p_dataset_name STRING, IN p_num INT64)
+BEGIN
+	DECLARE 	nCount								INT64;
+	DECLARE		strSqlSnt							STRING;
+	DECLARE 	MV_REP_INT_SPACE_TENANCY			STRING;
+	DECLARE 	mcs_fact_int_space_tenancy_update 	STRING;
+	DECLARE		mcs_fact_int_space_tenancy_insert	STRING;
+	DECLARE		FACT_INT_SPACE_TENANCY				STRING;
+	DECLARE		strRemarks							STRING;
+	DECLARE 	error_txt							STRING;
+	DECLARE 	strErrorMessage         			STRING;
+	DECLARE		strProcName							STRING;
+	
+	SET strProcName 				= 'pr_fact_int_space_tenancy';
+	SET strRemarks					= '';
+	SET FACT_INT_SPACE_TENANCY     	= p_project_id||'.'||p_dataset_name||'.FACT_INT_SPACE_TENANCY';
+	
+	CALL `cobundu-bi-playground.dataform_sd_procedure.Execution_log`(p_dataset_name, strProcName, 'S', strRemarks);
+	
+	SET strSqlSnt = FORMAT("""SELECT COUNT(*) FROM `%s` """,FACT_INT_SPACE_TENANCY);
+	
+	EXECUTE IMMEDIATE strSqlSnt INTO nCount;
+				
+	IF nCount <= 1
+	THEN
+		SET MV_REP_INT_SPACE_TENANCY 		= 	p_project_id||'.'||p_dataset_name||'.MV_REP_INT_SPACE_TENANCY_'||p_num;															
+		--##############################
+		--FACT_INT_SPACE_TENANCY --UPDATE
+		--##############################
+
+		BEGIN	
+			SET mcs_fact_int_space_tenancy_update = FORMAT("""
+															MERGE INTO `%s` d
+															using 
+																(
+																	SELECT   
+																		location_id 					AS		int_spc_tenancy_location_id,
+																		su_name 						AS		int_spc_tenancy_su_name,
+																		room_ref 						AS		int_spc_tenancy_room_ref,
+																		floor_ref 						AS		int_spc_tenancy_floor_ref,
+																		building_ref 					AS		int_spc_tenancy_building_ref,
+																		site_ref 						AS		int_spc_tenancy_site_ref,
+																		area_ref 						AS		int_spc_tenancy_area_ref,
+																		area_l1_ref 					AS		int_spc_tenancy_area_l1_ref,
+																		area_l2_ref 					AS		int_spc_tenancy_area_l2_ref,
+																		area_l3_ref 					AS		int_spc_tenancy_area_l3_ref,
+																		CAST(su_area AS NUMERIC)  		AS		int_spc_tenancy_su_area,
+																		CAST(prorated_area AS NUMERIC)  AS		int_spc_tenancy_prorated_area,
+																		su_purpose 						AS		int_spc_tenancy_su_purpose,
+																		tenancy_id 						AS		int_spc_tenancy_tenancy_id,
+																		date(from_date)  				AS		int_spc_tenancy_from_date,
+																		date(until_date)  				AS		int_spc_tenancy_until_date,
+																		rental_status 					AS		int_spc_tenancy_rental_status,
+																		contract_code 					AS		int_spc_tenancy_contract_code,
+																		contract_ref 					AS		int_spc_tenancy_contract_ref,
+																		contract_type_code 				AS		int_spc_tenancy_contract_type_code,
+																		contract_type_ref 				AS		int_spc_tenancy_contract_type_ref,
+																		tenant_name 					AS		int_spc_tenancy_tenant_name,
+																		tenant_trade_name 				AS		int_spc_tenancy_tenant_trade_name,
+																		room_category_code 				AS		int_spc_tenancy_room_category_code,
+																		room_category 					AS		int_spc_tenancy_room_category,
+																		room_category_group_code 		AS		int_spc_tenancy_room_category_group_code,
+																		room_category_group 			AS		int_spc_tenancy_room_category_group,
+																		contract_id 					AS		int_spc_tenancy_contract_id
+																	FROM `%s`
+																) s 
+															ON s.int_spc_tenancy_location_id = d.int_spc_tenancy_location_id
+															AND d.is_deleted = 'N'
+															WHEN MATCHED AND 
+																s.int_spc_tenancy_su_name 					<>  d.int_spc_tenancy_su_name OR
+																s.int_spc_tenancy_room_ref 					<>  d.int_spc_tenancy_room_ref OR
+																s.int_spc_tenancy_floor_ref 				<>  d.int_spc_tenancy_floor_ref OR
+																s.int_spc_tenancy_building_ref 				<>  d.int_spc_tenancy_building_ref OR
+																s.int_spc_tenancy_site_ref 					<>  d.int_spc_tenancy_site_ref OR
+																s.int_spc_tenancy_area_ref 					<>  d.int_spc_tenancy_area_ref OR
+																s.int_spc_tenancy_area_l1_ref 				<>  d.int_spc_tenancy_area_l1_ref OR
+																s.int_spc_tenancy_area_l2_ref 				<>  d.int_spc_tenancy_area_l2_ref OR
+																s.int_spc_tenancy_area_l3_ref 				<>  d.int_spc_tenancy_area_l3_ref OR
+																s.int_spc_tenancy_su_area 					<>  d.int_spc_tenancy_su_area OR
+																s.int_spc_tenancy_prorated_area 			<>  d.int_spc_tenancy_prorated_area OR
+																s.int_spc_tenancy_su_purpose 				<>  d.int_spc_tenancy_su_purpose OR
+																--s.int_spc_tenancy_tenancy_id 				<>  d.int_spc_tenancy_tenancy_id OR ISSUE IS HERE
+																--s.int_spc_tenancy_from_date 				<>  d.int_spc_tenancy_from_date OR   ISSUE IS HERE
+																s.int_spc_tenancy_until_date 				<>  d.int_spc_tenancy_until_date OR
+																--s.int_spc_tenancy_rental_status 			<>  d.int_spc_tenancy_rental_status OR
+																s.int_spc_tenancy_contract_code 			<>  d.int_spc_tenancy_contract_code OR
+																s.int_spc_tenancy_contract_ref 				<>  d.int_spc_tenancy_contract_ref OR
+																s.int_spc_tenancy_contract_type_code 		<>  d.int_spc_tenancy_contract_type_code OR
+																s.int_spc_tenancy_contract_type_ref 		<>  d.int_spc_tenancy_contract_type_ref OR
+																s.int_spc_tenancy_tenant_name 				<>  d.int_spc_tenancy_tenant_name OR
+																s.int_spc_tenancy_tenant_trade_name 		<>  d.int_spc_tenancy_tenant_trade_name OR
+																s.int_spc_tenancy_room_category_code 		<>  d.int_spc_tenancy_room_category_code OR
+																s.int_spc_tenancy_room_category 			<>  d.int_spc_tenancy_room_category OR
+																s.int_spc_tenancy_room_category_group_code 	<>  d.int_spc_tenancy_room_category_group_code OR
+																s.int_spc_tenancy_room_category_group 		<>  d.int_spc_tenancy_room_category_group OR
+																s.int_spc_tenancy_contract_id 				<>  d.int_spc_tenancy_contract_id 
+															THEN UPDATE SET is_deleted = 'Y'
+										"""
+										,FACT_INT_SPACE_TENANCY,MV_REP_INT_SPACE_TENANCY);
+
+				EXECUTE IMMEDIATE mcs_fact_int_space_tenancy_update;
+			
+		EXCEPTION WHEN ERROR THEN
+			SET strRemarks 			= 'Failed in '||strProcName||', check error_log table for more info';
+			SET strErrorMessage 	= @@error.message;
+			SET error_txt		  	= 'Failed in mcs_fact_int_space_tenancy_update '||' ~'||@@error.statement_text;
+			  
+			CALL `cobundu-bi-playground.dataform_sd_procedure.Execution_log`(p_dataset_name, strProcName, 'E', strRemarks);
+			CALL `cobundu-bi-playground.dataform_sd_procedure.Error_log`(p_dataset_name, strErrorMessage, error_txt);
+
+		END;
+
+		--##############################
+		--FACT_INT_SPACE_TENANCY --INSERT
+		--##############################
+
+			BEGIN	
+			SET mcs_fact_int_space_tenancy_insert = FORMAT("""
+															MERGE INTO `%s` d
+															using 
+																(
+																	SELECT   
+																		location_id 					AS		int_spc_tenancy_location_id,
+																		su_name 						AS		int_spc_tenancy_su_name,
+																		room_ref 						AS		int_spc_tenancy_room_ref,
+																		floor_ref 						AS		int_spc_tenancy_floor_ref,
+																		building_ref 					AS		int_spc_tenancy_building_ref,
+																		site_ref 						AS		int_spc_tenancy_site_ref,
+																		area_ref 						AS		int_spc_tenancy_area_ref,
+																		area_l1_ref 					AS		int_spc_tenancy_area_l1_ref,
+																		area_l2_ref 					AS		int_spc_tenancy_area_l2_ref,
+																		area_l3_ref 					AS		int_spc_tenancy_area_l3_ref,
+																		CAST(su_area AS NUMERIC)  		AS		int_spc_tenancy_su_area,
+																		CAST(prorated_area AS NUMERIC) 	AS		int_spc_tenancy_prorated_area,
+																		su_purpose 						AS		int_spc_tenancy_su_purpose,
+																		tenancy_id 						AS		int_spc_tenancy_tenancy_id,
+																		date(from_date)  				AS		int_spc_tenancy_from_date,
+																		date(until_date)  				AS		int_spc_tenancy_until_date,
+																		rental_status 					AS		int_spc_tenancy_rental_status,
+																		contract_code 					AS		int_spc_tenancy_contract_code,
+																		contract_ref 					AS		int_spc_tenancy_contract_ref,
+																		contract_type_code 				AS		int_spc_tenancy_contract_type_code,
+																		contract_type_ref 				AS		int_spc_tenancy_contract_type_ref,
+																		tenant_name 					AS		int_spc_tenancy_tenant_name,
+																		tenant_trade_name 				AS		int_spc_tenancy_tenant_trade_name,
+																		room_category_code 				AS		int_spc_tenancy_room_category_code,
+																		room_category 					AS		int_spc_tenancy_room_category,
+																		room_category_group_code 		AS		int_spc_tenancy_room_category_group_code,
+																		room_category_group 			AS		int_spc_tenancy_room_category_group,
+																		contract_id 					AS		int_spc_tenancy_contract_id
+																	FROM `%s`
+																) s 
+															ON s.int_spc_tenancy_location_id = d.int_spc_tenancy_location_id
+															AND d.is_deleted = 'N'
+															WHEN NOT MATCHED THEN
+															INSERT  
+																(
+																	int_spc_tenancy_location_id,
+																	int_spc_tenancy_su_name,
+																	int_spc_tenancy_room_ref,
+																	int_spc_tenancy_floor_ref,
+																	int_spc_tenancy_building_ref,
+																	int_spc_tenancy_site_ref,
+																	int_spc_tenancy_area_ref,
+																	int_spc_tenancy_area_l1_ref,
+																	int_spc_tenancy_area_l2_ref,
+																	int_spc_tenancy_area_l3_ref,
+																	int_spc_tenancy_su_area,
+																	int_spc_tenancy_prorated_area,
+																	int_spc_tenancy_su_purpose,
+																	int_spc_tenancy_tenancy_id,
+																	int_spc_tenancy_from_date,
+																	int_spc_tenancy_until_date,
+																	int_spc_tenancy_rental_status,
+																	int_spc_tenancy_contract_code,
+																	int_spc_tenancy_contract_ref,
+																	int_spc_tenancy_contract_type_code,
+																	int_spc_tenancy_contract_type_ref,
+																	int_spc_tenancy_tenant_name,
+																	int_spc_tenancy_tenant_trade_name,
+																	int_spc_tenancy_room_category_code,
+																	int_spc_tenancy_room_category,
+																	int_spc_tenancy_room_category_group_code,
+																	int_spc_tenancy_room_category_group,
+																	int_spc_tenancy_contract_id,
+																	is_deleted ,
+																	last_modified_timestamp 
+																)
+															VALUES
+																(
+																	int_spc_tenancy_location_id,
+																	int_spc_tenancy_su_name,
+																	int_spc_tenancy_room_ref,
+																	int_spc_tenancy_floor_ref,
+																	int_spc_tenancy_building_ref,
+																	int_spc_tenancy_site_ref,
+																	int_spc_tenancy_area_ref,
+																	int_spc_tenancy_area_l1_ref,
+																	int_spc_tenancy_area_l2_ref,
+																	int_spc_tenancy_area_l3_ref,
+																	int_spc_tenancy_su_area,
+																	int_spc_tenancy_prorated_area,
+																	int_spc_tenancy_su_purpose,
+																	int_spc_tenancy_tenancy_id,
+																	int_spc_tenancy_from_date,
+																	int_spc_tenancy_until_date,
+																	int_spc_tenancy_rental_status,
+																	int_spc_tenancy_contract_code,
+																	int_spc_tenancy_contract_ref,
+																	int_spc_tenancy_contract_type_code,
+																	int_spc_tenancy_contract_type_ref,
+																	int_spc_tenancy_tenant_name,
+																	int_spc_tenancy_tenant_trade_name,
+																	int_spc_tenancy_room_category_code,
+																	int_spc_tenancy_room_category,
+																	int_spc_tenancy_room_category_group_code,
+																	int_spc_tenancy_room_category_group,
+																	int_spc_tenancy_contract_id,
+																	'N',
+																	TIMESTAMP_TRUNC(datetime(current_timestamp(),"CET"), SECOND)
+																)
+													""",FACT_INT_SPACE_TENANCY,MV_REP_INT_SPACE_TENANCY);
+
+				EXECUTE IMMEDIATE mcs_fact_int_space_tenancy_insert;
+			
+		EXCEPTION WHEN ERROR THEN
+			
+			SET strRemarks 			= 'Failed in '||strProcName||', check error_log table for more info';
+			SET strErrorMessage 	= @@error.message;
+			SET error_txt		  	= 'Failed in mcs_fact_int_space_tenancy_insert '||' ~'||@@error.statement_text;
+			  
+			CALL `cobundu-bi-playground.dataform_sd_procedure.Execution_log`(p_dataset_name, strProcName, 'E', strRemarks);
+			CALL `cobundu-bi-playground.dataform_sd_procedure.Error_log`(p_dataset_name, strErrorMessage, error_txt);
+
+		END;
+	ELSE
+		SET MV_REP_INT_SPACE_TENANCY 		= `cobundu-bi-playground.dataform_sd_procedure.get_variable_name`(p_project_id, p_dataset_name, 'MV_REP_INT_SPACE_TENANCY_'||p_num);
+		
+		IF MV_REP_INT_SPACE_TENANCY IS NOT NULL
+		THEN
+			--##############################
+			--FACT_INT_SPACE_TENANCY --UPDATE
+			--##############################
+
+			BEGIN	
+				SET mcs_fact_int_space_tenancy_update = FORMAT("""
+																MERGE INTO `%s` d
+																using 
+																	(
+																		SELECT   
+																			location_id 					AS		int_spc_tenancy_location_id,
+																			su_name 						AS		int_spc_tenancy_su_name,
+																			room_ref 						AS		int_spc_tenancy_room_ref,
+																			floor_ref 						AS		int_spc_tenancy_floor_ref,
+																			building_ref 					AS		int_spc_tenancy_building_ref,
+																			site_ref 						AS		int_spc_tenancy_site_ref,
+																			area_ref 						AS		int_spc_tenancy_area_ref,
+																			area_l1_ref 					AS		int_spc_tenancy_area_l1_ref,
+																			area_l2_ref 					AS		int_spc_tenancy_area_l2_ref,
+																			area_l3_ref 					AS		int_spc_tenancy_area_l3_ref,
+																			CAST(su_area AS NUMERIC)  		AS		int_spc_tenancy_su_area,
+																			CAST(prorated_area AS NUMERIC)  AS		int_spc_tenancy_prorated_area,
+																			su_purpose 						AS		int_spc_tenancy_su_purpose,
+																			tenancy_id 						AS		int_spc_tenancy_tenancy_id,
+																			date(from_date)  				AS		int_spc_tenancy_from_date,
+																			date(until_date)  				AS		int_spc_tenancy_until_date,
+																			rental_status 					AS		int_spc_tenancy_rental_status,
+																			contract_code 					AS		int_spc_tenancy_contract_code,
+																			contract_ref 					AS		int_spc_tenancy_contract_ref,
+																			contract_type_code 				AS		int_spc_tenancy_contract_type_code,
+																			contract_type_ref 				AS		int_spc_tenancy_contract_type_ref,
+																			tenant_name 					AS		int_spc_tenancy_tenant_name,
+																			tenant_trade_name 				AS		int_spc_tenancy_tenant_trade_name,
+																			room_category_code 				AS		int_spc_tenancy_room_category_code,
+																			room_category 					AS		int_spc_tenancy_room_category,
+																			room_category_group_code 		AS		int_spc_tenancy_room_category_group_code,
+																			room_category_group 			AS		int_spc_tenancy_room_category_group,
+																			contract_id 					AS		int_spc_tenancy_contract_id
+																		FROM `%s`
+																		WHERE TIMESTAMP_TRUNC(TIMESTAMP_MILLIS(CAST(datastream_metadata.source_timestamp AS INT64)),DAY) = TIMESTAMP_TRUNC(CURRENT_TIMESTAMP(),DAY)
+																	) s 
+																ON s.int_spc_tenancy_location_id = d.int_spc_tenancy_location_id
+																AND d.is_deleted = 'N'
+																WHEN MATCHED AND 
+																	s.int_spc_tenancy_su_name 					<>  d.int_spc_tenancy_su_name OR
+																	s.int_spc_tenancy_room_ref 					<>  d.int_spc_tenancy_room_ref OR
+																	s.int_spc_tenancy_floor_ref 				<>  d.int_spc_tenancy_floor_ref OR
+																	s.int_spc_tenancy_building_ref 				<>  d.int_spc_tenancy_building_ref OR
+																	s.int_spc_tenancy_site_ref 					<>  d.int_spc_tenancy_site_ref OR
+																	s.int_spc_tenancy_area_ref 					<>  d.int_spc_tenancy_area_ref OR
+																	s.int_spc_tenancy_area_l1_ref 				<>  d.int_spc_tenancy_area_l1_ref OR
+																	s.int_spc_tenancy_area_l2_ref 				<>  d.int_spc_tenancy_area_l2_ref OR
+																	s.int_spc_tenancy_area_l3_ref 				<>  d.int_spc_tenancy_area_l3_ref OR
+																	s.int_spc_tenancy_su_area 					<>  d.int_spc_tenancy_su_area OR
+																	s.int_spc_tenancy_prorated_area 			<>  d.int_spc_tenancy_prorated_area OR
+																	s.int_spc_tenancy_su_purpose 				<>  d.int_spc_tenancy_su_purpose OR
+																	--s.int_spc_tenancy_tenancy_id 				<>  d.int_spc_tenancy_tenancy_id OR ISSUE IS HERE
+																	--s.int_spc_tenancy_from_date 				<>  d.int_spc_tenancy_from_date OR   ISSUE IS HERE
+																	s.int_spc_tenancy_until_date 				<>  d.int_spc_tenancy_until_date OR
+																	--s.int_spc_tenancy_rental_status 			<>  d.int_spc_tenancy_rental_status OR
+																	s.int_spc_tenancy_contract_code 			<>  d.int_spc_tenancy_contract_code OR
+																	s.int_spc_tenancy_contract_ref 				<>  d.int_spc_tenancy_contract_ref OR
+																	s.int_spc_tenancy_contract_type_code 		<>  d.int_spc_tenancy_contract_type_code OR
+																	s.int_spc_tenancy_contract_type_ref 		<>  d.int_spc_tenancy_contract_type_ref OR
+																	s.int_spc_tenancy_tenant_name 				<>  d.int_spc_tenancy_tenant_name OR
+																	s.int_spc_tenancy_tenant_trade_name 		<>  d.int_spc_tenancy_tenant_trade_name OR
+																	s.int_spc_tenancy_room_category_code 		<>  d.int_spc_tenancy_room_category_code OR
+																	s.int_spc_tenancy_room_category 			<>  d.int_spc_tenancy_room_category OR
+																	s.int_spc_tenancy_room_category_group_code 	<>  d.int_spc_tenancy_room_category_group_code OR
+																	s.int_spc_tenancy_room_category_group 		<>  d.int_spc_tenancy_room_category_group OR
+																	s.int_spc_tenancy_contract_id 				<>  d.int_spc_tenancy_contract_id 
+																THEN UPDATE SET is_deleted = 'Y'
+														"""
+														,FACT_INT_SPACE_TENANCY,MV_REP_INT_SPACE_TENANCY);
+
+				EXECUTE IMMEDIATE mcs_fact_int_space_tenancy_update;
+				
+			EXCEPTION WHEN ERROR THEN
+
+			  SET strRemarks 		= 'Failed in '||strProcName||', check error_log table for more info';
+			  SET strErrorMessage 	= @@error.message;
+			  SET error_txt		  	= 'Failed in mcs_fact_int_space_tenancy_update for current day load '||CURRENT_DATE||' ~'||@@error.statement_text;
+			  
+			  CALL `cobundu-bi-playground.dataform_sd_procedure.Execution_log`(p_dataset_name, strProcName, 'E', strRemarks);
+			  CALL `cobundu-bi-playground.dataform_sd_procedure.Error_log`(p_dataset_name, strErrorMessage, error_txt);
+
+			END;
+
+			--##############################
+			--FACT_INT_SPACE_TENANCY --INSERT
+			--##############################
+
+			BEGIN	
+				SET mcs_fact_int_space_tenancy_insert = FORMAT("""
+																MERGE INTO `%s` d
+																using 
+																	(
+																		SELECT   
+																			location_id 					AS		int_spc_tenancy_location_id,
+																			su_name 						AS		int_spc_tenancy_su_name,
+																			room_ref 						AS		int_spc_tenancy_room_ref,
+																			floor_ref 						AS		int_spc_tenancy_floor_ref,
+																			building_ref 					AS		int_spc_tenancy_building_ref,
+																			site_ref 						AS		int_spc_tenancy_site_ref,
+																			area_ref 						AS		int_spc_tenancy_area_ref,
+																			area_l1_ref 					AS		int_spc_tenancy_area_l1_ref,
+																			area_l2_ref 					AS		int_spc_tenancy_area_l2_ref,
+																			area_l3_ref 					AS		int_spc_tenancy_area_l3_ref,
+																			CAST(su_area AS NUMERIC)  		AS		int_spc_tenancy_su_area,
+																			CAST(prorated_area AS NUMERIC) 	AS		int_spc_tenancy_prorated_area,
+																			su_purpose 						AS		int_spc_tenancy_su_purpose,
+																			tenancy_id 						AS		int_spc_tenancy_tenancy_id,
+																			date(from_date)  				AS		int_spc_tenancy_from_date,
+																			date(until_date)  				AS		int_spc_tenancy_until_date,
+																			rental_status 					AS		int_spc_tenancy_rental_status,
+																			contract_code 					AS		int_spc_tenancy_contract_code,
+																			contract_ref 					AS		int_spc_tenancy_contract_ref,
+																			contract_type_code 				AS		int_spc_tenancy_contract_type_code,
+																			contract_type_ref 				AS		int_spc_tenancy_contract_type_ref,
+																			tenant_name 					AS		int_spc_tenancy_tenant_name,
+																			tenant_trade_name 				AS		int_spc_tenancy_tenant_trade_name,
+																			room_category_code 				AS		int_spc_tenancy_room_category_code,
+																			room_category 					AS		int_spc_tenancy_room_category,
+																			room_category_group_code 		AS		int_spc_tenancy_room_category_group_code,
+																			room_category_group 			AS		int_spc_tenancy_room_category_group,
+																			contract_id 					AS		int_spc_tenancy_contract_id
+																		FROM `%s`
+																		WHERE TIMESTAMP_TRUNC(TIMESTAMP_MILLIS(CAST(datastream_metadata.source_timestamp AS INT64)),DAY) = TIMESTAMP_TRUNC(CURRENT_TIMESTAMP(),DAY)
+																	) s 
+																ON s.int_spc_tenancy_location_id = d.int_spc_tenancy_location_id
+																AND d.is_deleted = 'N'
+																WHEN NOT MATCHED THEN
+																INSERT  
+																	(
+																		int_spc_tenancy_location_id,
+																		int_spc_tenancy_su_name,
+																		int_spc_tenancy_room_ref,
+																		int_spc_tenancy_floor_ref,
+																		int_spc_tenancy_building_ref,
+																		int_spc_tenancy_site_ref,
+																		int_spc_tenancy_area_ref,
+																		int_spc_tenancy_area_l1_ref,
+																		int_spc_tenancy_area_l2_ref,
+																		int_spc_tenancy_area_l3_ref,
+																		int_spc_tenancy_su_area,
+																		int_spc_tenancy_prorated_area,
+																		int_spc_tenancy_su_purpose,
+																		int_spc_tenancy_tenancy_id,
+																		int_spc_tenancy_from_date,
+																		int_spc_tenancy_until_date,
+																		int_spc_tenancy_rental_status,
+																		int_spc_tenancy_contract_code,
+																		int_spc_tenancy_contract_ref,
+																		int_spc_tenancy_contract_type_code,
+																		int_spc_tenancy_contract_type_ref,
+																		int_spc_tenancy_tenant_name,
+																		int_spc_tenancy_tenant_trade_name,
+																		int_spc_tenancy_room_category_code,
+																		int_spc_tenancy_room_category,
+																		int_spc_tenancy_room_category_group_code,
+																		int_spc_tenancy_room_category_group,
+																		int_spc_tenancy_contract_id,
+																		is_deleted ,
+																		last_modified_timestamp 
+																	)
+																VALUES
+																	(
+																		int_spc_tenancy_location_id,
+																		int_spc_tenancy_su_name,
+																		int_spc_tenancy_room_ref,
+																		int_spc_tenancy_floor_ref,
+																		int_spc_tenancy_building_ref,
+																		int_spc_tenancy_site_ref,
+																		int_spc_tenancy_area_ref,
+																		int_spc_tenancy_area_l1_ref,
+																		int_spc_tenancy_area_l2_ref,
+																		int_spc_tenancy_area_l3_ref,
+																		int_spc_tenancy_su_area,
+																		int_spc_tenancy_prorated_area,
+																		int_spc_tenancy_su_purpose,
+																		int_spc_tenancy_tenancy_id,
+																		int_spc_tenancy_from_date,
+																		int_spc_tenancy_until_date,
+																		int_spc_tenancy_rental_status,
+																		int_spc_tenancy_contract_code,
+																		int_spc_tenancy_contract_ref,
+																		int_spc_tenancy_contract_type_code,
+																		int_spc_tenancy_contract_type_ref,
+																		int_spc_tenancy_tenant_name,
+																		int_spc_tenancy_tenant_trade_name,
+																		int_spc_tenancy_room_category_code,
+																		int_spc_tenancy_room_category,
+																		int_spc_tenancy_room_category_group_code,
+																		int_spc_tenancy_room_category_group,
+																		int_spc_tenancy_contract_id,
+																		'N',
+																		TIMESTAMP_TRUNC(datetime(current_timestamp(),"CET"), SECOND)
+																	)
+															""",FACT_INT_SPACE_TENANCY,MV_REP_INT_SPACE_TENANCY);
+
+				EXECUTE IMMEDIATE mcs_fact_int_space_tenancy_insert;
+				
+			EXCEPTION WHEN ERROR THEN
+
+			  SET strRemarks 		= 'Failed in '||strProcName||', check error_log table for more info';
+			  SET strErrorMessage 	= @@error.message;
+			  SET error_txt		  	= 'Failed in mcs_fact_int_space_tenancy_insert for current day load '||CURRENT_DATE||' ~'||@@error.statement_text;
+			  
+			  CALL `cobundu-bi-playground.dataform_sd_procedure.Execution_log`(p_dataset_name, strProcName, 'E', strRemarks);
+			  CALL `cobundu-bi-playground.dataform_sd_procedure.Error_log`(p_dataset_name, strErrorMessage, error_txt);
+
+			END;
+		END IF;
+	END IF;
+	
+	SET strRemarks = 'Completed Successfully';
+	CALL `cobundu-bi-playground.dataform_sd_procedure.Execution_log`(p_dataset_name, strProcName, 'E', strRemarks);
+	
+EXCEPTION WHEN ERROR THEN
+
+	CALL `cobundu-bi-playground.dataform_sd_procedure.Execution_log`(p_dataset_name, 'pr_fact_int_space_tenancy', 'E', 'Failed');
+	CALL `cobundu-bi-playground.dataform_sd_procedure.Error_log`(p_dataset_name, @@error.message, @@error.statement_text);
+
+END;

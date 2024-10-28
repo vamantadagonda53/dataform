@@ -1,0 +1,753 @@
+CREATE OR REPLACE PROCEDURE `cobundu-bi-playground.dataform_sd_procedure.pr_fact_helpdesk`(IN p_project_id STRING, IN p_dataset_name STRING, IN p_num INT64)
+BEGIN
+	DECLARE 	nCount						INT64;
+	DECLARE		strSqlSnt					STRING;
+	DECLARE 	MV_REP_CALLS				STRING;
+	DECLARE		MV_REP_BUILDING_STATS		STRING;
+	DECLARE 	mcs_fact_helpdesk_update 	STRING;
+	DECLARE		mcs_fact_helpdesk_insert	STRING;
+	DECLARE		fact_helpdesk				STRING;
+	DECLARE		strRemarks					STRING;
+	DECLARE 	error_txt					STRING;
+	DECLARE 	strErrorMessage         	STRING;
+	DECLARE		strProcName					STRING;
+	
+	SET strProcName 	= 'pr_fact_helpdesk';
+	SET strRemarks		= '';
+	SET fact_helpdesk 	= p_project_id||'.'||p_dataset_name||'.FACT_HELPDESK';
+	
+	CALL `cobundu-bi-playground.dataform_sd_procedure.Execution_log`(p_dataset_name, strProcName, 'S', strRemarks);
+	
+	SET strSqlSnt = FORMAT("""SELECT COUNT(*) FROM `%s` """,fact_helpdesk);
+	
+	EXECUTE IMMEDIATE strSqlSnt INTO nCount;
+				
+	IF nCount <=1
+	THEN
+		SET MV_REP_CALLS 				= p_project_id||'.'||p_dataset_name||'.MV_REP_CALLS_'||p_num;															
+		SET MV_REP_BUILDING_STATS   	= p_project_id||'.'||p_dataset_name||'.MV_REP_BUILDING_STATS_'||p_num;
+		---#####################
+		---FACT_HELPDESK UPDATE
+		---#####################
+		BEGIN
+			SET mcs_fact_helpdesk_update = FORMAT("""
+												MERGE INTO `%s` h
+														using
+														(
+														  SELECT 
+														 c.call_id      									AS           hd_call_id
+													   , c.ext_reference            						AS           hd_external_ref
+													   , c.priority                 						AS           hd_priority
+													   , c.cause       										AS           hd_cause
+													   , c.book_method                                      AS           hd_book_method
+													   , DATETIME(c.date_received,"America/New_York")       AS           hd_date_received
+													   , DATETIME(c.date_due,"America/New_York")            AS           hd_due_date
+													   , DATETIME(c.date_closed ,"America/New_York")        AS           hd_date_closed 
+													   , c.nature_code                           			AS           hd_nature_code
+													   , c.nature_reference   								AS           hd_nature
+													   , c.nature_lvl1                             			AS           hd_nature_l1
+													   , c.nature_lvl2                             			AS           hd_nature_l2
+													   , c.nature_lvl3                             			AS           hd_nature_l3
+													   , c.caller_name                           			AS           hd_caller_name
+													   , c.caller_code                             			AS           hd_caller_code
+													   , c.caller_dept_name  								AS           hd_caller_department
+													   , c.caller_dept_code    								AS           hd_caller_department_code
+													   , c.caller_company_name         						AS           hd_caller_company
+													   , c.caller_company_code          					AS           hd_caller_company_code
+													   , c.ASsigned_name                     				AS           hd_ASsigned_person_name 
+													   , c.ASsigned_code                       				AS           hd_ASsigned_person_code
+													   , c.ASsigned_dept_name          						AS           hd_ASsigned_person_department 
+													   , ASsigned_dept_code  								AS           hd_ASsigned_person_department_code 
+													   , ASsigned_company_name     							AS           hd_ASsigned_person_company
+													   , ASsigned_company_code       						AS           hd_ASsigned_person_company_code
+													   , c.area_code                               			AS           hd_area_code
+													   , c.area_reference                      				AS           hd_area_reference
+													   , c.site_code                                		AS           hd_site_code
+													   , c.site_reference                       			AS           hd_site_reference
+													   , c.building_code                         			AS           hd_building_code
+													   , c.building_reference   							AS           hd_building_reference
+													   , c.floor_code                               		AS           hd_floor_code
+													   , c.floor_reference                      			AS           hd_floor_reference
+													   , c.room_code                             			AS           hd_room_code
+													   , c.room_reference                   			 	AS           hd_room_reference
+													   , c.status_code                            			AS           hd_status_code
+													   , c.status_name                          			AS           hd_status
+													   , c.status_clASs_name  								AS           hd_status_clASs
+													   --, CAST(EXTRACT(DAY FROM c.elapsed_time) AS INT64)    	AS           	hd_elapsed_time
+													   , NULL           										AS  		 	start_by
+													   , c.reference                                			AS           	hd_reference
+													   , b.city                                           		AS  			hd_city
+													   , b.country                                   			AS  			hd_country
+													   , b.building_type_ref   									AS  			hd_building_type
+													   /*, CASE    WHEN EXTRACT(DAY FROM c.elapsed_time) =0 THEN '0d'
+																					 WHEN EXTRACT(DAY FROM c.elapsed_time) =1 THEN '1d'
+																					 WHEN EXTRACT(DAY FROM c.elapsed_time) BETWEEN 2 AND 7 THEN '2-7d'
+																					 WHEN EXTRACT(DAY FROM c.elapsed_time) BETWEEN 8 and 14 THEN '8-14d'
+																					 WHEN EXTRACT(DAY FROM c.elapsed_time) BETWEEN 15 AND 30 THEN '15-30d'
+																					 WHEN EXTRACT(DAY FROM c.elapsed_time) > 30 THEN '>30d' 
+														 END             AS  hd_elapsed_time_slices*/
+													   , CAST(c.date_received AS DATETIME ) 					AS  			hd_date_received_YMD
+													   , 'NULL'         										AS  			hd_customer                                          
+													   , 'NULL'                                         		AS  			hd_customer_code
+													   , c.CLIENT_ORGANIZATION_ID                               AS  			hd_Client_Organization_ID
+													   , c.CLIENT_ORGANIZATION_CODE                             AS  			hd_Client_Organization_Code
+													   , c.CLIENT_ORGANIZATION_NAME                             AS  			hd_Client_Organization_Name
+													   FROM 
+													   `%s` c
+													   LEFT JOIN
+													   `%s` b 
+													   ON c.building_reference = b.building_name
+													   ) s
+														ON s.hd_call_id = h.hd_call_id and h.is_deleted = 'Y'
+													   WHEN matched AND
+													   s.hd_external_ref 						<> 		h.hd_external_ref OR
+													   s.hd_priority 							<> 		h.hd_priority OR
+													   s.hd_cause 								<> 		h.hd_cause OR
+													   s.hd_book_method 						<> 		h.hd_book_method OR
+													   s.hd_date_received 						<> 		h.hd_date_received OR
+													   s.hd_due_date 							<> 		h.hd_due_date OR
+													   s.hd_date_closed 						<> 		h.hd_date_closed OR
+													   s.hd_nature_code 						<> 		h.hd_nature_code OR
+													   s.hd_nature 								<> 		h.hd_nature OR
+													   s.hd_nature_l1 							<> 		h.hd_nature_l1 OR
+													   s.hd_nature_l2 							<> 		h.hd_nature_l2 OR
+													   s.hd_nature_l3 							<> 		h.hd_nature_l3 OR
+													   s.hd_caller_name 						<> 		h.hd_caller_name OR
+													   s.hd_caller_code 						<> 		h.hd_caller_code OR
+													   s.hd_caller_department 					<> 		h.hd_caller_department OR
+													   s.hd_caller_department_code 				<> 		h.hd_caller_department_code OR
+													   s.hd_caller_company 						<> 		h.hd_caller_company OR
+													   s.hd_caller_company_code 				<> 		h.hd_caller_company_code OR
+													   s.hd_ASsigned_person_name 				<> 		h.hd_ASsigned_person_name OR
+													   s.hd_ASsigned_person_code 				<> 		h.hd_ASsigned_person_code OR
+													   s.hd_ASsigned_person_department 			<> 		h.hd_ASsigned_person_department OR
+													   s.hd_ASsigned_person_department_code 	<> 		h.hd_ASsigned_person_department_code OR
+													   s.hd_ASsigned_person_company 			<> 		h.hd_ASsigned_person_company OR
+													   s.hd_ASsigned_person_company_code 		<> 		h.hd_ASsigned_person_company_code OR
+													   s.hd_area_code 							<> 		h.hd_area_code OR
+													   s.hd_area_reference 						<> 		h.hd_area_reference OR
+													   s.hd_site_code							<> 		h.hd_site_code OR
+													   s.hd_site_reference 						<> 		h.hd_site_reference OR
+													   s.hd_building_code 						<> 		h.hd_building_code OR
+													   s.hd_building_reference 					<> 		h.hd_building_reference OR
+													   s.hd_floor_code 							<> 		h.hd_floor_code OR
+													   s.hd_floor_reference 					<> 		h.hd_floor_reference OR
+													   s.hd_room_code 							<> 		h.hd_room_code OR
+													   s.hd_room_reference 						<> 		h.hd_room_reference OR
+													   s.hd_status_code 						<> 		h.hd_status_code OR
+													   s.hd_status 								<> 		h.hd_status OR
+													   s.hd_status_clASs 						<> 		h.hd_status_clASs OR
+													   --s.hd_elapsed_time 						<> 		h.hd_elapsed_time OR
+													   s.hd_reference 							<> 		h.hd_reference OR
+													   s.hd_city 								<> 		h.hd_city OR
+													   s.hd_country 							<> 		h.hd_country OR
+													   s.hd_building_type 						<> 		h.hd_building_type OR
+													   --s.hd_elapsed_time_slices	 			<> 		h.hd_elapsed_time_slices OR
+													   s.hd_date_received_YMD 					<> 		h.hd_date_received_YMD OR
+													   s.hd_customer 							<> 		h.hd_customer OR
+													   s.hd_customer_code 						<> 		h.hd_customer_code OR
+													   s.hd_Client_Organization_ID 				<> 		h.hd_Client_Organization_ID OR
+													   s.hd_Client_Organization_Code 			<> 		h.hd_Client_Organization_Code OR
+													   s.hd_Client_Organization_Name 			<> 		h.hd_Client_Organization_Name
+													   THEN UPDATE SET is_deleted = 'Y',modification_timestamp = CURRENT_DATETIME"""
+												,fact_helpdesk, MV_REP_CALLS , MV_REP_BUILDING_STATS);          
+
+			EXECUTE IMMEDIATE mcs_fact_helpdesk_update;
+		
+		EXCEPTION WHEN ERROR THEN
+			
+			SET strRemarks 			= 'Failed in '||strProcName||', check error_log table for more info';
+			SET strErrorMessage 	= @@error.message;
+			SET error_txt		  	= 'Failed in mcs_fact_helpdesk_update '||' ~'||@@error.statement_text;
+			  
+			CALL `cobundu-bi-playground.dataform_sd_procedure.Execution_log`(p_dataset_name, strProcName, 'E', strRemarks);
+			CALL `cobundu-bi-playground.dataform_sd_procedure.Error_log`(p_dataset_name, strErrorMessage, error_txt);
+
+		END;
+		
+		---#####################
+		---FACT_HELPDESK INSERT
+		---#####################
+
+		BEGIN
+			SET mcs_fact_helpdesk_insert = FORMAT("""
+													MERGE INTO `%s` h
+													USING
+													   (
+													   SELECT 
+														 ROW_NUMBER() OVER()       								AS			 	pk_fact_helpdesk_seq_id
+													   , c.call_id      										AS           	hd_call_id
+													   , c.ext_reference                        				AS           	hd_external_ref
+													   , c.priority                                     		AS           	hd_priority
+													   , c.cause       											AS           	hd_cause
+													   , c.book_method                                        	AS           	hd_book_method
+													   , DATETIME(c.date_received,"America/New_York")         	AS           	hd_date_received
+													   , DATETIME(c.date_due,"America/New_York")              	AS           	hd_due_date
+													   , DATETIME(c.date_closed ,"America/New_York")          	AS           	hd_date_closed 
+													   , c.nature_code                           				AS           	hd_nature_code
+													   , c.nature_reference   									AS              hd_nature
+													   , c.nature_lvl1                             				AS           	hd_nature_l1
+													   , c.nature_lvl2                             				AS           	hd_nature_l2
+													   , c.nature_lvl3                             				AS           	hd_nature_l3
+													   , c.caller_name                           				AS           	hd_caller_name
+													   , c.caller_code                             				AS           	hd_caller_code
+													   , c.caller_dept_name  									AS              hd_caller_department
+													   , c.caller_dept_code    									AS              hd_caller_department_code
+													   , c.caller_company_name         							AS           	hd_caller_company
+													   , c.caller_company_code          						AS           	hd_caller_company_code
+													   , c.ASsigned_name                     					AS           	hd_ASsigned_person_name 
+													   , c.ASsigned_code                       					AS           	hd_ASsigned_person_code
+													   , c.ASsigned_dept_name          							AS           	hd_ASsigned_person_department 
+													   , ASsigned_dept_code  									AS              hd_ASsigned_person_department_code 
+													   , ASsigned_company_name     								AS           	hd_ASsigned_person_company
+													   , ASsigned_company_code       							AS           	hd_ASsigned_person_company_code
+													   , c.area_code                               				AS           	hd_area_code
+													   , c.area_reference                      					AS           	hd_area_reference
+													   , c.site_code                                			AS           	hd_site_code
+													   , c.site_reference                       				AS           	hd_site_reference
+													   , c.building_code                         				AS           	hd_building_code
+													   , c.building_reference   								AS              hd_building_reference
+													   , c.floor_code                               			AS           	hd_floor_code
+													   , c.floor_reference                      				AS           	hd_floor_reference
+													   , c.room_code                             				AS           	hd_room_code
+													   , c.room_reference                    					AS           	hd_room_reference
+													   , c.status_code                            				AS           	hd_status_code
+													   , c.status_name                          				AS           	hd_status
+													   , c.status_clASs_name  									AS              hd_status_clASs
+													   --, CAST(EXTRACT(DAY FROM c.elapsed_time) AS INT64)    	AS           	hd_elapsed_time
+													   , CURRENT_DATETIME              							AS  			start_date
+													   , NULL           										AS  			start_by
+													   , c.reference                                			AS           	hd_reference
+													   , b.city                                           		AS  			hd_city
+													   , b.country                                   			AS  			hd_country
+													   , b.building_type_ref   									AS  			hd_building_type
+													   /*, CASE    WHEN EXTRACT(DAY FROM c.elapsed_time) =0 THEN '0d'
+																					 WHEN EXTRACT(DAY FROM c.elapsed_time) =1 THEN '1d'
+																					 WHEN EXTRACT(DAY FROM c.elapsed_time) BETWEEN 2 AND 7 THEN '2-7d'
+																					 WHEN EXTRACT(DAY FROM c.elapsed_time) BETWEEN 8 and 14 THEN '8-14d'
+																					 WHEN EXTRACT(DAY FROM c.elapsed_time) BETWEEN 15 AND 30 THEN '15-30d'
+																					 WHEN EXTRACT(DAY FROM c.elapsed_time) > 30 THEN '>30d' 
+														 END             										AS  			hd_elapsed_time_slices
+														 */
+													   , CAST(EXTRACT(DAY FROM (CURRENT_DATE -CAST(c.date_received AS DATE))) AS INT64)   AS 	hd_age
+													   , CASE    WHEN EXTRACT(DAY FROM (CURRENT_DATE -CAST(c.date_received AS DATE))) =0 THEN '0d'
+																					 WHEN EXTRACT(DAY FROM (CURRENT_DATE -CAST(c.date_received AS DATE))) =1 THEN '1d'
+																					 WHEN EXTRACT(DAY FROM (CURRENT_DATE -CAST(c.date_received AS DATE))) BETWEEN 2 AND 7  THEN '2-7d'
+																					 WHEN EXTRACT(DAY FROM (CURRENT_DATE -CAST(c.date_received AS DATE))) BETWEEN 8 and 14   THEN '8-14d'
+																					 WHEN EXTRACT(DAY FROM (CURRENT_DATE -CAST(c.date_received AS DATE))) BETWEEN 15 AND 30 THEN '15-30d'
+																					 WHEN EXTRACT(DAY FROM (CURRENT_DATE -CAST(c.date_received AS DATE))) > 30 THEN '>30d' 
+														 END 													AS 				hd_age_slices
+													   , CAST(c.date_received AS DATETIME )  					AS  			hd_date_received_YMD
+													   , 'NULL'                        							AS  			hd_customer                                          
+													   , 'NULL'         										AS  			hd_customer_code
+													   , c.CLIENT_ORGANIZATION_ID                               AS  			hd_Client_Organization_ID
+													   , c.CLIENT_ORGANIZATION_CODE                             AS  			hd_Client_Organization_Code
+													   , c.CLIENT_ORGANIZATION_NAME                             AS  			hd_Client_Organization_Name
+													   , CURRENT_DATETIME              							AS  			creation_timestamp
+													   , 'N'                 									AS  			is_deleted
+													   FROM 
+													   `%s` c
+													   LEFT JOIN
+													   `%s` b 
+													   ON c.building_reference = b.building_name
+													   ) s
+													ON s.hd_call_id = h.hd_call_id and h.is_deleted = 'N'
+													WHEN NOT matched THEN
+													INSERT
+													(	pk_fact_helpdesk_seq_id,
+														hd_call_id,
+														hd_external_ref,
+														hd_priority,
+														hd_cause,
+														hd_book_method,
+														hd_date_received,
+														hd_due_date,
+														hd_date_closed,
+														hd_nature_code,
+														hd_nature,
+														hd_nature_l1,
+														hd_nature_l2,
+														hd_nature_l3,
+														hd_caller_name,
+														hd_caller_code,
+														hd_caller_department,
+														hd_caller_department_code,
+														hd_caller_company,
+														hd_caller_company_code,
+														hd_ASsigned_person_name,
+														hd_ASsigned_person_code,
+														hd_ASsigned_person_department,
+														hd_ASsigned_person_department_code,
+														hd_ASsigned_person_company,
+														hd_ASsigned_person_company_code,
+														hd_area_code,
+														hd_area_reference,
+														hd_site_code,
+														hd_site_reference,
+														hd_building_code,
+														hd_building_reference,
+														hd_floor_code,
+														hd_floor_reference,
+														hd_room_code,
+														hd_room_reference,
+														hd_status_code,
+														hd_status,
+														hd_status_clASs,
+														--hd_elapsed_time,
+														hd_reference,
+														hd_city,
+														hd_country,
+														hd_building_type,
+														--hd_elapsed_time_slices,
+														hd_date_received_YMD,
+														hd_customer,
+														hd_customer_code,
+														hd_Client_Organization_ID,
+														hd_Client_Organization_Code,
+														hd_Client_Organization_Name,
+														creation_timestamp,
+														is_deleted
+												   )  
+												VALUES
+												(       pk_fact_helpdesk_seq_id,
+														hd_call_id,
+														hd_external_ref,
+														hd_priority,
+														hd_cause,
+														hd_book_method,
+														hd_date_received,
+														hd_due_date,
+														hd_date_closed,
+														hd_nature_code,
+														hd_nature,
+														hd_nature_l1,
+														hd_nature_l2,
+														hd_nature_l3,
+														hd_caller_name,
+														hd_caller_code,
+														hd_caller_department,
+														hd_caller_department_code,
+														hd_caller_company,
+														hd_caller_company_code,
+														hd_ASsigned_person_name,
+														hd_ASsigned_person_code,
+														hd_ASsigned_person_department,
+														hd_ASsigned_person_department_code,
+														hd_ASsigned_person_company,
+														hd_ASsigned_person_company_code,
+														hd_area_code,
+														hd_area_reference,
+														hd_site_code,
+														hd_site_reference,
+														hd_building_code,
+														hd_building_reference,
+														hd_floor_code,
+														hd_floor_reference,
+														hd_room_code,
+														hd_room_reference,
+														hd_status_code,
+														hd_status,
+														hd_status_clASs,
+														--hd_elapsed_time,
+														hd_reference,
+														hd_city,
+														hd_country,
+														hd_building_type,
+														--hd_elapsed_time_slices,
+														hd_date_received_YMD,
+														hd_customer,
+														hd_customer_code,
+														hd_Client_Organization_ID,
+														hd_Client_Organization_Code,
+														hd_Client_Organization_Name,
+														creation_timestamp,
+														is_deleted
+												   )
+									"""
+									,fact_helpdesk, MV_REP_CALLS , MV_REP_BUILDING_STATS);
+						   
+
+			EXECUTE IMMEDIATE mcs_fact_helpdesk_insert;
+
+		EXCEPTION WHEN ERROR THEN
+			
+			SET strRemarks 			= 'Failed in '||strProcName||', check error_log table for more info';
+			SET strErrorMessage 	= @@error.message;
+			SET error_txt		  	= 'Failed in mcs_fact_helpdesk_insert '||' ~'||@@error.statement_text;
+			  
+			CALL `cobundu-bi-playground.dataform_sd_procedure.Execution_log`(p_dataset_name, strProcName, 'E', strRemarks);
+			CALL `cobundu-bi-playground.dataform_sd_procedure.Error_log`(p_dataset_name, strErrorMessage, error_txt);
+
+		END;
+	ELSE
+		SET MV_REP_CALLS 	  			= `cobundu-bi-playground.dataform_sd_procedure.get_variable_name`(p_project_id, p_dataset_name, 'MV_REP_CALLS_'||p_num);
+		SET MV_REP_BUILDING_STATS 	   	= `cobundu-bi-playground.dataform_sd_procedure.get_variable_name`(p_project_id, p_dataset_name, 'MV_REP_BUILDING_STATS_'||p_num);
+		
+		IF MV_REP_CALLS IS NOT NULL 
+		OR MV_REP_BUILDING_STATS IS NOT NULL
+		THEN
+		---#################################
+		---FACT_HELPDESK UPDATE CURRENT DAY
+		---################################
+			BEGIN
+				SET mcs_fact_helpdesk_update = FORMAT("""
+													MERGE INTO `%s` h
+															using
+															(
+															  SELECT 
+															 c.call_id      									AS           hd_call_id
+														   , c.ext_reference            						AS           hd_external_ref
+														   , c.priority                 						AS           hd_priority
+														   , c.cause       										AS           hd_cause
+														   , c.book_method                                      AS           hd_book_method
+														   , DATETIME(c.date_received,"America/New_York")       AS           hd_date_received
+														   , DATETIME(c.date_due,"America/New_York")            AS           hd_due_date
+														   , DATETIME(c.date_closed ,"America/New_York")        AS           hd_date_closed 
+														   , c.nature_code                           			AS           hd_nature_code
+														   , c.nature_reference   								AS           hd_nature
+														   , c.nature_lvl1                             			AS           hd_nature_l1
+														   , c.nature_lvl2                             			AS           hd_nature_l2
+														   , c.nature_lvl3                             			AS           hd_nature_l3
+														   , c.caller_name                           			AS           hd_caller_name
+														   , c.caller_code                             			AS           hd_caller_code
+														   , c.caller_dept_name  								AS           hd_caller_department
+														   , c.caller_dept_code    								AS           hd_caller_department_code
+														   , c.caller_company_name         						AS           hd_caller_company
+														   , c.caller_company_code          					AS           hd_caller_company_code
+														   , c.ASsigned_name                     				AS           hd_ASsigned_person_name 
+														   , c.ASsigned_code                       				AS           hd_ASsigned_person_code
+														   , c.ASsigned_dept_name          						AS           hd_ASsigned_person_department 
+														   , ASsigned_dept_code  								AS           hd_ASsigned_person_department_code 
+														   , ASsigned_company_name     							AS           hd_ASsigned_person_company
+														   , ASsigned_company_code       						AS           hd_ASsigned_person_company_code
+														   , c.area_code                               			AS           hd_area_code
+														   , c.area_reference                      				AS           hd_area_reference
+														   , c.site_code                                		AS           hd_site_code
+														   , c.site_reference                       			AS           hd_site_reference
+														   , c.building_code                         			AS           hd_building_code
+														   , c.building_reference   							AS           hd_building_reference
+														   , c.floor_code                               		AS           hd_floor_code
+														   , c.floor_reference                      			AS           hd_floor_reference
+														   , c.room_code                             			AS           hd_room_code
+														   , c.room_reference                   			 	AS           hd_room_reference
+														   , c.status_code                            			AS           hd_status_code
+														   , c.status_name                          			AS           hd_status
+														   , c.status_clASs_name  								AS           hd_status_clASs
+														   --, CAST(EXTRACT(DAY FROM c.elapsed_time) AS INT64)    	AS           	hd_elapsed_time
+														   , NULL           										AS  		 	start_by
+														   , c.reference                                			AS           	hd_reference
+														   , b.city                                           		AS  			hd_city
+														   , b.country                                   			AS  			hd_country
+														   , b.building_type_ref   									AS  			hd_building_type
+														   /*, CASE    WHEN EXTRACT(DAY FROM c.elapsed_time) =0 THEN '0d'
+																						 WHEN EXTRACT(DAY FROM c.elapsed_time) =1 THEN '1d'
+																						 WHEN EXTRACT(DAY FROM c.elapsed_time) BETWEEN 2 AND 7 THEN '2-7d'
+																						 WHEN EXTRACT(DAY FROM c.elapsed_time) BETWEEN 8 and 14 THEN '8-14d'
+																						 WHEN EXTRACT(DAY FROM c.elapsed_time) BETWEEN 15 AND 30 THEN '15-30d'
+																						 WHEN EXTRACT(DAY FROM c.elapsed_time) > 30 THEN '>30d' 
+															 END             AS  hd_elapsed_time_slices*/
+														   , CAST(c.date_received AS DATETIME ) 					AS  			hd_date_received_YMD
+														   , 'NULL'         										AS  			hd_customer                                          
+														   , 'NULL'                                         		AS  			hd_customer_code
+														   , c.CLIENT_ORGANIZATION_ID                               AS  			hd_Client_Organization_ID
+														   , c.CLIENT_ORGANIZATION_CODE                             AS  			hd_Client_Organization_Code
+														   , c.CLIENT_ORGANIZATION_NAME                             AS  			hd_Client_Organization_Name
+														   FROM 
+														   (SELECT * FROM `%s` WHERE TIMESTAMP_TRUNC(TIMESTAMP_MILLIS(CAST(datastream_metadata.source_timestamp AS INT64)),DAY) = TIMESTAMP_TRUNC(CURRENT_TIMESTAMP(),DAY)) c
+														   LEFT JOIN
+														   (SELECT * FROM `%s` WHERE TIMESTAMP_TRUNC(TIMESTAMP_MILLIS(CAST(datastream_metadata.source_timestamp AS INT64)),DAY) = TIMESTAMP_TRUNC(CURRENT_TIMESTAMP(),DAY)) b 
+														   ON c.building_reference = b.building_name
+														   ) s
+															ON s.hd_call_id = h.hd_call_id and h.is_deleted = 'Y'
+														   WHEN matched AND
+														   s.hd_external_ref 						<> 		h.hd_external_ref OR
+														   s.hd_priority 							<> 		h.hd_priority OR
+														   s.hd_cause 								<> 		h.hd_cause OR
+														   s.hd_book_method 						<> 		h.hd_book_method OR
+														   s.hd_date_received 						<> 		h.hd_date_received OR
+														   s.hd_due_date 							<> 		h.hd_due_date OR
+														   s.hd_date_closed 						<> 		h.hd_date_closed OR
+														   s.hd_nature_code 						<> 		h.hd_nature_code OR
+														   s.hd_nature 								<> 		h.hd_nature OR
+														   s.hd_nature_l1 							<> 		h.hd_nature_l1 OR
+														   s.hd_nature_l2 							<> 		h.hd_nature_l2 OR
+														   s.hd_nature_l3 							<> 		h.hd_nature_l3 OR
+														   s.hd_caller_name 						<> 		h.hd_caller_name OR
+														   s.hd_caller_code 						<> 		h.hd_caller_code OR
+														   s.hd_caller_department 					<> 		h.hd_caller_department OR
+														   s.hd_caller_department_code 				<> 		h.hd_caller_department_code OR
+														   s.hd_caller_company 						<> 		h.hd_caller_company OR
+														   s.hd_caller_company_code 				<> 		h.hd_caller_company_code OR
+														   s.hd_ASsigned_person_name 				<> 		h.hd_ASsigned_person_name OR
+														   s.hd_ASsigned_person_code 				<> 		h.hd_ASsigned_person_code OR
+														   s.hd_ASsigned_person_department 			<> 		h.hd_ASsigned_person_department OR
+														   s.hd_ASsigned_person_department_code 	<> 		h.hd_ASsigned_person_department_code OR
+														   s.hd_ASsigned_person_company 			<> 		h.hd_ASsigned_person_company OR
+														   s.hd_ASsigned_person_company_code 		<> 		h.hd_ASsigned_person_company_code OR
+														   s.hd_area_code 							<> 		h.hd_area_code OR
+														   s.hd_area_reference 						<> 		h.hd_area_reference OR
+														   s.hd_site_code							<> 		h.hd_site_code OR
+														   s.hd_site_reference 						<> 		h.hd_site_reference OR
+														   s.hd_building_code 						<> 		h.hd_building_code OR
+														   s.hd_building_reference 					<> 		h.hd_building_reference OR
+														   s.hd_floor_code 							<> 		h.hd_floor_code OR
+														   s.hd_floor_reference 					<> 		h.hd_floor_reference OR
+														   s.hd_room_code 							<> 		h.hd_room_code OR
+														   s.hd_room_reference 						<> 		h.hd_room_reference OR
+														   s.hd_status_code 						<> 		h.hd_status_code OR
+														   s.hd_status 								<> 		h.hd_status OR
+														   s.hd_status_clASs 						<> 		h.hd_status_clASs OR
+														   --s.hd_elapsed_time 						<> 		h.hd_elapsed_time OR
+														   s.hd_reference 							<> 		h.hd_reference OR
+														   s.hd_city 								<> 		h.hd_city OR
+														   s.hd_country 							<> 		h.hd_country OR
+														   s.hd_building_type 						<> 		h.hd_building_type OR
+														   --s.hd_elapsed_time_slices	 			<> 		h.hd_elapsed_time_slices OR
+														   s.hd_date_received_YMD 					<> 		h.hd_date_received_YMD OR
+														   s.hd_customer 							<> 		h.hd_customer OR
+														   s.hd_customer_code 						<> 		h.hd_customer_code OR
+														   s.hd_Client_Organization_ID 				<> 		h.hd_Client_Organization_ID OR
+														   s.hd_Client_Organization_Code 			<> 		h.hd_Client_Organization_Code OR
+														   s.hd_Client_Organization_Name 			<> 		h.hd_Client_Organization_Name
+														   THEN UPDATE SET is_deleted = 'Y',modification_timestamp = CURRENT_DATETIME"""
+													,fact_helpdesk, MV_REP_CALLS , MV_REP_BUILDING_STATS);          
+
+				EXECUTE IMMEDIATE mcs_fact_helpdesk_update;
+			
+			EXCEPTION WHEN ERROR THEN
+
+			  SET strRemarks 		= 'Failed in '||strProcName||', check error_log table for more info';
+			  SET strErrorMessage 	= @@error.message;
+			  SET error_txt		  	= 'Failed in mcs_fact_helpdesk_update for current day load '||CURRENT_DATE||' ~'||@@error.statement_text;
+			  
+			  CALL `cobundu-bi-playground.dataform_sd_procedure.Execution_log`(p_dataset_name, strProcName, 'E', strRemarks);
+			  CALL `cobundu-bi-playground.dataform_sd_procedure.Error_log`(p_dataset_name, strErrorMessage, error_txt);
+
+			END;
+			
+			---#################################
+			---FACT_HELPDESK INSERT CURRENT DAY
+			---#################################
+
+			BEGIN
+				SET mcs_fact_helpdesk_insert = FORMAT("""
+														MERGE INTO `%s` h
+														USING
+															   (
+															   SELECT 
+																 ROW_NUMBER() OVER()       								AS			 	pk_fact_helpdesk_seq_id
+															   , c.call_id      										AS           	hd_call_id
+															   , c.ext_reference                        				AS           	hd_external_ref
+															   , c.priority                                     		AS           	hd_priority
+															   , c.cause       											AS           	hd_cause
+															   , c.book_method                                        	AS           	hd_book_method
+															   , DATETIME(c.date_received,"America/New_York")         	AS           	hd_date_received
+															   , DATETIME(c.date_due,"America/New_York")              	AS           	hd_due_date
+															   , DATETIME(c.date_closed ,"America/New_York")          	AS           	hd_date_closed 
+															   , c.nature_code                           				AS           	hd_nature_code
+															   , c.nature_reference   									AS              hd_nature
+															   , c.nature_lvl1                             				AS           	hd_nature_l1
+															   , c.nature_lvl2                             				AS           	hd_nature_l2
+															   , c.nature_lvl3                             				AS           	hd_nature_l3
+															   , c.caller_name                           				AS           	hd_caller_name
+															   , c.caller_code                             				AS           	hd_caller_code
+															   , c.caller_dept_name  									AS              hd_caller_department
+															   , c.caller_dept_code    									AS              hd_caller_department_code
+															   , c.caller_company_name         							AS           	hd_caller_company
+															   , c.caller_company_code          						AS           	hd_caller_company_code
+															   , c.ASsigned_name                     					AS           	hd_ASsigned_person_name 
+															   , c.ASsigned_code                       					AS           	hd_ASsigned_person_code
+															   , c.ASsigned_dept_name          							AS           	hd_ASsigned_person_department 
+															   , ASsigned_dept_code  									AS              hd_ASsigned_person_department_code 
+															   , ASsigned_company_name     								AS           	hd_ASsigned_person_company
+															   , ASsigned_company_code       							AS           	hd_ASsigned_person_company_code
+															   , c.area_code                               				AS           	hd_area_code
+															   , c.area_reference                      					AS           	hd_area_reference
+															   , c.site_code                                			AS           	hd_site_code
+															   , c.site_reference                       				AS           	hd_site_reference
+															   , c.building_code                         				AS           	hd_building_code
+															   , c.building_reference   								AS              hd_building_reference
+															   , c.floor_code                               			AS           	hd_floor_code
+															   , c.floor_reference                      				AS           	hd_floor_reference
+															   , c.room_code                             				AS           	hd_room_code
+															   , c.room_reference                    					AS           	hd_room_reference
+															   , c.status_code                            				AS           	hd_status_code
+															   , c.status_name                          				AS           	hd_status
+															   , c.status_clASs_name  									AS              hd_status_clASs
+															   --, CAST(EXTRACT(DAY FROM c.elapsed_time) AS INT64)    	AS           	hd_elapsed_time
+															   , CURRENT_DATETIME              							AS  			start_date
+															   , NULL           										AS  			start_by
+															   , c.reference                                			AS           	hd_reference
+															   , b.city                                           		AS  			hd_city
+															   , b.country                                   			AS  			hd_country
+															   , b.building_type_ref   									AS  			hd_building_type
+															   /*, CASE    WHEN EXTRACT(DAY FROM c.elapsed_time) =0 THEN '0d'
+																							 WHEN EXTRACT(DAY FROM c.elapsed_time) =1 THEN '1d'
+																							 WHEN EXTRACT(DAY FROM c.elapsed_time) BETWEEN 2 AND 7 THEN '2-7d'
+																							 WHEN EXTRACT(DAY FROM c.elapsed_time) BETWEEN 8 and 14 THEN '8-14d'
+																							 WHEN EXTRACT(DAY FROM c.elapsed_time) BETWEEN 15 AND 30 THEN '15-30d'
+																							 WHEN EXTRACT(DAY FROM c.elapsed_time) > 30 THEN '>30d' 
+																 END             										AS  			hd_elapsed_time_slices
+																 */
+															   , CAST(EXTRACT(DAY FROM (CURRENT_DATE -CAST(c.date_received AS DATE))) AS INT64)   AS 	hd_age
+															   , CASE    WHEN EXTRACT(DAY FROM (CURRENT_DATE -CAST(c.date_received AS DATE))) =0 THEN '0d'
+																							 WHEN EXTRACT(DAY FROM (CURRENT_DATE -CAST(c.date_received AS DATE))) =1 THEN '1d'
+																							 WHEN EXTRACT(DAY FROM (CURRENT_DATE -CAST(c.date_received AS DATE))) BETWEEN 2 AND 7  THEN '2-7d'
+																							 WHEN EXTRACT(DAY FROM (CURRENT_DATE -CAST(c.date_received AS DATE))) BETWEEN 8 and 14   THEN '8-14d'
+																							 WHEN EXTRACT(DAY FROM (CURRENT_DATE -CAST(c.date_received AS DATE))) BETWEEN 15 AND 30 THEN '15-30d'
+																							 WHEN EXTRACT(DAY FROM (CURRENT_DATE -CAST(c.date_received AS DATE))) > 30 THEN '>30d' 
+																 END 													AS 				hd_age_slices
+															   , CAST(c.date_received AS DATETIME )  					AS  			hd_date_received_YMD
+															   , 'NULL'                        							AS  			hd_customer                                          
+															   , 'NULL'         										AS  			hd_customer_code
+															   , c.CLIENT_ORGANIZATION_ID                               AS  			hd_Client_Organization_ID
+															   , c.CLIENT_ORGANIZATION_CODE                             AS  			hd_Client_Organization_Code
+															   , c.CLIENT_ORGANIZATION_NAME                             AS  			hd_Client_Organization_Name
+															   , CURRENT_DATETIME              							AS  			creation_timestamp
+															   , 'N'                 									AS  			is_deleted
+															   FROM 
+															   (SELECT * FROM `%s` WHERE TIMESTAMP_TRUNC(TIMESTAMP_MILLIS(CAST(datastream_metadata.source_timestamp AS INT64)),DAY) = TIMESTAMP_TRUNC(CURRENT_TIMESTAMP(),DAY)) c
+															   LEFT JOIN
+															   (SELECT * FROM `%s` WHERE TIMESTAMP_TRUNC(TIMESTAMP_MILLIS(CAST(datastream_metadata.source_timestamp AS INT64)),DAY) = TIMESTAMP_TRUNC(CURRENT_TIMESTAMP(),DAY)) b 
+															   ON c.building_reference = b.building_name
+															   ) s
+														ON s.hd_call_id = h.hd_call_id and h.is_deleted = 'N'
+														WHEN NOT matched THEN
+														INSERT
+														(	pk_fact_helpdesk_seq_id,
+															hd_call_id,
+															hd_external_ref,
+															hd_priority,
+															hd_cause,
+															hd_book_method,
+															hd_date_received,
+															hd_due_date,
+															hd_date_closed,
+															hd_nature_code,
+															hd_nature,
+															hd_nature_l1,
+															hd_nature_l2,
+															hd_nature_l3,
+															hd_caller_name,
+															hd_caller_code,
+															hd_caller_department,
+															hd_caller_department_code,
+															hd_caller_company,
+															hd_caller_company_code,
+															hd_ASsigned_person_name,
+															hd_ASsigned_person_code,
+															hd_ASsigned_person_department,
+															hd_ASsigned_person_department_code,
+															hd_ASsigned_person_company,
+															hd_ASsigned_person_company_code,
+															hd_area_code,
+															hd_area_reference,
+															hd_site_code,
+															hd_site_reference,
+															hd_building_code,
+															hd_building_reference,
+															hd_floor_code,
+															hd_floor_reference,
+															hd_room_code,
+															hd_room_reference,
+															hd_status_code,
+															hd_status,
+															hd_status_clASs,
+															--hd_elapsed_time,
+															hd_reference,
+															hd_city,
+															hd_country,
+															hd_building_type,
+															--hd_elapsed_time_slices,
+															hd_date_received_YMD,
+															hd_customer,
+															hd_customer_code,
+															hd_Client_Organization_ID,
+															hd_Client_Organization_Code,
+															hd_Client_Organization_Name,
+															creation_timestamp,
+															is_deleted
+													   )  
+													VALUES
+													(       pk_fact_helpdesk_seq_id,
+															hd_call_id,
+															hd_external_ref,
+															hd_priority,
+															hd_cause,
+															hd_book_method,
+															hd_date_received,
+															hd_due_date,
+															hd_date_closed,
+															hd_nature_code,
+															hd_nature,
+															hd_nature_l1,
+															hd_nature_l2,
+															hd_nature_l3,
+															hd_caller_name,
+															hd_caller_code,
+															hd_caller_department,
+															hd_caller_department_code,
+															hd_caller_company,
+															hd_caller_company_code,
+															hd_ASsigned_person_name,
+															hd_ASsigned_person_code,
+															hd_ASsigned_person_department,
+															hd_ASsigned_person_department_code,
+															hd_ASsigned_person_company,
+															hd_ASsigned_person_company_code,
+															hd_area_code,
+															hd_area_reference,
+															hd_site_code,
+															hd_site_reference,
+															hd_building_code,
+															hd_building_reference,
+															hd_floor_code,
+															hd_floor_reference,
+															hd_room_code,
+															hd_room_reference,
+															hd_status_code,
+															hd_status,
+															hd_status_clASs,
+															--hd_elapsed_time,
+															hd_reference,
+															hd_city,
+															hd_country,
+															hd_building_type,
+															--hd_elapsed_time_slices,
+															hd_date_received_YMD,
+															hd_customer,
+															hd_customer_code,
+															hd_Client_Organization_ID,
+															hd_Client_Organization_Code,
+															hd_Client_Organization_Name,
+															creation_timestamp,
+															is_deleted
+													   )
+										"""
+										,fact_helpdesk, MV_REP_CALLS , MV_REP_BUILDING_STATS);
+							   
+
+				EXECUTE IMMEDIATE mcs_fact_helpdesk_insert;
+
+			EXCEPTION WHEN ERROR THEN
+
+				SET strRemarks 			= 'Failed in '||strProcName||', check error_log table for more info';
+				SET strErrorMessage 	= @@error.message;
+				SET error_txt		  	= 'Failed in mcs_fact_helpdesk_insert for current day load '||CURRENT_DATE||' ~'||@@error.statement_text;
+
+				CALL `cobundu-bi-playground.dataform_sd_procedure.Execution_log`(p_dataset_name, strProcName, 'E', strRemarks);
+				CALL `cobundu-bi-playground.dataform_sd_procedure.Error_log`(p_dataset_name, strErrorMessage, error_txt);
+
+			END;
+		END IF;
+	END IF;
+	
+	SET strRemarks = 'Completed Successfully';
+	CALL `cobundu-bi-playground.dataform_sd_procedure.Execution_log`(p_dataset_name, strProcName, 'E', strRemarks);
+	
+EXCEPTION WHEN ERROR THEN
+
+	CALL `cobundu-bi-playground.dataform_sd_procedure.Execution_log`(p_dataset_name, 'pr_fact_helpdesk', 'E', 'Failed');
+	CALL `cobundu-bi-playground.dataform_sd_procedure.Error_log`(p_dataset_name, @@error.message, @@error.statement_text);
+
+END;	

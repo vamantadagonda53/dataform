@@ -1,0 +1,639 @@
+CREATE OR REPLACE PROCEDURE `cobundu-bi-playground.dataform_sd_procedure.pr_fact_corporate_real_estate`(IN p_project_id STRING, IN p_dataset_name STRING, IN p_num INT64)
+BEGIN
+	DECLARE 	nCount									INT64;
+	DECLARE		strSqlSnt								STRING;
+	DECLARE 	MV_REP_LEASE_OUT						STRING;
+	DECLARE 	mcs_fact_corporate_real_estate_update 	STRING;
+	DECLARE		mcs_fact_corporate_real_estate_insert	STRING;
+	DECLARE		FACT_CORPORATE_REAL_ESTATE				STRING;
+	DECLARE		strRemarks								STRING;
+	DECLARE 	error_txt								STRING;
+	DECLARE 	strErrorMessage         				STRING;
+	DECLARE		strProcName								STRING;
+	
+	SET strProcName 				= 'pr_fact_corporate_real_estate';
+	SET strRemarks					= '';
+	SET FACT_CORPORATE_REAL_ESTATE  = p_project_id||'.'||p_dataset_name||'.FACT_CORPORATE_REAL_ESTATE';
+	
+	CALL `cobundu-bi-playground.dataform_sd_procedure.Execution_log`(p_dataset_name, strProcName, 'S', strRemarks);
+	
+	SET strSqlSnt = FORMAT("""SELECT COUNT(*) FROM `%s` """,FACT_CORPORATE_REAL_ESTATE);
+
+	EXECUTE IMMEDIATE strSqlSnt INTO nCount;
+				
+	IF nCount <= 1
+	THEN
+		SET MV_REP_LEASE_OUT 		= 	p_project_id||'.'||p_dataset_name||'.MV_REP_LEASE_OUT_'||p_num;															
+		--##############################
+		--FACT_CORPORATE_REAL_ESTATE --UPDATE
+		--##############################
+
+		BEGIN	
+			SET mcs_fact_corporate_real_estate_update = FORMAT("""
+																MERGE INTO `%s` d
+																using
+																	(
+																	SELECT 
+																	  lease_condition_id 								AS 	corp_real_estate_lease_condition_id,
+																	  item_nr 											AS 	corp_real_estate_item_nr,
+																	  item_name 										AS 	corp_real_estate_item_name,
+																	  product_code 										AS 	corp_real_estate_product_code,
+																	  product_category 									AS 	corp_real_estate_product_category,
+																	  --TO_DATE (lease_start_date,'DD-MON-YY') 			AS 	lease_start_date,
+																	  --TO_DATE(substring(lease_end_date,1,7)|| 20 
+																	  --|| substring(lease_end_date,8),'DD-MON-YYYY') 	AS 	lease_end_date,
+																	  date(lease_start_date) 							AS 	corp_real_estate_lease_start_date,
+																	  date(lease_end_date) 								AS 	corp_real_estate_lease_end_date,
+																	  lease_currency 									AS 	corp_real_estate_lease_currency,
+																	  lease_status 										AS 	corp_real_estate_lease_status,
+																	  CAST(unit_price as numeric) 						AS 	corp_real_estate_unit_price,
+																	  unit_price_interval 								AS 	corp_real_estate_unit_price_interval,
+																	  unit_price_uom 									AS 	corp_real_estate_unit_price_uom,
+																	  CAST(qty as numeric) 								AS 	corp_real_estate_qty,
+																	  CAST(lease_amount as numeric) 					AS 	corp_real_estate_lease_amount,
+																	  lease_interval 									AS 	corp_real_estate_lease_interval,
+																	  is_advance_payment 								AS 	corp_real_estate_is_advance_payment,
+																	  room_category_group 								AS 	corp_real_estate_room_category_group,
+																	  cost_category 									AS 	corp_real_estate_cost_category,
+																	  contract_id 										AS 	corp_real_estate_contract_id,
+																	  contract_code 									AS 	corp_real_estate_contract_code,
+																	  contract_name 									AS 	corp_real_estate_contract_name,
+																	  contract_type_code 								AS 	corp_real_estate_contract_type_code,
+																	  contract_type 									AS 	corp_real_estate_contract_type,
+																	  contract_status 									AS 	corp_real_estate_contract_status,
+																	  --TO_DATE(contract_start_date,'DD-MON-YY') 		AS 	contract_start_date,
+																	  --TO_DATE(substring(contract_end_date,1,7)|| 20 
+																	  --|| substring(contract_end_date,8),'DD-MON-YYYY') 	AS	contract_end_date,
+																	  date(contract_start_date) 							AS 	corp_real_estate_contract_start_date,
+																	  date(contract_end_date) 								AS 	corp_real_estate_contract_end_date,
+																	  contract_version 										AS 	corp_real_estate_contract_version,
+																	  CAST(contract_total_value AS numeric) 				AS  corp_real_estate_contract_total_value,
+																	  CAST(contract_negotiated_value AS numeric) 			AS 	corp_real_estate_contract_negotiated_value,
+																	  CAST(contract_earned_value AS numeric) 				AS 	corp_real_estate_contract_earned_value ,
+																	  CAST(contract_estimated_value AS numeric) 			AS 	corp_real_estate_contract_estimated_value,
+																	  CAST(contract_approval_value  AS numeric) 			AS 	corp_real_estate_contract_approval_value,
+																	  contract_currency 									AS 	corp_real_estate_contract_currency,
+																	  tenant_id 											AS 	corp_real_estate_tenant_id,
+																	  tenant_code 											AS 	corp_real_estate_tenant_code,
+																	  tenant 												AS 	corp_real_estate_tenant,
+																	  supplier_id 											AS 	corp_real_estate_supplier_id,
+																	  supplier_code 										AS 	corp_real_estate_supplier_code,
+																	  supplier 												AS 	corp_real_estate_supplier,
+																	  CLIENT_ORGANIZATION_ID 								AS 	corp_real_estate_client_organization_id,
+																	  CLIENT_ORGANIZATION_CODE 								AS 	corp_real_estate_client_organization_code,
+																	  CLIENT_ORGANIZATION_NAME 								AS 	corp_real_estate_client_organization_name
+																	FROM `%s`
+																	) s 
+																ON s.corp_real_estate_lease_condition_id = d.corp_real_estate_lease_condition_id
+																AND is_deleted = 'N'
+																WHEN MATCHED AND 
+																	s.corp_real_estate_item_nr 						<>		d.corp_real_estate_item_nr OR
+																	s.corp_real_estate_item_name 					<>		d.corp_real_estate_item_name OR
+																	s.corp_real_estate_product_code 				<>		d.corp_real_estate_product_code OR
+																	s.corp_real_estate_product_category 			<>		d.corp_real_estate_product_category OR
+																	s.corp_real_estate_lease_start_date 			<>		d.corp_real_estate_lease_start_date OR
+																	s.corp_real_estate_lease_end_date 				<>		d.corp_real_estate_lease_end_date OR
+																	s.corp_real_estate_lease_currency 				<>		d.corp_real_estate_lease_currency OR
+																	s.corp_real_estate_lease_status 				<>		d.corp_real_estate_lease_status OR
+																	s.corp_real_estate_unit_price 					<>		d.corp_real_estate_unit_price OR
+																	s.corp_real_estate_unit_price_interval 			<>		d.corp_real_estate_unit_price_interval OR
+																	s.corp_real_estate_unit_price_uom 				<>		d.corp_real_estate_unit_price_uom OR
+																	s.corp_real_estate_qty 							<>		d.corp_real_estate_qty OR
+																	s.corp_real_estate_lease_amount 				<>		d.corp_real_estate_lease_amount OR
+																	s.corp_real_estate_lease_interval 				<>		d.corp_real_estate_lease_interval OR
+																	s.corp_real_estate_is_advance_payment 			<>		d.corp_real_estate_is_advance_payment OR
+																	s.corp_real_estate_room_category_group 			<>		d.corp_real_estate_room_category_group OR
+																	s.corp_real_estate_cost_category 				<>		d.corp_real_estate_cost_category OR
+																	s.corp_real_estate_contract_id 					<>		d.corp_real_estate_contract_id OR
+																	s.corp_real_estate_contract_code 				<>		d.corp_real_estate_contract_code OR
+																	s.corp_real_estate_contract_name 				<>		d.corp_real_estate_contract_name OR
+																	s.corp_real_estate_contract_type_code 			<>		d.corp_real_estate_contract_type_code OR
+																	s.corp_real_estate_contract_type 				<>		d.corp_real_estate_contract_type OR
+																	s.corp_real_estate_contract_status 				<>		d.corp_real_estate_contract_status OR
+																	s.corp_real_estate_contract_start_date 			<>		d.corp_real_estate_contract_start_date OR
+																	s.corp_real_estate_contract_end_date 			<>		d.corp_real_estate_contract_end_date OR
+																	s.corp_real_estate_contract_version 			<>		d.corp_real_estate_contract_version OR
+																	s.corp_real_estate_contract_total_value 		<>		d.corp_real_estate_contract_total_value OR
+																	s.corp_real_estate_contract_negotiated_value 	<>		d.corp_real_estate_contract_negotiated_value OR
+																	s.corp_real_estate_contract_earned_value 		<> 		d.corp_real_estate_contract_earned_value OR
+																	s.corp_real_estate_contract_estimated_value 	<> 		d.corp_real_estate_contract_estimated_value OR
+																	s.corp_real_estate_contract_approval_value 		<> 		d.corp_real_estate_contract_approval_value OR
+																	s.corp_real_estate_contract_currency 			<> 		d.corp_real_estate_contract_currency OR
+																	s.corp_real_estate_tenant_id 					<> 		d.corp_real_estate_tenant_id OR
+																	s.corp_real_estate_tenant_code 					<> 		d.corp_real_estate_tenant_code OR
+																	s.corp_real_estate_tenant 						<> 		d.corp_real_estate_tenant OR
+																	s.corp_real_estate_supplier_id 					<> 		d.corp_real_estate_supplier_id OR
+																	s.corp_real_estate_supplier_code 				<> 		d.corp_real_estate_supplier_code OR
+																	s.corp_real_estate_supplier 					<> 		d.corp_real_estate_supplier OR
+																	s.corp_real_estate_client_organization_id 		<> 		d.corp_real_estate_client_organization_id OR
+																	s.corp_real_estate_client_organization_code 	<> 		d.corp_real_estate_client_organization_code OR
+																	s.corp_real_estate_client_organization_name 	<> 		d.corp_real_estate_client_organization_name 
+																THEN UPDATE SET is_deleted = 'Y'"""
+															,FACT_CORPORATE_REAL_ESTATE, MV_REP_LEASE_OUT);
+
+				EXECUTE IMMEDIATE mcs_fact_corporate_real_estate_update;
+			
+		EXCEPTION WHEN ERROR THEN
+
+			SET strRemarks 			= 'Failed in '||strProcName||', check error_log table for more info';
+			SET strErrorMessage 	= @@error.message;
+			SET error_txt		  	= 'Failed in mcs_fact_corporate_real_estate_update '||' ~'||@@error.statement_text;
+			  
+			CALL `cobundu-bi-playground.dataform_sd_procedure.Execution_log`(p_dataset_name, strProcName, 'E', strRemarks);
+			CALL `cobundu-bi-playground.dataform_sd_procedure.Error_log`(p_dataset_name, strErrorMessage, error_txt);
+
+		END;
+
+		--##############################
+		--FACT_CORPORATE_REAL_ESTATE --INSERT
+		--##############################
+
+		BEGIN	
+			SET mcs_fact_corporate_real_estate_insert = FORMAT("""
+																MERGE INTO `%s` d
+																using
+																	(
+																	SELECT 
+																	  lease_condition_id 								AS 	corp_real_estate_lease_condition_id,
+																	  item_nr 											AS 	corp_real_estate_item_nr,
+																	  item_name 										AS 	corp_real_estate_item_name,
+																	  product_code 										AS 	corp_real_estate_product_code,
+																	  product_category 									AS 	corp_real_estate_product_category,
+																	  --TO_DATE (lease_start_date,'DD-MON-YY') 			AS 	lease_start_date,
+																	  --TO_DATE(substring(lease_end_date,1,7)|| 20 	
+																	  --|| substring(lease_end_date,8),'DD-MON-YYYY') 	AS 	lease_end_date,
+																	  date(lease_start_date) 							AS 	corp_real_estate_lease_start_date,
+																	  date(lease_end_date) 								AS 	corp_real_estate_lease_end_date,
+																	  lease_currency 									AS 	corp_real_estate_lease_currency,
+																	  lease_status 										AS 	corp_real_estate_lease_status,
+																	  CAST(unit_price as numeric) 						AS 	corp_real_estate_unit_price,
+																	  unit_price_interval 								AS 	corp_real_estate_unit_price_interval,
+																	  unit_price_uom 									AS 	corp_real_estate_unit_price_uom,
+																	  CAST(qty as numeric) 								AS 	corp_real_estate_qty,
+																	  CAST(lease_amount as numeric) 					AS 	corp_real_estate_lease_amount,
+																	  lease_interval 									AS 	corp_real_estate_lease_interval,
+																	  is_advance_payment 								AS 	corp_real_estate_is_advance_payment,
+																	  room_category_group 								AS 	corp_real_estate_room_category_group,
+																	  cost_category 									AS 	corp_real_estate_cost_category,
+																	  contract_id 										AS 	corp_real_estate_contract_id,
+																	  contract_code 									AS 	corp_real_estate_contract_code,
+																	  contract_name 									AS 	corp_real_estate_contract_name,
+																	  contract_type_code 								AS 	corp_real_estate_contract_type_code,
+																	  contract_type 									AS 	corp_real_estate_contract_type,
+																	  contract_status 									AS 	corp_real_estate_contract_status,
+																	  --TO_DATE(contract_start_date,'DD-MON-YY') 		AS 	contract_start_date,
+																	  --TO_DATE(substring(contract_end_date,1,7)|| 20 
+																	  --|| substring(contract_end_date,8),'DD-MON-YYYY') 	AS 	contract_end_date,
+																	  date(contract_start_date) 							AS 	corp_real_estate_contract_start_date,
+																	  date(contract_end_date) 								AS 	corp_real_estate_contract_end_date,
+																	  contract_version 										AS 	corp_real_estate_contract_version,
+																	  CAST(contract_total_value AS numeric) 				AS  corp_real_estate_contract_total_value,
+																	  CAST(contract_negotiated_value AS numeric) 			AS 	corp_real_estate_contract_negotiated_value,
+																	  CAST(contract_earned_value AS numeric) 				AS 	corp_real_estate_contract_earned_value ,
+																	  CAST(contract_estimated_value AS numeric) 			AS 	corp_real_estate_contract_estimated_value,
+																	  CAST(contract_approval_value  AS numeric) 			AS 	corp_real_estate_contract_approval_value,
+																	  contract_currency 									AS 	corp_real_estate_contract_currency,
+																	  tenant_id 											AS 	corp_real_estate_tenant_id,
+																	  tenant_code 											AS 	corp_real_estate_tenant_code,
+																	  tenant 												AS 	corp_real_estate_tenant,
+																	  supplier_id 											AS 	corp_real_estate_supplier_id,
+																	  supplier_code 										AS 	corp_real_estate_supplier_code,
+																	  supplier 												AS 	corp_real_estate_supplier,
+																	  CLIENT_ORGANIZATION_ID 								AS 	corp_real_estate_client_organization_id,
+																	  CLIENT_ORGANIZATION_CODE 								AS 	corp_real_estate_client_organization_code,
+																	  CLIENT_ORGANIZATION_NAME 								AS 	corp_real_estate_client_organization_name,
+																	  CAST(creation_timestamp as datetime) 					AS 	creation_timestamp,
+																	  cast(modification_timestamp as datetime) 				AS 	modification_timestamp
+																	FROM `%s`
+																	) s 
+																ON s.corp_real_estate_lease_condition_id = d.corp_real_estate_lease_condition_id
+																AND is_deleted = 'N'
+																WHEN NOT MATCHED THEN
+																INSERT
+																	(
+																		corp_real_estate_lease_condition_id,
+																		corp_real_estate_item_nr,
+																		corp_real_estate_item_name,
+																		corp_real_estate_product_code,
+																		corp_real_estate_product_category,
+																		corp_real_estate_lease_start_date,
+																		corp_real_estate_lease_end_date,
+																		corp_real_estate_lease_currency,
+																		corp_real_estate_lease_status,
+																		corp_real_estate_unit_price,
+																		corp_real_estate_unit_price_interval,
+																		corp_real_estate_unit_price_uom,
+																		corp_real_estate_qty,
+																		corp_real_estate_lease_amount,
+																		corp_real_estate_lease_interval,
+																		corp_real_estate_is_advance_payment,
+																		corp_real_estate_room_category_group,
+																		corp_real_estate_cost_category,
+																		corp_real_estate_contract_id,
+																		corp_real_estate_contract_code,
+																		corp_real_estate_contract_name,
+																		corp_real_estate_contract_type_code,
+																		corp_real_estate_contract_type,
+																		corp_real_estate_contract_status,
+																		corp_real_estate_contract_start_date,
+																		corp_real_estate_contract_end_date,
+																		corp_real_estate_contract_version,
+																		corp_real_estate_contract_total_value,
+																		corp_real_estate_contract_negotiated_value,
+																		corp_real_estate_contract_earned_value,
+																		corp_real_estate_contract_estimated_value,
+																		corp_real_estate_contract_approval_value,
+																		corp_real_estate_contract_currency,
+																		corp_real_estate_tenant_id,
+																		corp_real_estate_tenant_code,
+																		corp_real_estate_tenant,
+																		corp_real_estate_supplier_id,
+																		corp_real_estate_supplier_code,
+																		corp_real_estate_supplier,
+																		corp_real_estate_client_organization_id,
+																		corp_real_estate_client_organization_code,
+																		corp_real_estate_client_organization_name,
+																		creation_timestamp,
+																		modification_timestamp,
+																		is_deleted,
+																		last_modified_timestamp
+																	)
+																VALUES
+																	(
+																		corp_real_estate_lease_condition_id,
+																		corp_real_estate_item_nr,
+																		corp_real_estate_item_name,
+																		corp_real_estate_product_code,
+																		corp_real_estate_product_category,
+																		corp_real_estate_lease_start_date,
+																		corp_real_estate_lease_end_date,
+																		corp_real_estate_lease_currency,
+																		corp_real_estate_lease_status,
+																		corp_real_estate_unit_price,
+																		corp_real_estate_unit_price_interval,
+																		corp_real_estate_unit_price_uom,
+																		corp_real_estate_qty,
+																		corp_real_estate_lease_amount,
+																		corp_real_estate_lease_interval,
+																		corp_real_estate_is_advance_payment,
+																		corp_real_estate_room_category_group,
+																		corp_real_estate_cost_category,
+																		corp_real_estate_contract_id,
+																		corp_real_estate_contract_code,
+																		corp_real_estate_contract_name,
+																		corp_real_estate_contract_type_code,
+																		corp_real_estate_contract_type,
+																		corp_real_estate_contract_status,
+																		corp_real_estate_contract_start_date,
+																		corp_real_estate_contract_end_date,
+																		corp_real_estate_contract_version,
+																		corp_real_estate_contract_total_value,
+																		corp_real_estate_contract_negotiated_value,
+																		corp_real_estate_contract_earned_value,
+																		corp_real_estate_contract_estimated_value,
+																		corp_real_estate_contract_approval_value,
+																		corp_real_estate_contract_currency,
+																		corp_real_estate_tenant_id,
+																		corp_real_estate_tenant_code,
+																		corp_real_estate_tenant,
+																		corp_real_estate_supplier_id,
+																		corp_real_estate_supplier_code,
+																		corp_real_estate_supplier,
+																		corp_real_estate_client_organization_id,
+																		corp_real_estate_client_organization_code,
+																		corp_real_estate_client_organization_name,
+																		creation_timestamp,
+																		modification_timestamp,
+																		'N',
+																		TIMESTAMP_TRUNC(datetime(current_timestamp(),"CET"), SECOND)
+																	)"""
+															,FACT_CORPORATE_REAL_ESTATE,MV_REP_LEASE_OUT);
+
+			EXECUTE IMMEDIATE mcs_fact_corporate_real_estate_insert;
+			
+		EXCEPTION WHEN ERROR THEN
+			
+			SET strRemarks 			= 'Failed in '||strProcName||', check error_log table for more info';
+			SET strErrorMessage 	= @@error.message;
+			SET error_txt		  	= 'Failed in mcs_fact_corporate_real_estate_insert '||' ~'||@@error.statement_text;
+			  
+			CALL `cobundu-bi-playground.dataform_sd_procedure.Execution_log`(p_dataset_name, strProcName, 'E', strRemarks);
+			CALL `cobundu-bi-playground.dataform_sd_procedure.Error_log`(p_dataset_name, strErrorMessage, error_txt);
+
+		END;
+	ELSE
+		SET MV_REP_LEASE_OUT 		= `cobundu-bi-playground.dataform_sd_procedure.get_variable_name`(p_project_id, p_dataset_name, 'MV_REP_LEASE_OUT_'||p_num);
+		
+		IF MV_REP_LEASE_OUT IS NOT NULL
+		THEN
+			--##############################
+			--FACT_CORPORATE_REAL_ESTATE --UPDATE
+			--##############################
+
+			BEGIN	
+				SET mcs_fact_corporate_real_estate_update = FORMAT("""
+																	MERGE INTO `%s` d
+																	using
+																		(
+																		SELECT 
+																		  lease_condition_id 								AS 	corp_real_estate_lease_condition_id,
+																		  item_nr 											AS 	corp_real_estate_item_nr,
+																		  item_name 										AS 	corp_real_estate_item_name,
+																		  product_code 										AS 	corp_real_estate_product_code,
+																		  product_category 									AS 	corp_real_estate_product_category,
+																		  --TO_DATE (lease_start_date,'DD-MON-YY') 			AS 	lease_start_date,
+																		  --TO_DATE(substring(lease_end_date,1,7)|| 20 
+																		  --|| substring(lease_end_date,8),'DD-MON-YYYY') 	AS 	lease_end_date,
+																		  date(lease_start_date) 							AS 	corp_real_estate_lease_start_date,
+																		  date(lease_end_date) 								AS 	corp_real_estate_lease_end_date,
+																		  lease_currency 									AS 	corp_real_estate_lease_currency,
+																		  lease_status 										AS 	corp_real_estate_lease_status,
+																		  CAST(unit_price as numeric) 						AS 	corp_real_estate_unit_price,
+																		  unit_price_interval 								AS 	corp_real_estate_unit_price_interval,
+																		  unit_price_uom 									AS 	corp_real_estate_unit_price_uom,
+																		  CAST(qty as numeric) 								AS 	corp_real_estate_qty,
+																		  CAST(lease_amount as numeric) 					AS 	corp_real_estate_lease_amount,
+																		  lease_interval 									AS 	corp_real_estate_lease_interval,
+																		  is_advance_payment 								AS 	corp_real_estate_is_advance_payment,
+																		  room_category_group 								AS 	corp_real_estate_room_category_group,
+																		  cost_category 									AS 	corp_real_estate_cost_category,
+																		  contract_id 										AS 	corp_real_estate_contract_id,
+																		  contract_code 									AS 	corp_real_estate_contract_code,
+																		  contract_name 									AS 	corp_real_estate_contract_name,
+																		  contract_type_code 								AS 	corp_real_estate_contract_type_code,
+																		  contract_type 									AS 	corp_real_estate_contract_type,
+																		  contract_status 									AS 	corp_real_estate_contract_status,
+																		  --TO_DATE(contract_start_date,'DD-MON-YY') 		AS 	contract_start_date,
+																		  --TO_DATE(substring(contract_end_date,1,7)|| 20 
+																		  --|| substring(contract_end_date,8),'DD-MON-YYYY') 	AS	contract_end_date,
+																		  date(contract_start_date) 							AS 	corp_real_estate_contract_start_date,
+																		  date(contract_end_date) 								AS 	corp_real_estate_contract_end_date,
+																		  contract_version 										AS 	corp_real_estate_contract_version,
+																		  CAST(contract_total_value AS numeric) 				AS  corp_real_estate_contract_total_value,
+																		  CAST(contract_negotiated_value AS numeric) 			AS 	corp_real_estate_contract_negotiated_value,
+																		  CAST(contract_earned_value AS numeric) 				AS 	corp_real_estate_contract_earned_value ,
+																		  CAST(contract_estimated_value AS numeric) 			AS 	corp_real_estate_contract_estimated_value,
+																		  CAST(contract_approval_value  AS numeric) 			AS 	corp_real_estate_contract_approval_value,
+																		  contract_currency 									AS 	corp_real_estate_contract_currency,
+																		  tenant_id 											AS 	corp_real_estate_tenant_id,
+																		  tenant_code 											AS 	corp_real_estate_tenant_code,
+																		  tenant 												AS 	corp_real_estate_tenant,
+																		  supplier_id 											AS 	corp_real_estate_supplier_id,
+																		  supplier_code 										AS 	corp_real_estate_supplier_code,
+																		  supplier 												AS 	corp_real_estate_supplier,
+																		  CLIENT_ORGANIZATION_ID 								AS 	corp_real_estate_client_organization_id,
+																		  CLIENT_ORGANIZATION_CODE 								AS 	corp_real_estate_client_organization_code,
+																		  CLIENT_ORGANIZATION_NAME 								AS 	corp_real_estate_client_organization_name
+																		FROM `%s`
+																		WHERE TIMESTAMP_TRUNC(TIMESTAMP_MILLIS(CAST(datastream_metadata.source_timestamp AS INT64)),DAY) = TIMESTAMP_TRUNC(CURRENT_TIMESTAMP(),DAY)
+																		) s 
+																	ON s.corp_real_estate_lease_condition_id = d.corp_real_estate_lease_condition_id
+																	AND is_deleted = 'N'
+																	WHEN MATCHED AND 
+																		s.corp_real_estate_item_nr 						<>		d.corp_real_estate_item_nr OR
+																		s.corp_real_estate_item_name 					<>		d.corp_real_estate_item_name OR
+																		s.corp_real_estate_product_code 				<>		d.corp_real_estate_product_code OR
+																		s.corp_real_estate_product_category 			<>		d.corp_real_estate_product_category OR
+																		s.corp_real_estate_lease_start_date 			<>		d.corp_real_estate_lease_start_date OR
+																		s.corp_real_estate_lease_end_date 				<>		d.corp_real_estate_lease_end_date OR
+																		s.corp_real_estate_lease_currency 				<>		d.corp_real_estate_lease_currency OR
+																		s.corp_real_estate_lease_status 				<>		d.corp_real_estate_lease_status OR
+																		s.corp_real_estate_unit_price 					<>		d.corp_real_estate_unit_price OR
+																		s.corp_real_estate_unit_price_interval 			<>		d.corp_real_estate_unit_price_interval OR
+																		s.corp_real_estate_unit_price_uom 				<>		d.corp_real_estate_unit_price_uom OR
+																		s.corp_real_estate_qty 							<>		d.corp_real_estate_qty OR
+																		s.corp_real_estate_lease_amount 				<>		d.corp_real_estate_lease_amount OR
+																		s.corp_real_estate_lease_interval 				<>		d.corp_real_estate_lease_interval OR
+																		s.corp_real_estate_is_advance_payment 			<>		d.corp_real_estate_is_advance_payment OR
+																		s.corp_real_estate_room_category_group 			<>		d.corp_real_estate_room_category_group OR
+																		s.corp_real_estate_cost_category 				<>		d.corp_real_estate_cost_category OR
+																		s.corp_real_estate_contract_id 					<>		d.corp_real_estate_contract_id OR
+																		s.corp_real_estate_contract_code 				<>		d.corp_real_estate_contract_code OR
+																		s.corp_real_estate_contract_name 				<>		d.corp_real_estate_contract_name OR
+																		s.corp_real_estate_contract_type_code 			<>		d.corp_real_estate_contract_type_code OR
+																		s.corp_real_estate_contract_type 				<>		d.corp_real_estate_contract_type OR
+																		s.corp_real_estate_contract_status 				<>		d.corp_real_estate_contract_status OR
+																		s.corp_real_estate_contract_start_date 			<>		d.corp_real_estate_contract_start_date OR
+																		s.corp_real_estate_contract_end_date 			<>		d.corp_real_estate_contract_end_date OR
+																		s.corp_real_estate_contract_version 			<>		d.corp_real_estate_contract_version OR
+																		s.corp_real_estate_contract_total_value 		<>		d.corp_real_estate_contract_total_value OR
+																		s.corp_real_estate_contract_negotiated_value 	<>		d.corp_real_estate_contract_negotiated_value OR
+																		s.corp_real_estate_contract_earned_value 		<> 		d.corp_real_estate_contract_earned_value OR
+																		s.corp_real_estate_contract_estimated_value 	<> 		d.corp_real_estate_contract_estimated_value OR
+																		s.corp_real_estate_contract_approval_value 		<> 		d.corp_real_estate_contract_approval_value OR
+																		s.corp_real_estate_contract_currency 			<> 		d.corp_real_estate_contract_currency OR
+																		s.corp_real_estate_tenant_id 					<> 		d.corp_real_estate_tenant_id OR
+																		s.corp_real_estate_tenant_code 					<> 		d.corp_real_estate_tenant_code OR
+																		s.corp_real_estate_tenant 						<> 		d.corp_real_estate_tenant OR
+																		s.corp_real_estate_supplier_id 					<> 		d.corp_real_estate_supplier_id OR
+																		s.corp_real_estate_supplier_code 				<> 		d.corp_real_estate_supplier_code OR
+																		s.corp_real_estate_supplier 					<> 		d.corp_real_estate_supplier OR
+																		s.corp_real_estate_client_organization_id 		<> 		d.corp_real_estate_client_organization_id OR
+																		s.corp_real_estate_client_organization_code 	<> 		d.corp_real_estate_client_organization_code OR
+																		s.corp_real_estate_client_organization_name 	<> 		d.corp_real_estate_client_organization_name 
+																	THEN UPDATE SET is_deleted = 'Y'"""
+																,FACT_CORPORATE_REAL_ESTATE, MV_REP_LEASE_OUT);
+
+					EXECUTE IMMEDIATE mcs_fact_corporate_real_estate_update;
+				
+			EXCEPTION WHEN ERROR THEN
+			
+				SET strRemarks 		= 'Failed in '||strProcName||', check error_log table for more info';
+				SET strErrorMessage 	= @@error.message;
+				SET error_txt		  	= 'Failed in mcs_fact_corporate_real_estate_update for current day load '||CURRENT_DATE||' ~'||@@error.statement_text;
+
+				CALL `cobundu-bi-playground.dataform_sd_procedure.Execution_log`(p_dataset_name, strProcName, 'E', strRemarks);
+				CALL `cobundu-bi-playground.dataform_sd_procedure.Error_log`(p_dataset_name, strErrorMessage, error_txt);
+
+			END;
+
+			--##############################
+			--FACT_CORPORATE_REAL_ESTATE --INSERT
+			--##############################
+
+			BEGIN	
+				SET mcs_fact_corporate_real_estate_insert = FORMAT("""
+																	MERGE INTO `%s` d
+																	using
+																		(
+																		SELECT 
+																		  lease_condition_id 								AS 	corp_real_estate_lease_condition_id,
+																		  item_nr 											AS 	corp_real_estate_item_nr,
+																		  item_name 										AS 	corp_real_estate_item_name,
+																		  product_code 										AS 	corp_real_estate_product_code,
+																		  product_category 									AS 	corp_real_estate_product_category,
+																		  --TO_DATE (lease_start_date,'DD-MON-YY') 			AS 	lease_start_date,
+																		  --TO_DATE(substring(lease_end_date,1,7)|| 20 	
+																		  --|| substring(lease_end_date,8),'DD-MON-YYYY') 	AS 	lease_end_date,
+																		  date(lease_start_date) 							AS 	corp_real_estate_lease_start_date,
+																		  date(lease_end_date) 								AS 	corp_real_estate_lease_end_date,
+																		  lease_currency 									AS 	corp_real_estate_lease_currency,
+																		  lease_status 										AS 	corp_real_estate_lease_status,
+																		  CAST(unit_price as numeric) 						AS 	corp_real_estate_unit_price,
+																		  unit_price_interval 								AS 	corp_real_estate_unit_price_interval,
+																		  unit_price_uom 									AS 	corp_real_estate_unit_price_uom,
+																		  CAST(qty as numeric) 								AS 	corp_real_estate_qty,
+																		  CAST(lease_amount as numeric) 					AS 	corp_real_estate_lease_amount,
+																		  lease_interval 									AS 	corp_real_estate_lease_interval,
+																		  is_advance_payment 								AS 	corp_real_estate_is_advance_payment,
+																		  room_category_group 								AS 	corp_real_estate_room_category_group,
+																		  cost_category 									AS 	corp_real_estate_cost_category,
+																		  contract_id 										AS 	corp_real_estate_contract_id,
+																		  contract_code 									AS 	corp_real_estate_contract_code,
+																		  contract_name 									AS 	corp_real_estate_contract_name,
+																		  contract_type_code 								AS 	corp_real_estate_contract_type_code,
+																		  contract_type 									AS 	corp_real_estate_contract_type,
+																		  contract_status 									AS 	corp_real_estate_contract_status,
+																		  --TO_DATE(contract_start_date,'DD-MON-YY') 		AS 	contract_start_date,
+																		  --TO_DATE(substring(contract_end_date,1,7)|| 20 
+																		  --|| substring(contract_end_date,8),'DD-MON-YYYY') 	AS 	contract_end_date,
+																		  date(contract_start_date) 							AS 	corp_real_estate_contract_start_date,
+																		  date(contract_end_date) 								AS 	corp_real_estate_contract_end_date,
+																		  contract_version 										AS 	corp_real_estate_contract_version,
+																		  CAST(contract_total_value AS numeric) 				AS  corp_real_estate_contract_total_value,
+																		  CAST(contract_negotiated_value AS numeric) 			AS 	corp_real_estate_contract_negotiated_value,
+																		  CAST(contract_earned_value AS numeric) 				AS 	corp_real_estate_contract_earned_value ,
+																		  CAST(contract_estimated_value AS numeric) 			AS 	corp_real_estate_contract_estimated_value,
+																		  CAST(contract_approval_value  AS numeric) 			AS 	corp_real_estate_contract_approval_value,
+																		  contract_currency 									AS 	corp_real_estate_contract_currency,
+																		  tenant_id 											AS 	corp_real_estate_tenant_id,
+																		  tenant_code 											AS 	corp_real_estate_tenant_code,
+																		  tenant 												AS 	corp_real_estate_tenant,
+																		  supplier_id 											AS 	corp_real_estate_supplier_id,
+																		  supplier_code 										AS 	corp_real_estate_supplier_code,
+																		  supplier 												AS 	corp_real_estate_supplier,
+																		  CLIENT_ORGANIZATION_ID 								AS 	corp_real_estate_client_organization_id,
+																		  CLIENT_ORGANIZATION_CODE 								AS 	corp_real_estate_client_organization_code,
+																		  CLIENT_ORGANIZATION_NAME 								AS 	corp_real_estate_client_organization_name,
+																		  CAST(creation_timestamp as datetime) 					AS 	creation_timestamp,
+																		  cast(modification_timestamp as datetime) 				AS 	modification_timestamp
+																		FROM `%s`
+																		WHERE TIMESTAMP_TRUNC(TIMESTAMP_MILLIS(CAST(datastream_metadata.source_timestamp AS INT64)),DAY) = TIMESTAMP_TRUNC(CURRENT_TIMESTAMP(),DAY)
+																		) s 
+																	ON s.corp_real_estate_lease_condition_id = d.corp_real_estate_lease_condition_id
+																	AND is_deleted = 'N'
+																	WHEN NOT MATCHED THEN
+																	INSERT
+																		(
+																			corp_real_estate_lease_condition_id,
+																			corp_real_estate_item_nr,
+																			corp_real_estate_item_name,
+																			corp_real_estate_product_code,
+																			corp_real_estate_product_category,
+																			corp_real_estate_lease_start_date,
+																			corp_real_estate_lease_end_date,
+																			corp_real_estate_lease_currency,
+																			corp_real_estate_lease_status,
+																			corp_real_estate_unit_price,
+																			corp_real_estate_unit_price_interval,
+																			corp_real_estate_unit_price_uom,
+																			corp_real_estate_qty,
+																			corp_real_estate_lease_amount,
+																			corp_real_estate_lease_interval,
+																			corp_real_estate_is_advance_payment,
+																			corp_real_estate_room_category_group,
+																			corp_real_estate_cost_category,
+																			corp_real_estate_contract_id,
+																			corp_real_estate_contract_code,
+																			corp_real_estate_contract_name,
+																			corp_real_estate_contract_type_code,
+																			corp_real_estate_contract_type,
+																			corp_real_estate_contract_status,
+																			corp_real_estate_contract_start_date,
+																			corp_real_estate_contract_end_date,
+																			corp_real_estate_contract_version,
+																			corp_real_estate_contract_total_value,
+																			corp_real_estate_contract_negotiated_value,
+																			corp_real_estate_contract_earned_value,
+																			corp_real_estate_contract_estimated_value,
+																			corp_real_estate_contract_approval_value,
+																			corp_real_estate_contract_currency,
+																			corp_real_estate_tenant_id,
+																			corp_real_estate_tenant_code,
+																			corp_real_estate_tenant,
+																			corp_real_estate_supplier_id,
+																			corp_real_estate_supplier_code,
+																			corp_real_estate_supplier,
+																			corp_real_estate_client_organization_id,
+																			corp_real_estate_client_organization_code,
+																			corp_real_estate_client_organization_name,
+																			creation_timestamp,
+																			modification_timestamp,
+																			is_deleted,
+																			last_modified_timestamp
+																		)
+																	VALUES
+																		(
+																			corp_real_estate_lease_condition_id,
+																			corp_real_estate_item_nr,
+																			corp_real_estate_item_name,
+																			corp_real_estate_product_code,
+																			corp_real_estate_product_category,
+																			corp_real_estate_lease_start_date,
+																			corp_real_estate_lease_end_date,
+																			corp_real_estate_lease_currency,
+																			corp_real_estate_lease_status,
+																			corp_real_estate_unit_price,
+																			corp_real_estate_unit_price_interval,
+																			corp_real_estate_unit_price_uom,
+																			corp_real_estate_qty,
+																			corp_real_estate_lease_amount,
+																			corp_real_estate_lease_interval,
+																			corp_real_estate_is_advance_payment,
+																			corp_real_estate_room_category_group,
+																			corp_real_estate_cost_category,
+																			corp_real_estate_contract_id,
+																			corp_real_estate_contract_code,
+																			corp_real_estate_contract_name,
+																			corp_real_estate_contract_type_code,
+																			corp_real_estate_contract_type,
+																			corp_real_estate_contract_status,
+																			corp_real_estate_contract_start_date,
+																			corp_real_estate_contract_end_date,
+																			corp_real_estate_contract_version,
+																			corp_real_estate_contract_total_value,
+																			corp_real_estate_contract_negotiated_value,
+																			corp_real_estate_contract_earned_value,
+																			corp_real_estate_contract_estimated_value,
+																			corp_real_estate_contract_approval_value,
+																			corp_real_estate_contract_currency,
+																			corp_real_estate_tenant_id,
+																			corp_real_estate_tenant_code,
+																			corp_real_estate_tenant,
+																			corp_real_estate_supplier_id,
+																			corp_real_estate_supplier_code,
+																			corp_real_estate_supplier,
+																			corp_real_estate_client_organization_id,
+																			corp_real_estate_client_organization_code,
+																			corp_real_estate_client_organization_name,
+																			creation_timestamp,
+																			modification_timestamp,
+																			'N',
+																			TIMESTAMP_TRUNC(datetime(current_timestamp(),"CET"), SECOND)
+																		)"""
+																,FACT_CORPORATE_REAL_ESTATE,MV_REP_LEASE_OUT);
+
+				EXECUTE IMMEDIATE mcs_fact_corporate_real_estate_insert;
+				
+			EXCEPTION WHEN ERROR THEN
+				
+				SET strRemarks 		= 'Failed in '||strProcName||', check error_log table for more info';
+				SET strErrorMessage 	= @@error.message;
+				SET error_txt		  	= 'Failed in mcs_fact_corporate_real_estate_insert for current day load '||CURRENT_DATE||' ~'||@@error.statement_text;
+
+				CALL `cobundu-bi-playground.dataform_sd_procedure.Execution_log`(p_dataset_name, strProcName, 'E', strRemarks);
+				CALL `cobundu-bi-playground.dataform_sd_procedure.Error_log`(p_dataset_name, strErrorMessage, error_txt);
+
+			END;
+		END IF;
+	END IF;
+	
+	SET strRemarks = 'Completed Successfully';
+	CALL `cobundu-bi-playground.dataform_sd_procedure.Execution_log`(p_dataset_name, strProcName, 'E', strRemarks);
+	
+EXCEPTION WHEN ERROR THEN
+
+	CALL `cobundu-bi-playground.dataform_sd_procedure.Execution_log`(p_dataset_name, 'pr_fact_corporate_real_estate', 'E', 'Failed');
+	CALL `cobundu-bi-playground.dataform_sd_procedure.Error_log`(p_dataset_name, @@error.message, @@error.statement_text);
+
+END;

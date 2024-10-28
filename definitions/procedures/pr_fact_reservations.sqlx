@@ -1,0 +1,944 @@
+CREATE OR REPLACE PROCEDURE `cobundu-bi-playground.dataform_sd_procedure.pr_fact_reservations`(IN p_project_id STRING, IN p_dataset_name STRING, IN p_num INT64)
+BEGIN
+	DECLARE 	nCount					INT64;
+	DECLARE		strSqlSnt				STRING;
+	DECLARE 	MV_REP_CLIENT_ORG		STRING;
+	DECLARE		MV_REP_RESERVATIONS		STRING;
+	DECLARE 	mcs_fact_resrv_update 	STRING;
+	DECLARE		mcs_fact_resrv_insert	STRING;
+	DECLARE		fact_reservations		STRING;
+	DECLARE		dim_location			STRING;
+	DECLARE		strRemarks				STRING;
+	DECLARE 	error_txt				STRING;
+	DECLARE 	strErrorMessage         STRING;
+	DECLARE		strProcName				STRING;
+	
+	SET strProcName 		= 'pr_fact_reservations';
+	SET dim_location 		= p_project_id||'.'||p_dataset_name||'.dim_locations';	
+	SET fact_reservations 	= p_project_id||'.'||p_dataset_name||'.fact_reservations';
+	
+	CALL `cobundu-bi-playground.dataform_sd_procedure.Execution_log`(p_dataset_name, strProcName, 'S', '');
+	
+	SET strSqlSnt = FORMAT("""SELECT COUNT(*) FROM `%s` """,fact_reservations);
+	
+	EXECUTE IMMEDIATE strSqlSnt INTO nCount;
+			
+	IF nCount <= 1
+	THEN
+		SET MV_REP_CLIENT_ORG 	  		= p_project_id||'.'||p_dataset_name||'.MV_REP_CLIENT_ORG_'||p_num;
+		SET MV_REP_RESERVATIONS			= p_project_id||'.'||p_dataset_name||'.MV_REP_RESERVATIONS_'||p_num;
+		--######################################	
+		--FACT_RESERVATIONS  -- UPDATE FULL LOAD
+		--######################################
+		BEGIN
+			SET mcs_fact_resrv_update = FORMAT("""
+											MERGE INTO `%s` d
+											USING (
+											  Select  
+											--dept_id
+											  reservation_line_id 							AS   	rsrv_line_id
+											, reservation_id 								AS   	rsrv_id
+											, reservation_class_id 							AS  	rsrv_class
+											, description 									AS   	rsrv_description
+											, note 											AS 		rsrv_note
+											, conference_id 								AS  	rsrv_conference_id
+											, date(from_datetime) 							AS 		date_id 
+											, datetime(from_datetime,"America/New_York") 	AS 		rsrv_from_datetime 
+											, datetime(until_datetime,"America/New_York") 	AS 		rsrv_until_datetime
+											/*
+											, cast(booking_datetime as date) 				AS 		rsrv_booking_datetime
+											,cast(cancellation_datetime as date) 			AS  	rsrv_cancellation_datetime
+											*/
+											, cast(preparation_time  as numeric)			AS  	rsrv_preparation_time
+											, cast(cleanup_time as numeric) 				AS  	rsrv_cleanup_time
+											, cast(duration as numeric) 					AS  	rsrv_duration
+											--, location_id 								AS  	rsrv_room_id
+											--, COALESCE(r.location_id,st.location_id) 		AS 		rsrv_room_id 
+											, resource_code 								AS  	rsrv_resource_code
+											, resource_reference 							AS   	rsrv_resource_ref
+											, resource_class 								AS  	rsrv_resource_class
+											, resource_note 								AS 		rsrv_resource_note
+											--, CAST(resource_picture  AS BYTEA) 			AS 		rsrv_resource_picture
+											, resource_category_reference 					AS  	RSRV_RESOURCE_CATEGORY_REF    
+											--rsrv_room_category_ref
+											, room_layout 									AS   	rsrv_room_layout
+											, room_purpose 									AS   	rsrv_room_purpose
+											, CAST(room_capacity AS BIGINT) 				AS 		rsrv_meeting_room_capacity
+											, CAST(service_quantity  AS BIGINT) 			AS  	rsrv_service_quantity
+											, service_delivery_location 					AS  	rsrv_delivery_location
+											, CAST(canceled AS INT) 						AS 		rsrv_cancelled
+											, CAST(confidential AS INT) 					AS   	rsrv_confidential
+											, cast(is_tentative as string) 					AS 		rsrv_is_tentative
+											, CASE
+												WHEN CAST(is_recurrent AS int ) =0 THEN 'N'
+												WHEN CAST(is_recurrent AS int )=1 THEN 'Y'
+											END   											AS		rsrv_is_recurrent
+											, cast(count_invitees as bigint) 				AS   	rsrv_participants
+											, responsible_name 								AS 		rsrv_people_name
+											, responsible_department_code 					AS 		rsrv_department_code
+											, region_reference 								AS 		rsrv_loc_region
+											, site_reference 								AS 		rsrv_loc_site
+											, d.loc_area 									AS 		rsrv_loc_area
+											, building_reference 							AS 		rsrv_loc_building
+											, floor_reference 								AS  	rsrv_loc_floor
+											, CASE WHEN billing='Yes' then 'Y'
+											  when billing='No' then 'N' end 				AS 		rsrv_billing
+											, fiscal_entity_code 							AS  	rsrv_fiscal_entity_code
+											, gl_account 									AS   	rsrv_gl_account
+											, cost_center 									AS  	rsrv_cost_center
+											, fk1 											AS 		rsrv_fk1
+											, fk2 											AS 		rsrv_fk2
+											, fk3 											AS 		rsrv_fk3
+											, fk4 											AS 		rsrv_fk4
+											, fk5 											AS 		rsrv_fk5
+											, fk6 											AS 		rsrv_fk6
+											, fk7 											AS 		rsrv_fk7
+											, fk8 											AS 		rsrv_fk8
+											--, CAST(quantity AS numeric) 					AS 		rsrv_qty
+											--, uom 										AS 		rsrv_uom
+											--, cast(unit_price as numeric) 				AS 		rsrv_unit_price
+											--, currency	 								AS 		rsrv_currency
+											--, cast(revenue_factor as bigint) 				AS  	rsrv_revenue_factor
+											--, cast(revenue_amount as NUMERIC) 			AS   	rsrv_revenue_amount
+											, project_code 									AS 		rsrv_project_code
+											, project_reference 							AS  	rsrv_project_ref
+											, project_part_code 							AS  	rsrv_project_part_code
+											, project_part_reference 						AS 		rsrv_project_part_ref
+											, resource_reference 							AS   	rsrv_room_name
+											, c.department_id 								AS 		rsrv_department_id
+											, c.department_name 							AS 		department_name,
+											 r.Client_Organization_ID 						AS 		rsrv_Client_Organization_ID,
+											 r.Client_Organization_Code 					AS 		rsrv_Client_Organization_Code,
+											 r.Client_Organization_Name 					AS 		rsrv_Client_Organization_Name
+											FROM `%s` r
+											left join `%s` c
+											on r.responsible_department_code = c.department_code
+											left join (SELECT  DISTINCT LOC_SITE, LOC_aREA from `%s` 
+														WHERE loc_type='SITE' 
+														AND CURRENT_FLAG='Y') d
+											on r.site_reference=d.loc_site
+											--left join  stg_api_location_id st
+											--on r.resource_id = st.reference_id
+											) s 
+											on s.rsrv_line_id = d.rsrv_line_id and d.is_deleted = 'N' 
+											when matched and 
+											s.rsrv_line_id 					<> 		d.rsrv_line_id OR
+											s.rsrv_id 						<> 		d.rsrv_id OR
+											s.rsrv_class 					<> 		d.rsrv_class OR
+											s.rsrv_conference_id 			<> 		d.rsrv_conference_id OR
+											s.rsrv_description 				<> 		d.rsrv_description OR
+											s.rsrv_note 					<> 		d.rsrv_note OR
+											s.rsrv_from_datetime 			<> 		d.rsrv_from_datetime OR
+											s.rsrv_until_datetime 			<> 		d.rsrv_until_datetime OR
+											--s.fk_date_id 					<> 		d.fk_date_id OR
+											--s.rsrv_booking_datetime 		<> 		d.rsrv_booking_datetime OR
+											--s.rsrv_cancellation_datetime 	<> 		d.rsrv_cancellation_datetime OR
+											s.rsrv_preparation_time 		<> 		d.rsrv_preparation_time OR
+											s.rsrv_cleanup_time 			<> 		d.rsrv_cleanup_time OR
+											s.rsrv_duration 				<> 		d.rsrv_duration OR
+											--s.rsrv_cancelled 				<> 		d.rsrv_cancelled OR
+											--s.rsrv_confidential 			<> 		d.rsrv_confidential OR
+											s.rsrv_is_tentative 			<> 		d.rsrv_is_tentative OR
+											--s.rsrv_is_recurrent 			<> 		d.rsrv_is_recurrent OR Find the issue here
+											s.rsrv_participants 			<> 		d.rsrv_participants OR
+											s.rsrv_resource_code 			<> 		d.rsrv_resource_code OR
+											s.rsrv_resource_ref 			<> 		d.rsrv_resource_ref OR
+											s.rsrv_resource_class 			<> 		d.rsrv_resource_class OR
+											--s.rsrv_resource_category_id 	<> 		d.rsrv_resource_category_id OR--
+											--s.rsrv_resource_category 		<> 		d.rsrv_resource_category OR--
+											s.rsrv_resource_category_ref 	<> 		d.rsrv_resource_category_ref OR--
+											s.rsrv_resource_note 			<> 		d.rsrv_resource_note OR
+											--s.rsrv_resource_picture 		<> 		d.rsrv_resource_picture OR
+											s.rsrv_room_layout 				<> 		d.rsrv_room_layout OR
+											s.rsrv_room_purpose 			<> 		d.rsrv_room_purpose OR
+											s.rsrv_meeting_room_capacity 	<> 		d.rsrv_meeting_room_capacity OR
+											s.rsrv_service_quantity 		<> 		d.rsrv_service_quantity OR
+											s.rsrv_delivery_location 		<> 		d.rsrv_delivery_location OR 
+											s.rsrv_people_name 				<> 		d.rsrv_people_name OR
+											--s.rsrv_region_code 			<> 		d.rsrv_region_code OR
+											s.rsrv_loc_region 				<> 		d.rsrv_loc_region OR
+											s.rsrv_loc_area 				<> 		d.rsrv_loc_area OR
+											s.rsrv_loc_site 				<> 		d.rsrv_loc_site OR
+											s.rsrv_loc_building 			<> 		d.rsrv_loc_building OR
+											s.rsrv_loc_floor 				<> 		d.rsrv_loc_floor OR
+											--s.rsrv_room_id 				<> 		d.rsrv_room_id OR  -- do not delete this field
+											s.rsrv_room_name 				<> 		d.rsrv_room_name OR
+											--s.rsrv_billing 				<> 		d.rsrv_billing OR  Find the issue here
+											s.rsrv_fiscal_entity_code 		<> 		d.rsrv_fiscal_entity_code OR
+											s.rsrv_gl_account 				<> 		d.rsrv_gl_account OR
+											s.rsrv_cost_center 				<> 		d.rsrv_cost_center OR
+											s.rsrv_fk1 						<> 		d.rsrv_fk1 OR
+											s.rsrv_fk2 						<> 		d.rsrv_fk2 OR
+											s.rsrv_fk3 						<> 		d.rsrv_fk3 OR
+											s.rsrv_fk4 						<> 		d.rsrv_fk4 OR
+											s.rsrv_fk5 						<> 		d.rsrv_fk5 OR
+											s.rsrv_fk6 						<> 		d.rsrv_fk6 OR
+											s.rsrv_fk7 						<> 		d.rsrv_fk7 OR
+											s.rsrv_fk8 						<> 		d.rsrv_fk8 OR
+											--s.fk_financial_dim_id 		<> 		d.fk_financial_dim_id OR
+											--s.rsrv_cost_item_id 			<> 		d.rsrv_cost_item_id OR
+											--s.rsrv_qty 					<> 		d.rsrv_qty OR -- not found inside s
+											--s.rsrv_uom 					<> 		d.rsrv_uom OR -- not found inside s
+											--s.rsrv_unit_price 			<> 		d.rsrv_unit_price OR  -- not found inside s
+											--s.rsrv_currency 				<> 		d.rsrv_currency OR  -- not found inside s
+											--s.rsrv_revenue_factor 		<> 		d.rsrv_revenue_factor OR -- not found inside s
+											--s.rsrv_revenue_amount 		<> 		d.rsrv_revenue_amount OR -- not found inside s
+											s.rsrv_project_code 			<> 		d.rsrv_project_code OR
+											s.rsrv_project_ref 				<> 		d.rsrv_project_ref OR
+											s.rsrv_project_part_code 		<> 		d.rsrv_project_part_code OR
+											s.rsrv_project_part_ref 		<> 		d.rsrv_project_part_ref OR
+											s.rsrv_department_id 			<> 		d.rsrv_department_id OR
+											--s.fk_dept_id 					<> 		d.fk_dept_id OR
+											--s.dept_id 					<> 		d.dept_id OR  -- do not delete this field
+											s.rsrv_department_code 			<> 		d.rsrv_department_code OR
+											s.department_name 				<> 		d.department_name OR
+											s.rsrv_client_organization_id 	<> 		d.rsrv_client_organization_id OR
+											s.rsrv_client_organization_code <> 		d.rsrv_client_organization_code OR
+											s.rsrv_client_organization_name <> 		d.rsrv_client_organization_name --OR
+											--s.creation_timestamp 			<> 		d.creation_timestamp OR
+											--s.modification_timestamp 		<> 		d.modification_timestamp OR
+											--s.is_deleted 					<> 		d.is_deleted OR
+											--s.start_date 					<> 		d.start_date OR
+											--s.start_by 					<> 		d.start_by OR
+											--s.last_modified_timestamp 	<> 		d.last_modified_timestamp OR
+											then update set is_deleted = 'Y' """
+											,fact_reservations,MV_REP_RESERVATIONS,MV_REP_CLIENT_ORG, dim_location);
+
+			EXECUTE IMMEDIATE mcs_fact_resrv_update;
+		
+		EXCEPTION WHEN ERROR THEN
+
+		  SET strRemarks = 'Failed in '||strProcName||', check error_log table for more info';
+		  SET strErrorMessage = @@error.message;
+		  SET error_txt		  = 'Failed in mcs_fact_resrv_update full load '||'~'||@@error.statement_text;
+		  
+		  CALL `cobundu-bi-playground.dataform_sd_procedure.Execution_log`(p_dataset_name, strProcName, 'E', strRemarks);
+		  CALL `cobundu-bi-playground.dataform_sd_procedure.Error_log`(p_dataset_name, strErrorMessage, error_txt);
+
+		END;
+		
+		--######################################
+		--FACT_RESERVATIONS  -- INSERT FULL LOAD
+		--######################################
+		BEGIN
+			SET mcs_fact_resrv_insert = FORMAT("""
+											MERGE INTO `%s` d
+											USING (
+											Select  --dept_id
+											reservation_line_id 							AS   	rsrv_line_id
+											, reservation_id			 					AS   	rsrv_id
+											, reservation_class_id 							AS		rsrv_class
+											, description 									AS   	rsrv_description
+											, note 											AS 		rsrv_note
+											, conference_id 								AS  	rsrv_conference_id
+											, date(from_datetime) 							AS 		date_id 
+											, datetime(from_datetime,"America/New_York") 	AS 		rsrv_from_datetime 
+											, datetime(until_datetime,"America/New_York") 	AS 		rsrv_until_datetime
+											/*
+											, cast(booking_datetime as date) 				AS 		rsrv_booking_datetime
+											,cast(cancellation_datetime as date) 			AS  	rsrv_cancellation_datetime
+											*/
+											, cast(preparation_time  as numeric)			AS  	rsrv_preparation_time
+											, cast(cleanup_time as numeric) 				AS  	rsrv_cleanup_time
+											, cast(duration as numeric) 					AS  	rsrv_duration
+											--, location_id 								AS  	rsrv_room_id
+											--, COALESCE(r.location_id,st.location_id) 		AS 		rsrv_room_id 
+											, resource_code 								AS  	rsrv_resource_code
+											, resource_reference 							AS   	rsrv_resource_ref
+											, resource_class 								AS  	rsrv_resource_class
+											, resource_note 								AS 		rsrv_resource_note
+											--, CAST(resource_picture  AS BYTEA) 			AS 		rsrv_resource_picture
+											, resource_category_reference 					AS  	RSRV_RESOURCE_CATEGORY_REF    
+											--rsrv_room_category_ref
+											, room_layout 									AS   	rsrv_room_layout
+											, room_purpose 									AS   	rsrv_room_purpose
+											, CAST(room_capacity AS BIGINT) 				AS 		rsrv_meeting_room_capacity
+											, CAST(service_quantity  AS BIGINT) 			AS  	rsrv_service_quantity
+											, service_delivery_location 					AS  	rsrv_delivery_location
+											, CAST(canceled AS INT) 						AS 		rsrv_cancelled
+											, CAST(confidential AS INT) 					AS   	rsrv_confidential
+											, cast(is_tentative as string)  				AS 		rsrv_is_tentative
+											, CASE
+													WHEN CAST(is_recurrent AS int ) =0 THEN 'No'
+													WHEN CAST(is_recurrent AS int )=1 THEN 'Y'
+											END   											AS		rsrv_is_recurrent
+											, cast(count_invitees as bigint) 				AS   	rsrv_participants
+											, responsible_name 								AS 		rsrv_people_name
+											, responsible_department_code 					AS 		rsrv_department_code
+											, region_reference 								AS 		rsrv_loc_region
+											, site_reference 								AS 		rsrv_loc_site
+											, d.loc_area 									AS 		rsrv_loc_area
+											, building_reference 							AS 		rsrv_loc_building
+											, floor_reference 								AS  	rsrv_loc_floor
+											, CASE WHEN billing='Yes' then 'Y'
+												when billing='No' then 'N' end 				AS 		rsrv_billing
+											, fiscal_entity_code 							AS  	rsrv_fiscal_entity_code
+											, gl_account 									AS   	rsrv_gl_account
+											, cost_center 									AS  	rsrv_cost_center
+											, fk1 											AS 		rsrv_fk1
+											, fk2 											AS 		rsrv_fk2
+											, fk3 											AS 		rsrv_fk3
+											, fk4 											AS 		rsrv_fk4
+											, fk5 											AS 		rsrv_fk5
+											, fk6 											AS 		rsrv_fk6
+											, fk7 											AS 		rsrv_fk7
+											, fk8 											AS 		rsrv_fk8
+											--, CAST(quantity AS numeric) 					AS 		rsrv_qty
+											--, uom 										AS 		rsrv_uom	
+											--, cast(unit_price as numeric) 				AS 		rsrv_unit_price
+											--, currency 									AS 		rsrv_currency
+											--, cast(revenue_factor as bigint) 				AS  	rsrv_revenue_factor
+											--, cast(revenue_amount as NUMERIC) 			AS   	rsrv_revenue_amount
+											, project_code 									AS 		rsrv_project_code
+											, project_reference 							AS  	rsrv_project_ref
+											, project_part_code 							AS  	rsrv_project_part_code
+											, project_part_reference 						AS 		rsrv_project_part_ref
+											, resource_reference 							AS   	rsrv_room_name
+											, c.department_id 								AS 		rsrv_department_id
+											, c.department_name 							AS 		department_name,
+											r.Client_Organization_ID 						AS 		rsrv_Client_Organization_ID,
+											r.Client_Organization_Code 						AS 		rsrv_Client_Organization_Code,
+											r.Client_Organization_Name 						AS 		rsrv_Client_Organization_Name
+											FROM `%s` r
+											left join `%s` c
+											on r.responsible_department_code = c.department_code
+											left join (SELECT  DISTINCT LOC_SITE, LOC_aREA FROM `%s` 
+														WHERE loc_type='SITE' 
+														AND CURRENT_FLAG='Y') d
+											on r.site_reference=d.loc_site
+											--left join  stg_api_location_id st
+											--on r.resource_id = st.reference_id
+											) s 
+											on s.rsrv_line_id = d.rsrv_line_id and d.is_deleted = 'N' 
+											when not matched then
+											Insert (
+													rsrv_line_id,
+													rsrv_id,
+													rsrv_class,
+													rsrv_description,
+													rsrv_note,
+													rsrv_conference_id,
+													--date_id,
+													rsrv_from_datetime,
+													rsrv_until_datetime,
+													--rsrv_booking_datetime,
+													--rsrv_cancellation_datetime,
+													rsrv_preparation_time,
+													rsrv_cleanup_time,
+													rsrv_duration,
+													--rsrv_room_id,
+													rsrv_resource_code,
+													rsrv_resource_ref,
+													rsrv_resource_class,
+													rsrv_resource_note,
+													--rsrv_resource_picture,
+													--rsrv_room_category_ref,
+													rsrv_room_layout,
+													rsrv_room_purpose,
+													rsrv_meeting_room_capacity,
+													rsrv_service_quantity,
+													--rsrv_cancelled,
+													--rsrv_confidential,
+													rsrv_is_tentative,
+													rsrv_is_recurrent,
+													rsrv_participants,
+													rsrv_people_name,
+													rsrv_department_code,
+													rsrv_loc_region,
+													rsrv_loc_site,
+													rsrv_loc_area,
+													rsrv_loc_building,
+													rsrv_loc_floor,
+													rsrv_billing,
+													rsrv_fiscal_entity_code,
+													rsrv_gl_account,
+													rsrv_cost_center,
+													rsrv_fk1,
+													rsrv_fk2,
+													rsrv_fk3,
+													rsrv_fk4,
+													rsrv_fk5,
+													rsrv_fk6,
+													rsrv_fk7,
+													rsrv_fk8,
+													--rsrv_qty,
+													--rsrv_uom,
+													--rsrv_unit_price,
+													--rsrv_currency,
+													--rsrv_revenue_factor,
+													--rsrv_revenue_amount,
+													rsrv_project_code,
+													rsrv_project_ref,
+													rsrv_project_part_code,
+													rsrv_project_part_ref,
+													rsrv_room_name,
+													rsrv_department_id,
+													department_name,
+													rsrv_Client_Organization_ID,
+													rsrv_Client_Organization_Code,
+													rsrv_Client_Organization_Name,
+													--creation_timestamp,
+													--modification_timestamp,
+													is_deleted,
+													--start_date,
+													--start_by,
+													last_modified_timestamp
+											)
+											VALUES
+											(
+													rsrv_line_id,
+													rsrv_id,
+													rsrv_class,
+													rsrv_description,
+													rsrv_note,
+													rsrv_conference_id,
+													--date_id,
+													rsrv_from_datetime,
+													rsrv_until_datetime,
+													--rsrv_booking_datetime,
+													--rsrv_cancellation_datetime,
+													rsrv_preparation_time,
+													rsrv_cleanup_time,
+													rsrv_duration,
+													--rsrv_room_id,
+													rsrv_resource_code,
+													rsrv_resource_ref,
+													rsrv_resource_class,
+													rsrv_resource_note,
+													--rsrv_resource_picture,
+													--rsrv_room_category_ref,
+													rsrv_room_layout,
+													rsrv_room_purpose,
+													rsrv_meeting_room_capacity,
+													rsrv_service_quantity,
+													--rsrv_cancelled,
+													--rsrv_confidential,
+													rsrv_is_tentative,
+													rsrv_is_recurrent,
+													rsrv_participants,
+													rsrv_people_name,
+													rsrv_department_code,
+													rsrv_loc_region,
+													rsrv_loc_site,
+													rsrv_loc_area,
+													rsrv_loc_building,
+													rsrv_loc_floor,
+													rsrv_billing,
+													rsrv_fiscal_entity_code,
+													rsrv_gl_account,
+													rsrv_cost_center,
+													rsrv_fk1,
+													rsrv_fk2,
+													rsrv_fk3,
+													rsrv_fk4,
+													rsrv_fk5,
+													rsrv_fk6,
+													rsrv_fk7,
+													rsrv_fk8,
+													--rsrv_qty,
+													--rsrv_uom,
+													--rsrv_unit_price,
+													--rsrv_currency,
+													--rsrv_revenue_factor,
+													--rsrv_revenue_amount,
+													rsrv_project_code,
+													rsrv_project_ref,
+													rsrv_project_part_code,
+													rsrv_project_part_ref,
+													rsrv_room_name,
+													rsrv_department_id,
+													department_name,
+													rsrv_Client_Organization_ID,
+													rsrv_Client_Organization_Code,
+													rsrv_Client_Organization_Name,
+													--creation_timestamp,
+													--modification_timestamp,
+													'N' ,
+													--start_date,
+													---start_by,
+													TIMESTAMP_TRUNC(datetime(current_timestamp(),"CET"), SECOND)
+											)"""
+											,fact_reservations,MV_REP_RESERVATIONS,MV_REP_CLIENT_ORG, dim_location);
+
+			EXECUTE IMMEDIATE mcs_fact_resrv_insert;
+		
+		EXCEPTION WHEN ERROR THEN
+			
+		  SET strRemarks 		= 'Failed in '||strProcName||', check error_log table for more info';
+		  SET strErrorMessage 	= @@error.message;
+		  SET error_txt		  	= 'Failed in mcs_fact_resrv_insert full load '||'~'||@@error.statement_text;
+		  
+		  CALL `cobundu-bi-playground.dataform_sd_procedure.Execution_log`(p_dataset_name, strProcName, 'E', strRemarks);
+		  CALL `cobundu-bi-playground.dataform_sd_procedure.Error_log`(p_dataset_name, strErrorMessage, error_txt);
+
+		END;
+	ELSE 
+		SET MV_REP_CLIENT_ORG 		  	= 	`cobundu-bi-playground.dataform_sd_procedure.get_variable_name`(p_project_id, p_dataset_name, 'MV_REP_CLIENT_ORG_'||p_num);
+		SET MV_REP_RESERVATIONS 	  	= 	`cobundu-bi-playground.dataform_sd_procedure.get_variable_name`(p_project_id, p_dataset_name, 'MV_REP_RESERVATIONS_'||p_num);
+		
+		IF MV_REP_RESERVATIONS IS NOT NULL
+		OR MV_REP_CLIENT_ORG IS NOT NULL
+		THEN
+			--########################################
+			--FACT_RESERVATIONS  -- UPDATE CURRENT DAY
+			--########################################
+			BEGIN
+				SET mcs_fact_resrv_update = FORMAT("""
+												MERGE INTO `%s` d
+												USING (
+														  SELECT  
+														  --dept_id
+														  reservation_line_id							AS   	rsrv_line_id
+														, reservation_id 								AS   	rsrv_id
+														, reservation_class_id 							AS  	rsrv_class
+														, description 									AS   	rsrv_description
+														, note 											AS 		rsrv_note
+														, conference_id 								AS  	rsrv_conference_id
+														, date(from_datetime) 							AS 		date_id 
+														, datetime(from_datetime,"America/New_York") 	AS 		rsrv_from_datetime 
+														, datetime(until_datetime,"America/New_York") 	AS 		rsrv_until_datetime
+														/*
+														, cast(booking_datetime as date) 				AS 		rsrv_booking_datetime
+														,cast(cancellation_datetime as date) 			AS  	rsrv_cancellation_datetime
+														*/
+														, cast(preparation_time  as numeric)			AS  	rsrv_preparation_time
+														, cast(cleanup_time as numeric) 				AS  	rsrv_cleanup_time
+														, cast(duration as numeric) 					AS  	rsrv_duration
+														--, location_id 								AS  	rsrv_room_id
+														--, COALESCE(r.location_id,st.location_id) 		AS 		rsrv_room_id 
+														, resource_code 								AS  	rsrv_resource_code
+														, resource_reference 							AS   	rsrv_resource_ref
+														, resource_class 								AS  	rsrv_resource_class
+														, resource_note 								AS 		rsrv_resource_note
+														--, CAST(resource_picture  AS BYTEA) 			AS 		rsrv_resource_picture
+														, resource_category_reference 					AS  	RSRV_RESOURCE_CATEGORY_REF    
+														--rsrv_room_category_ref
+														, room_layout 									AS   	rsrv_room_layout
+														, room_purpose 									AS   	rsrv_room_purpose
+														, CAST(room_capacity AS BIGINT) 				AS 		rsrv_meeting_room_capacity
+														, CAST(service_quantity  AS BIGINT) 			AS  	rsrv_service_quantity
+														, service_delivery_location 					AS  	rsrv_delivery_location
+														, CAST(canceled AS INT) 						AS 		rsrv_cancelled
+														, CAST(confidential AS INT) 					AS   	rsrv_confidential
+														, cast(is_tentative as string) 					AS 		rsrv_is_tentative
+														, CASE
+															WHEN CAST(is_recurrent AS int ) =0 THEN 'N'
+															WHEN CAST(is_recurrent AS int )=1 THEN 'Y'
+														  END   										AS		rsrv_is_recurrent
+														, cast(count_invitees as bigint) 				AS   	rsrv_participants
+														, responsible_name 								AS 		rsrv_people_name
+														, responsible_department_code 					AS 		rsrv_department_code
+														, region_reference 								AS 		rsrv_loc_region
+														, site_reference 								AS 		rsrv_loc_site
+														, d.loc_area 									AS 		rsrv_loc_area
+														, building_reference 							AS 		rsrv_loc_building
+														, floor_reference 								AS  	rsrv_loc_floor
+														, CASE WHEN billing='Yes' then 'Y'
+														  when billing='No' then 'N' end 				AS 		rsrv_billing
+														, fiscal_entity_code 							AS  	rsrv_fiscal_entity_code
+														, gl_account 									AS   	rsrv_gl_account
+														, cost_center 									AS  	rsrv_cost_center
+														, fk1 											AS 		rsrv_fk1
+														, fk2 											AS 		rsrv_fk2
+														, fk3 											AS 		rsrv_fk3
+														, fk4 											AS 		rsrv_fk4
+														, fk5 											AS 		rsrv_fk5
+														, fk6 											AS 		rsrv_fk6
+														, fk7 											AS 		rsrv_fk7
+														, fk8 											AS 		rsrv_fk8
+														--, CAST(quantity AS numeric) 					AS 		rsrv_qty
+														--, uom 										AS 		rsrv_uom
+														--, cast(unit_price as numeric) 				AS 		rsrv_unit_price
+														--, currency 									AS 		rsrv_currency
+														--, cast(revenue_factor as bigint) 				AS  	rsrv_revenue_factor
+														--, cast(revenue_amount as NUMERIC) 			AS   	rsrv_revenue_amount
+														, project_code 									AS 		rsrv_project_code
+														, project_reference 							AS  	rsrv_project_ref
+														, project_part_code 							AS  	rsrv_project_part_code
+														, project_part_reference 						AS 		rsrv_project_part_ref
+														, resource_reference 							AS   	rsrv_room_name
+														, c.department_id 								AS 		rsrv_department_id
+														, c.department_name 							AS 		department_name,
+														 r.Client_Organization_ID 						AS 		rsrv_Client_Organization_ID,
+														 r.Client_Organization_Code 					AS 		rsrv_Client_Organization_Code,
+														 r.Client_Organization_Name 					AS 		rsrv_Client_Organization_Name
+														FROM (SELECT * FROM `%s` WHERE TIMESTAMP_TRUNC(TIMESTAMP_MILLIS(CAST(datastream_metadata.source_timestamp AS INT64)),DAY) = TIMESTAMP_TRUNC(CURRENT_TIMESTAMP(),DAY)) r
+														left join (SELECT * FROM `%s` WHERE TIMESTAMP_TRUNC(TIMESTAMP_MILLIS(CAST(datastream_metadata.source_timestamp AS INT64)),DAY) = TIMESTAMP_TRUNC(CURRENT_TIMESTAMP(),DAY)) c
+														on r.responsible_department_code = c.department_code
+														left join (SELECT  DISTINCT LOC_SITE, LOC_aREA FROM `%s` 
+																	WHERE loc_type='SITE' 
+																	AND CURRENT_FLAG='Y') d
+														on r.site_reference=d.loc_site
+														--left join  stg_api_location_id st
+														--on r.resource_id = st.reference_id
+												) s 
+												on s.rsrv_line_id = d.rsrv_line_id and d.is_deleted = 'N' 
+												when matched and 
+													s.rsrv_line_id 						<> 		d.rsrv_line_id OR
+													s.rsrv_id 							<> 		d.rsrv_id OR
+													s.rsrv_class 						<> 		d.rsrv_class OR
+													s.rsrv_conference_id 				<> 		d.rsrv_conference_id OR
+													s.rsrv_description 					<> 		d.rsrv_description OR
+													s.rsrv_note 						<> 		d.rsrv_note OR
+													s.rsrv_from_datetime 				<> 		d.rsrv_from_datetime OR
+													s.rsrv_until_datetime 				<> 		d.rsrv_until_datetime OR
+													--s.fk_date_id 						<> 		d.fk_date_id OR
+													--s.rsrv_booking_datetime 			<> 		d.rsrv_booking_datetime OR
+													--s.rsrv_cancellation_datetime 		<> 		d.rsrv_cancellation_datetime OR
+													s.rsrv_preparation_time 			<> 		d.rsrv_preparation_time OR
+													s.rsrv_cleanup_time 				<> 		d.rsrv_cleanup_time OR
+													s.rsrv_duration 					<> 		d.rsrv_duration OR
+													--s.rsrv_cancelled 					<> 		d.rsrv_cancelled OR
+													--s.rsrv_confidential 				<> 		d.rsrv_confidential OR
+													s.rsrv_is_tentative 				<> 		d.rsrv_is_tentative OR
+													--s.rsrv_is_recurrent 				<> 		d.rsrv_is_recurrent OR Find the issue here
+													s.rsrv_participants 				<> 		d.rsrv_participants OR
+													s.rsrv_resource_code 				<> 		d.rsrv_resource_code OR
+													s.rsrv_resource_ref 				<> 		d.rsrv_resource_ref OR
+													s.rsrv_resource_class 				<> 		d.rsrv_resource_class OR
+													--s.rsrv_resource_category_id 		<> 		d.rsrv_resource_category_id OR--
+													--s.rsrv_resource_category 			<> 		d.rsrv_resource_category OR--
+													s.rsrv_resource_category_ref 		<> 		d.rsrv_resource_category_ref OR--
+													s.rsrv_resource_note 				<> 		d.rsrv_resource_note OR
+													--s.rsrv_resource_picture 			<> 		d.rsrv_resource_picture OR
+													s.rsrv_room_layout 					<> 		d.rsrv_room_layout OR
+													s.rsrv_room_purpose 				<> 		d.rsrv_room_purpose OR
+													s.rsrv_meeting_room_capacity 		<> 		d.rsrv_meeting_room_capacity OR
+													s.rsrv_service_quantity 			<> 		d.rsrv_service_quantity OR
+													s.rsrv_delivery_location 			<> 		d.rsrv_delivery_location OR 
+													s.rsrv_people_name 					<> 		d.rsrv_people_name OR
+													--s.rsrv_region_code 				<> 		d.rsrv_region_code OR
+													s.rsrv_loc_region 					<> 		d.rsrv_loc_region OR
+													s.rsrv_loc_area 					<> 		d.rsrv_loc_area OR
+													s.rsrv_loc_site 					<> 		d.rsrv_loc_site OR
+													s.rsrv_loc_building 				<> 		d.rsrv_loc_building OR
+													s.rsrv_loc_floor 					<> 		d.rsrv_loc_floor OR
+													--s.rsrv_room_id 					<> 		d.rsrv_room_id OR  -- do not delete this field
+													s.rsrv_room_name 					<> 		d.rsrv_room_name OR
+													--s.rsrv_billing 					<> 		d.rsrv_billing OR  Find the issue here
+													s.rsrv_fiscal_entity_code 			<> 		d.rsrv_fiscal_entity_code OR
+													s.rsrv_gl_account 					<> 		d.rsrv_gl_account OR
+													s.rsrv_cost_center					<> 		d.rsrv_cost_center OR
+													s.rsrv_fk1 							<> 		d.rsrv_fk1 OR
+													s.rsrv_fk2 							<> 		d.rsrv_fk2 OR
+													s.rsrv_fk3 							<> 		d.rsrv_fk3 OR
+													s.rsrv_fk4 							<> 		d.rsrv_fk4 OR
+													s.rsrv_fk5 							<> 		d.rsrv_fk5 OR
+													s.rsrv_fk6 							<> 		d.rsrv_fk6 OR
+													s.rsrv_fk7 							<> 		d.rsrv_fk7 OR
+													s.rsrv_fk8 							<> 		d.rsrv_fk8 OR
+													--s.fk_financial_dim_id 			<> 		d.fk_financial_dim_id OR
+													--s.rsrv_cost_item_id 				<> 		d.rsrv_cost_item_id OR
+													--s.rsrv_qty 						<> 		d.rsrv_qty OR -- not found inside s
+													--s.rsrv_uom 						<> 		d.rsrv_uom OR -- not found inside s
+													--s.rsrv_unit_price 				<> 		d.rsrv_unit_price OR  -- not found inside s
+													--s.rsrv_currency 					<> 		d.rsrv_currency OR  -- not found inside s
+													--s.rsrv_revenue_factor 			<> 		d.rsrv_revenue_factor OR -- not found inside s
+													--s.rsrv_revenue_amount 			<> 		d.rsrv_revenue_amount OR -- not found inside s
+													s.rsrv_project_code 				<> 		d.rsrv_project_code OR
+													s.rsrv_project_ref 					<> 		d.rsrv_project_ref OR
+													s.rsrv_project_part_code 			<> 		d.rsrv_project_part_code OR
+													s.rsrv_project_part_ref 			<> 		d.rsrv_project_part_ref OR
+													s.rsrv_department_id 				<> 		d.rsrv_department_id OR
+													--s.fk_dept_id 						<> 		d.fk_dept_id OR
+													--s.dept_id 						<> 		d.dept_id OR  -- do not delete this field
+													s.rsrv_department_code 				<> 		d.rsrv_department_code OR
+													s.department_name 					<> 		d.department_name OR
+													s.rsrv_client_organization_id 		<> 		d.rsrv_client_organization_id OR
+													s.rsrv_client_organization_code 	<> 		d.rsrv_client_organization_code OR
+													s.rsrv_client_organization_name 	<> 		d.rsrv_client_organization_name --OR
+													--s.creation_timestamp 				<> 		d.creation_timestamp OR
+													--s.modification_timestamp 			<> 		d.modification_timestamp OR
+													--s.is_deleted 						<> 		d.is_deleted OR
+													--s.start_date 						<> 		d.start_date OR
+													--s.start_by 						<> 		d.start_by OR
+													--s.last_modified_timestamp 		<> 		d.last_modified_timestamp OR
+												then update set is_deleted = 'Y' """
+												,fact_reservations,MV_REP_RESERVATIONS,MV_REP_CLIENT_ORG, dim_location);
+
+				EXECUTE IMMEDIATE mcs_fact_resrv_update;
+			
+			EXCEPTION WHEN ERROR THEN
+
+			  SET strRemarks 		= 'Failed in '||strProcName||', check error_log table for more info';
+			  SET strErrorMessage 	= @@error.message;
+			  SET error_txt		  	= 'Failed in mcs_fact_resrv_update for current day load '||CURRENT_DATE||' ~'||@@error.statement_text;
+			  
+			  CALL `cobundu-bi-playground.dataform_sd_procedure.Execution_log`(p_dataset_name, strProcName, 'E', strRemarks);
+			  CALL `cobundu-bi-playground.dataform_sd_procedure.Error_log`(p_dataset_name, strErrorMessage, error_txt);
+
+			END;
+			
+			--########################################
+			--FACT_RESERVATIONS  -- INSERT CURRENT DAY
+			--########################################
+			BEGIN
+				SET mcs_fact_resrv_insert = FORMAT("""
+												MERGE INTO `%s` d
+												USING (
+														SELECT  
+														--dept_id
+														reservation_line_id 							AS   	rsrv_line_id
+														, reservation_id 								AS		rsrv_id
+														, reservation_class_id 							AS  	rsrv_class
+														, description 									AS   	rsrv_description
+														, note 											AS 		rsrv_note
+														, conference_id 								AS  	rsrv_conference_id
+														, date(from_datetime) 							AS 		date_id 
+														, datetime(from_datetime,"America/New_York") 	AS 		rsrv_from_datetime 
+														, datetime(until_datetime,"America/New_York") 	AS 		rsrv_until_datetime
+														/*
+														, cast(booking_datetime as date) 				AS 		rsrv_booking_datetime
+														,cast(cancellation_datetime as date) 			AS  	rsrv_cancellation_datetime
+														*/
+														, cast(preparation_time  as numeric)			AS  	rsrv_preparation_time
+														, cast(cleanup_time as numeric) 				AS  	rsrv_cleanup_time
+														, cast(duration as numeric) 					AS  	rsrv_duration
+
+														--, location_id 								AS  	rsrv_room_id
+														--, COALESCE(r.location_id,st.location_id) 		AS		rsrv_room_id 
+
+														, resource_code 								AS  	rsrv_resource_code
+														, resource_reference 							AS   	rsrv_resource_ref
+														, resource_class 								AS  	rsrv_resource_class
+														, resource_note 								AS 		rsrv_resource_note
+														--, CAST(resource_picture  AS BYTEA) 			AS 		rsrv_resource_picture
+														, resource_category_reference 					AS  	RSRV_RESOURCE_CATEGORY_REF    
+														--rsrv_room_category_ref
+														, room_layout 									AS   	rsrv_room_layout
+														, room_purpose 									AS   	rsrv_room_purpose
+														, CAST(room_capacity AS BIGINT) 				AS 		rsrv_meeting_room_capacity
+														, CAST(service_quantity  AS BIGINT) 			AS  	rsrv_service_quantity
+														, service_delivery_location 					AS  	rsrv_delivery_location
+														, CAST(canceled AS INT) 						AS 		rsrv_cancelled
+														, CAST(confidential AS INT) 					AS   	rsrv_confidential
+														, cast(is_tentative as string)  				AS 		rsrv_is_tentative
+														, CASE
+															WHEN CAST(is_recurrent AS int ) =0 THEN 'No'
+															WHEN CAST(is_recurrent AS int )=1 THEN 'Y'
+														  END   										AS		rsrv_is_recurrent
+														, cast(count_invitees as bigint) 				AS   	rsrv_participants
+														, responsible_name 								AS 		rsrv_people_name
+														, responsible_department_code 					AS 		rsrv_department_code
+														, region_reference 								AS 		rsrv_loc_region
+														, site_reference 								AS 		rsrv_loc_site
+														, d.loc_area 									AS 		rsrv_loc_area
+														, building_reference 							AS 		rsrv_loc_building
+														, floor_reference 								AS  	rsrv_loc_floor
+														, CASE WHEN billing='Yes' then 'Y'
+															when billing='No' then 'N' 
+														  END 											AS 		rsrv_billing
+														, fiscal_entity_code 							AS  	rsrv_fiscal_entity_code
+														, gl_account 									AS   	rsrv_gl_account
+														, cost_center 									AS  	rsrv_cost_center
+														, fk1 											AS 		rsrv_fk1
+														, fk2 											AS   	rsrv_fk2
+														, fk3 											AS 		rsrv_fk3
+														, fk4 											AS 		rsrv_fk4
+														, fk5 											AS 		rsrv_fk5
+														, fk6 											AS 		rsrv_fk6
+														, fk7 											AS 		rsrv_fk7
+														, fk8 											AS 		rsrv_fk8
+														--, CAST(quantity AS numeric) 					AS 		rsrv_qty
+														--, uom 										AS 		rsrv_uom
+														--, cast(unit_price as numeric) 				AS 		rsrv_unit_price
+														--, currency 									AS 		rsrv_currency
+														--, cast(revenue_factor as bigint) 				AS  	rsrv_revenue_factor
+														--, cast(revenue_amount as NUMERIC) 			AS   	rsrv_revenue_amount
+														, project_code 									AS 		rsrv_project_code
+														, project_reference 							AS  	rsrv_project_ref
+														, project_part_code 							AS  	rsrv_project_part_code
+														, project_part_reference 						AS 		rsrv_project_part_ref
+														, resource_reference 							AS   	rsrv_room_name
+														, c.department_id 								AS 		rsrv_department_id
+														, c.department_name 							AS 		department_name
+														,r.Client_Organization_ID 						AS 		rsrv_Client_Organization_ID
+														,r.Client_Organization_Code 					AS 		rsrv_Client_Organization_Code
+														,r.Client_Organization_Name 					AS 		rsrv_Client_Organization_Name
+														FROM 
+														(SELECT * FROM `%s` WHERE TIMESTAMP_TRUNC(TIMESTAMP_MILLIS(CAST(datastream_metadata.source_timestamp AS INT64)),DAY) = TIMESTAMP_TRUNC(CURRENT_TIMESTAMP(),DAY)) r
+														left join 
+														(SELECT * FROM `%s` WHERE TIMESTAMP_TRUNC(TIMESTAMP_MILLIS(CAST(datastream_metadata.source_timestamp AS INT64)),DAY) = TIMESTAMP_TRUNC(CURRENT_TIMESTAMP(),DAY)) c
+														on r.responsible_department_code = c.department_code
+														left join (SELECT  DISTINCT LOC_SITE, LOC_aREA FROM `%s` 
+																	WHERE loc_type='SITE' 
+																	AND CURRENT_FLAG='Y') d
+														on r.site_reference=d.loc_site
+														--left join  stg_api_location_id st
+														--on r.resource_id = st.reference_id
+												) s 
+												on s.rsrv_line_id = d.rsrv_line_id and d.is_deleted = 'N' 
+												when not matched then
+												Insert (
+														rsrv_line_id,
+														rsrv_id,
+														rsrv_class,
+														rsrv_description,
+														rsrv_note,
+														rsrv_conference_id,
+														--date_id,
+														rsrv_from_datetime,
+														rsrv_until_datetime,
+														--rsrv_booking_datetime,
+														--rsrv_cancellation_datetime,
+														rsrv_preparation_time,
+														rsrv_cleanup_time,
+														rsrv_duration,
+														--rsrv_room_id,
+														rsrv_resource_code,
+														rsrv_resource_ref,
+														rsrv_resource_class,
+														rsrv_resource_note,
+														--rsrv_resource_picture,
+														--rsrv_room_category_ref,
+														rsrv_room_layout,
+														rsrv_room_purpose,
+														rsrv_meeting_room_capacity,
+														rsrv_service_quantity,
+														--rsrv_cancelled,
+														--rsrv_confidential,
+														rsrv_is_tentative,
+														rsrv_is_recurrent,
+														rsrv_participants,
+														rsrv_people_name,
+														rsrv_department_code,
+														rsrv_loc_region,
+														rsrv_loc_site,
+														rsrv_loc_area,
+														rsrv_loc_building,
+														rsrv_loc_floor,
+														rsrv_billing,
+														rsrv_fiscal_entity_code,
+														rsrv_gl_account,
+														rsrv_cost_center,
+														rsrv_fk1,
+														rsrv_fk2,
+														rsrv_fk3,
+														rsrv_fk4,
+														rsrv_fk5,
+														rsrv_fk6,
+														rsrv_fk7,
+														rsrv_fk8,
+														--rsrv_qty,
+														--rsrv_uom,
+														--rsrv_unit_price,
+														--rsrv_currency,
+														--rsrv_revenue_factor,
+														--rsrv_revenue_amount,
+														rsrv_project_code,
+														rsrv_project_ref,
+														rsrv_project_part_code,
+														rsrv_project_part_ref,
+														rsrv_room_name,
+														rsrv_department_id,
+														department_name,
+														rsrv_Client_Organization_ID,
+														rsrv_Client_Organization_Code,
+														rsrv_Client_Organization_Name,
+														--creation_timestamp,
+														--modification_timestamp,
+														is_deleted,
+														--start_date,
+														--start_by,
+														last_modified_timestamp
+												)
+												VALUES
+												(
+														rsrv_line_id,
+														rsrv_id,
+														rsrv_class,
+														rsrv_description,
+														rsrv_note,
+														rsrv_conference_id,
+														--date_id,
+														rsrv_from_datetime,
+														rsrv_until_datetime,
+														--rsrv_booking_datetime,
+														--rsrv_cancellation_datetime,
+														rsrv_preparation_time,
+														rsrv_cleanup_time,
+														rsrv_duration,
+														--rsrv_room_id,
+														rsrv_resource_code,
+														rsrv_resource_ref,
+														rsrv_resource_class,
+														rsrv_resource_note,
+														--rsrv_resource_picture,
+														--rsrv_room_category_ref,
+														rsrv_room_layout,
+														rsrv_room_purpose,
+														rsrv_meeting_room_capacity,
+														rsrv_service_quantity,
+														--rsrv_cancelled,
+														--rsrv_confidential,
+														rsrv_is_tentative,
+														rsrv_is_recurrent,
+														rsrv_participants,
+														rsrv_people_name,
+														rsrv_department_code,
+														rsrv_loc_region,
+														rsrv_loc_site,
+														rsrv_loc_area,
+														rsrv_loc_building,
+														rsrv_loc_floor,
+														rsrv_billing,
+														rsrv_fiscal_entity_code,
+														rsrv_gl_account,
+														rsrv_cost_center,
+														rsrv_fk1,
+														rsrv_fk2,
+														rsrv_fk3,
+														rsrv_fk4,
+														rsrv_fk5,
+														rsrv_fk6,
+														rsrv_fk7,
+														rsrv_fk8,
+														--rsrv_qty,
+														--rsrv_uom,
+														--rsrv_unit_price,
+														--rsrv_currency,
+														--rsrv_revenue_factor,
+														--rsrv_revenue_amount,
+														rsrv_project_code,
+														rsrv_project_ref,
+														rsrv_project_part_code,
+														rsrv_project_part_ref,
+														rsrv_room_name,
+														rsrv_department_id,
+														department_name,
+														rsrv_Client_Organization_ID,
+														rsrv_Client_Organization_Code,
+														rsrv_Client_Organization_Name,
+														--creation_timestamp,
+														--modification_timestamp,
+														'N' ,
+														--start_date,
+														---start_by,
+														TIMESTAMP_TRUNC(datetime(current_timestamp(),"CET"), SECOND)
+												)"""
+												,fact_reservations,MV_REP_RESERVATIONS,MV_REP_CLIENT_ORG, dim_location);
+
+				EXECUTE IMMEDIATE mcs_fact_resrv_insert;
+			
+			EXCEPTION WHEN ERROR THEN
+				
+			  SET strRemarks 		= 'Failed in '||strProcName||', check error_log table for more info';
+			  SET strErrorMessage 	= @@error.message;
+			  SET error_txt		  	= 'Failed in mcs_fact_resrv_insert for current day load '||CURRENT_DATE||' ~'||@@error.statement_text;
+			  
+			  CALL `cobundu-bi-playground.dataform_sd_procedure.Execution_log`(p_dataset_name, strProcName, 'E', strRemarks);
+			  CALL `cobundu-bi-playground.dataform_sd_procedure.Error_log`(p_dataset_name, strErrorMessage, error_txt);
+
+			END;
+		END IF;
+	END IF;
+	
+	SET strRemarks = 'Completed Successfully';
+	CALL `cobundu-bi-playground.dataform_sd_procedure.Execution_log`(p_dataset_name, strProcName, 'E', strRemarks);
+	
+EXCEPTION WHEN ERROR THEN
+
+	CALL `cobundu-bi-playground.dataform_sd_procedure.Execution_log`(p_dataset_name, 'pr_fact_reservations', 'E', 'Failed');
+	CALL `cobundu-bi-playground.dataform_sd_procedure.Error_log`(p_dataset_name, @@error.message, @@error.statement_text);
+
+END;

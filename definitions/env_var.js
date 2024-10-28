@@ -4,5 +4,6 @@ module.exports = {
   chemours_t_dataset_name: "CHEMOURS_T",
   arla_p_dataset_name: "ARLA",
   nordea_p_dataset_name: "NORDEA_P",
-  nordea_t_dataset_name: "NORDEA_T"
+  nordea_t_dataset_name: "NORDEA_T",
+  nordea_p_ver_num: 21
 };
