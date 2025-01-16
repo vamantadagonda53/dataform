@@ -1,0 +1,1204 @@
+CREATE OR REPLACE PROCEDURE `cobundu-bi-playground.mcs_procedures.pr_fact_wp_buildings`(IN p_project_id STRING, IN p_dataset_name STRING, IN p_num INT64)
+BEGIN
+	DECLARE 	nCount					INT64;
+	DECLARE		strSqlSnt				STRING;
+	DECLARE 	mcs_fact_resrv_update 	STRING;
+	DECLARE		mcs_fact_resrv_insert	STRING;
+	DECLARE		fact_reservations		STRING;
+	DECLARE		dim_location			STRING;
+	DECLARE		fact_wp_buildings			STRING;
+	DECLARE		MV_REP_INT_LOCATIONS			STRING;
+	DECLARE		MV_REP_BUILDING_STATS			STRING;
+	DECLARE		mcs_fact_building_update			STRING;
+	DECLARE		mcs_fact_building_insert			STRING;
+	DECLARE		strRemarks				STRING;
+	DECLARE 	error_txt				STRING;
+	DECLARE 	strErrorMessage         STRING;
+	DECLARE		strProcName				STRING;
+	
+	SET strProcName 		= 'pr_fact_reservations';
+	SET dim_location 		= p_project_id||'.'||p_dataset_name||'.dim_locations';	
+	SET fact_reservations = p_project_id||'.'||p_dataset_name||'.fact_reservations';
+	SET fact_wp_buildings = p_project_id||'.'||p_dataset_name||'.fact_wp_buildings';
+	
+	CALL `cobundu-bi-playground.dataform_sd_procedure.Execution_log`(p_dataset_name, strProcName, 'S', '');
+	
+	SET strSqlSnt = FORMAT("""SELECT COUNT(*) FROM `%s` """,fact_wp_buildings);
+	
+	EXECUTE IMMEDIATE strSqlSnt INTO nCount;
+			
+	IF nCount <= 1
+	THEN
+		SET MV_REP_INT_LOCATIONS				= p_project_id||'.'||p_dataset_name||'.MV_REP_INT_LOCATIONS_DAILY_'||p_num; --Hemanth
+		SET MV_REP_BUILDING_STATS				= p_project_id||'.'||p_dataset_name||'.MV_REP_BUILDING_STATS_DAILY_'||p_num; --Hemanth 
+			
+			--######################################
+			--FACT_WP_BUILDINGS  -- UPDATE FULL LOAD
+			--######################################
+				
+			BEGIN
+				SET mcs_fact_building_update = FORMAT("""merge into `%s` d
+													using (WITH loc AS (
+														SELECT 
+															ll.location_id,
+															ll.location_id AS loc_room_id,
+															lf.location_id AS loc_floor_id,
+															lb.location_id AS loc_building_id,
+															b.city,
+															b.country,
+															ls.location_id AS loc_site_id,
+															la.location_id AS loc_area_id 
+														FROM 
+															`%s` ll
+														LEFT JOIN `%s` lr ON ll.location_id = lr.location_id 
+														LEFT JOIN `%s` lf ON lr.parent_id = lf.location_id
+														LEFT JOIN `%s` lb ON lf.parent_id = lb.location_id
+														LEFT JOIN `%s` ls ON lb.parent_id = ls.location_id
+														LEFT JOIN `%s` la ON ls.parent_id = la.location_id
+														LEFT JOIN `%s` b ON lb.location_id = b.location_id
+														WHERE ll.location_type = 'ROOM' AND lr.location_type = 'ROOM'
+														UNION ALL
+														SELECT 
+															ll.location_id, 
+															NULL AS loc_room_id,
+															ll.location_id AS loc_floor_id,
+															lb.location_id AS loc_building_id,
+															b.city,
+															b.country,
+															ls.location_id AS loc_site_id,
+															la.location_id AS loc_Area_id
+														FROM
+															`%s` ll
+														LEFT JOIN `%s` lf ON ll.location_id=lf.location_id
+														LEFT JOIN `%s` lb ON lf.parent_id=lb.location_id
+														LEFT JOIN `%s` ls ON lb.parent_id=ls.location_id
+														LEFT JOIN `%s` la ON ls.parent_id=la.location_id
+														LEFT JOIN `%s` b ON lb.location_id=b.location_id
+														WHERE ll.location_type='FLOOR' AND lf.location_type='FLOOR' AND lb.location_type='BUILDING'
+														UNION ALL
+														SELECT 
+															ll.location_id,
+															NULL AS loc_room_id,
+															NULL AS loc_floor_id,
+															ll.location_id AS loc_building_id,
+															b.city,
+															b.country,
+															ls.location_id AS loc_site_id,
+															la.location_id AS loc_area_id
+														FROM
+															`%s` ll 
+														LEFT JOIN `%s` ls ON ll.parent_id=ls.location_id
+														LEFT JOIN `%s` la ON ls.parent_id=la.location_id
+														LEFT JOIN `%s` b ON ll.location_id=b.location_id
+														WHERE ll.location_type='BUILDING'
+														UNION ALL
+														SELECT 
+															ll.location_id, 
+															NULL AS loc_room_id,
+															NULL AS loc_floor_id,
+															NULL AS loc_building_id,
+															NULL AS city,
+															NULL AS country,
+															ls.location_id AS  loc_site_id,
+															la.location_id AS loc_area_id
+														FROM  
+															`%s` ll  
+														LEFT JOIN `%s` ls ON ll.location_id=ls.location_id
+														LEFT JOIN `%s` la ON ls.parent_id=la.location_id
+														WHERE ll.location_type='SITE' AND ls.location_type='SITE'
+														UNION ALL
+														SELECT
+															ll.location_id,
+															NULL AS loc_room_id,
+															NULL AS loc_floor_id,
+															NULL AS loc_building_id,
+															NULL AS city,
+															NULL AS country,
+															NULL AS loc_site_id,
+															la.location_id AS loc_area_id
+														FROM  
+															`%s` ll
+														LEFT JOIN `%s` la ON ll.location_id=la.location_id
+														WHERE ll.location_type='AREA' AND la.location_type='AREA' 
+													)
+													SELECT 
+														DISTINCT l.location_id AS wp_location_id,
+														l.location_type AS wp_location_type,
+														CASE 
+															WHEN l.location_type = 'BUILDING' THEN l.building_type_ref
+														END AS wp_building_type,
+														b.prop_ownership_type_code AS wp_ownership_type,
+														b.accommodation AS wp_Accommodation,
+														CAST(b.year_build AS INT) AS wp_year_built,
+														b.re_zone AS wp_real_estate_zone,
+														EXTRACT(YEAR FROM CURRENT_DATE) - CAST(b.year_build AS INT) AS WP_BUILDING_AGE,
+														l.room_cat_ref AS wp_room_category_reference,
+														l.room_purpose_ref AS wp_room_purpose_reference,
+														CAST(l.room_area AS numeric) AS wp_room_Area,
+														CAST(l.workplaces_nr AS int) AS wp_nr_of_workplaces,
+														CAST(l.employees_nr AS int) AS wp_nr_of_employees,
+														l.room_cat_group_ref AS wp_room_category_group_reference,
+														loc.loc_room_id AS wp_loc_room_id,
+														l.room_ref AS wp_loc_room_ref,
+														loc.loc_floor_id AS wp_loc_floor_id,
+														l.floor_ref AS wp_loc_floor_Ref,
+														loc.loc_building_id AS wp_loc_building_id,
+														l.building_ref AS wp_loc_building_ref,
+														loc.loc_site_id AS wp_loc_site_id,
+														l.site_ref AS wp_loc_site_Ref,
+														loc.loc_area_id AS wp_loc_area_id,
+														l.area_Ref AS wp_loc_area_ref,
+														CASE 
+															WHEN l.location_type = 'BUILDING' THEN loc.city
+														END AS wp_city,
+														CASE 
+															WHEN l.location_type = 'BUILDING' THEN loc.country
+														END AS wp_country,
+														CAST(b.en15221_gross_floor_area AS float64) AS wp_gross_floor_area,
+														CAST(b.en15221_net_room_area  AS float64)AS wp_net_room_area,
+														CAST(b.en15221_net_floor_area  AS float64) AS wp_net_floor_area,
+														CAST(b.iso9836_net_area AS float64) AS wp_net_area,
+														CAST(b.iso9836_gross_external_area  AS float64)AS wp_gross_external_area,
+														CAST(b.iso9836_usable_Area AS float64) AS wp_usable_area,
+														CAST(b.en15221_gross_floor_area AS float64) as en15221_gross_floor_area,
+														CAST(b.en15221_net_room_area  AS float64) as en15221_net_room_area,
+														CAST(b.en15221_net_floor_area  AS float64) as en15221_net_floor_area,
+														CAST(b.iso9836_net_area AS float64) as iso9836_net_area,
+														CAST(b.iso9836_gross_external_area  AS float64) as iso9836_gross_external_area,
+														CAST(b.iso9836_usable_Area AS float64) as iso9836_usable_Area,
+														CAST(b.en15221_level_area AS float64) as en15221_level_area,
+														CAST(b.en15221_internal_floor_area AS float64) as en15221_internal_floor_area,
+														CAST(b.en15221_techical_area AS float64) as en15221_techical_area,
+														CAST(b.en15221_circulation_area AS float64) as en15221_circulation_area,
+														CAST(b.en15221_amenity_area AS float64) as en15221_amenity_area,
+														CAST(b.en15221_primary_area AS float64) as en15221_primary_area,
+														CAST(b.en15221_nonfunc_level_area AS float64) as en15221_nonfunc_level_area,
+														CAST(b.en15221_ext_construct_area AS float64) as en15221_ext_construct_area,
+														CAST(b.en15221_int_construct_area AS float64) as en15221_int_construct_area,
+														CAST(b.en15221_partition_wall_area AS float64) as en15221_partition_wall_area,
+														CAST(b.iso9836_gross_internal_area AS float64) as iso9836_gross_internal_area,
+														CAST(b.iso9836_main_usable_area AS float64) as iso9836_main_usable_area,
+														CAST(b.iso9836_subsidiary_usage_area AS float64) as iso9836_subsidiary_usage_area,
+														CAST(b.iso9836_services_area AS float64) as iso9836_services_area,
+														CAST(b.iso9836_circulations_area AS float64) as iso9836_circulations_area,
+														CAST(b.iso9836_exterior_walls_area AS float64) as iso9836_exterior_walls_area,
+														CAST(b.iso9836_int_construction_area AS float64) as iso9836_int_construction_area
+													FROM 
+														`%s` l 
+													LEFT JOIN loc ON l.location_id = loc.location_id
+													LEFT JOIN `%s` b ON l.location_id = b.location_id
+													WHERE 
+														l.LOC_STATUS_CLASS = 'Active') s on 
+														s.wp_location_id = d.wp_location_id and d.is_deleted = 'N'
+														when  matched and
+													   s.wp_location_id <> d.wp_location_id OR
+													s.wp_location_type <> d.wp_location_type OR
+													s.wp_building_type <> d.wp_building_type OR
+													s.wp_ownership_type <> d.wp_ownership_type OR
+													s.wp_Accommodation <> d.wp_Accommodation OR
+													s.wp_year_built <> d.wp_year_built OR
+													s.wp_real_estate_zone <> d.wp_real_estate_zone OR
+													s.WP_BUILDING_AGE <> d.WP_BUILDING_AGE OR
+													s.wp_room_category_reference <> d.wp_room_category_reference OR
+													s.wp_room_purpose_reference <> d.wp_room_purpose_reference OR
+													s.wp_room_Area <> d.wp_room_Area OR
+													s.wp_nr_of_workplaces <> d.wp_nr_of_workplaces OR
+													s.wp_nr_of_employees <> d.wp_nr_of_employees OR
+													s.wp_room_category_group_reference <> d.wp_room_category_group_reference OR
+													s.wp_loc_room_id <> d.wp_loc_room_id OR
+													s.wp_loc_room_ref <> d.wp_loc_room_ref OR
+													s.wp_loc_floor_id <> d.wp_loc_floor_id OR
+													s.wp_loc_floor_Ref <> d.wp_loc_floor_Ref OR
+													s.wp_loc_building_id <> d.wp_loc_building_id OR
+													s.wp_loc_building_ref <> d.wp_loc_building_ref OR
+													s.wp_loc_site_id <> d.wp_loc_site_id OR
+													s.wp_loc_site_Ref <> d.wp_loc_site_Ref OR
+													s.wp_loc_area_id <> d.wp_loc_area_id OR
+													s.wp_loc_area_ref <> d.wp_loc_area_ref OR
+													s.wp_city <> d.wp_city OR
+													s.wp_country <> d.wp_country OR
+													s.wp_gross_floor_area <> d.wp_gross_floor_area OR
+													s.wp_net_room_area <> d.wp_net_room_area OR
+													s.wp_net_floor_area <> d.wp_net_floor_area OR
+													s.wp_net_area <> d.wp_net_area OR
+													s.wp_gross_external_area <> d.wp_gross_external_area OR
+													s.wp_usable_area <> d.wp_usable_area OR
+													s.en15221_gross_floor_area <> d.en15221_gross_floor_area OR
+													s.en15221_net_room_area <> d.en15221_net_room_area OR
+													s.en15221_net_floor_area <> d.en15221_net_floor_area OR
+													s.iso9836_net_area <> d.iso9836_net_area OR
+													s.iso9836_gross_external_area <> d.iso9836_gross_external_area OR
+													s.iso9836_usable_Area <> d.iso9836_usable_Area OR
+													s.en15221_level_area <> d.en15221_level_area OR
+													s.en15221_internal_floor_area <> d.en15221_internal_floor_area OR
+													s.en15221_techical_area <> d.en15221_techical_area OR
+													s.en15221_circulation_area <> d.en15221_circulation_area OR
+													s.en15221_amenity_area <> d.en15221_amenity_area OR
+													s.en15221_primary_area <> d.en15221_primary_area OR
+													s.en15221_nonfunc_level_area <> d.en15221_nonfunc_level_area OR
+													s.en15221_ext_construct_area <> d.en15221_ext_construct_area OR
+													s.en15221_int_construct_area <> d.en15221_int_construct_area OR
+													s.en15221_partition_wall_area <> d.en15221_partition_wall_area OR
+													s.iso9836_gross_internal_area <> d.iso9836_gross_internal_area OR
+													s.iso9836_main_usable_area <> d.iso9836_main_usable_area OR
+													s.iso9836_subsidiary_usage_area <> d.iso9836_subsidiary_usage_area OR
+													s.iso9836_services_area <> d.iso9836_services_area OR
+													s.iso9836_circulations_area <> d.iso9836_circulations_area OR
+													s.iso9836_exterior_walls_area <> d.iso9836_exterior_walls_area OR
+													s.iso9836_int_construction_area <> d.iso9836_int_construction_area
+													then update set is_deleted = 'Y' """
+														,
+														fact_wp_buildings,
+														MV_REP_INT_LOCATIONS,
+														MV_REP_INT_LOCATIONS,
+														MV_REP_INT_LOCATIONS,
+														MV_REP_INT_LOCATIONS,
+														MV_REP_INT_LOCATIONS,
+														MV_REP_INT_LOCATIONS,
+														MV_REP_BUILDING_STATS,
+														MV_REP_INT_LOCATIONS,
+														MV_REP_INT_LOCATIONS,
+														MV_REP_INT_LOCATIONS,
+														MV_REP_INT_LOCATIONS,
+														MV_REP_INT_LOCATIONS,
+														MV_REP_BUILDING_STATS,
+														MV_REP_INT_LOCATIONS,
+														MV_REP_INT_LOCATIONS,
+														MV_REP_INT_LOCATIONS,
+														MV_REP_BUILDING_STATS,
+														MV_REP_INT_LOCATIONS,
+														MV_REP_INT_LOCATIONS,
+														MV_REP_INT_LOCATIONS,
+														MV_REP_INT_LOCATIONS,
+														MV_REP_INT_LOCATIONS,
+														MV_REP_INT_LOCATIONS,
+														MV_REP_BUILDING_STATS
+														);
+
+				EXECUTE IMMEDIATE mcs_fact_building_update;
+		
+		EXCEPTION WHEN ERROR THEN
+
+		  SET strRemarks = 'Failed in '||strProcName||', check error_log table for more info';
+		  SET strErrorMessage = @@error.message;
+		  SET error_txt		  = 'Failed in mcs_fact_building_update full load '||'~'||@@error.statement_text;
+		  
+		  CALL `cobundu-bi-playground.mcs_procedures.Execution_log`(p_dataset_name, strProcName, 'E', strRemarks);
+		  CALL `cobundu-bi-playground.mcs_procedures.Error_log`(p_dataset_name, strErrorMessage, error_txt);
+
+		END;
+		
+		--######################################
+			--FACT_WP_BUILDINGS  -- INSERT
+			--######################################
+			BEGIN
+
+				SET mcs_fact_building_insert = FORMAT("""merge into `%s` d
+														using (WITH loc AS (
+															SELECT 
+																ll.location_id,
+																ll.location_id AS loc_room_id,
+																lf.location_id AS loc_floor_id,
+																lb.location_id AS loc_building_id,
+																b.city,
+																b.country,
+																ls.location_id AS loc_site_id,
+																la.location_id AS loc_area_id 
+															FROM 
+																`%s` ll
+															LEFT JOIN `%s` lr ON ll.location_id = lr.location_id 
+															LEFT JOIN `%s` lf ON lr.parent_id = lf.location_id
+															LEFT JOIN `%s` lb ON lf.parent_id = lb.location_id
+															LEFT JOIN `%s` ls ON lb.parent_id = ls.location_id
+															LEFT JOIN `%s` la ON ls.parent_id = la.location_id
+															LEFT JOIN `%s` b ON lb.location_id = b.location_id
+															WHERE ll.location_type = 'ROOM' AND lr.location_type = 'ROOM'
+															UNION ALL
+															SELECT 
+																ll.location_id, 
+																NULL AS loc_room_id,
+																ll.location_id AS loc_floor_id,
+																lb.location_id AS loc_building_id,
+																b.city,
+																b.country,
+																ls.location_id AS loc_site_id,
+																la.location_id AS loc_Area_id
+															FROM
+																`%s` ll
+															LEFT JOIN `%s` lf ON ll.location_id=lf.location_id
+															LEFT JOIN `%s` lb ON lf.parent_id=lb.location_id
+															LEFT JOIN `%s` ls ON lb.parent_id=ls.location_id
+															LEFT JOIN `%s` la ON ls.parent_id=la.location_id
+															LEFT JOIN `%s` b ON lb.location_id=b.location_id
+															WHERE ll.location_type='FLOOR' AND lf.location_type='FLOOR' AND lb.location_type='BUILDING'
+															UNION ALL
+															SELECT 
+																ll.location_id,
+																NULL AS loc_room_id,
+																NULL AS loc_floor_id,
+																ll.location_id AS loc_building_id,
+																b.city,
+																b.country,
+																ls.location_id AS loc_site_id,
+																la.location_id AS loc_area_id
+															FROM
+																`%s` ll 
+															LEFT JOIN `%s` ls ON ll.parent_id=ls.location_id
+															LEFT JOIN `%s` la ON ls.parent_id=la.location_id
+															LEFT JOIN `%s` b ON ll.location_id=b.location_id
+															WHERE ll.location_type='BUILDING'
+															UNION ALL
+															SELECT 
+																ll.location_id, 
+																NULL AS loc_room_id,
+																NULL AS loc_floor_id,
+																NULL AS loc_building_id,
+																NULL AS city,
+																NULL AS country,
+																ls.location_id AS  loc_site_id,
+																la.location_id AS loc_area_id
+															FROM  
+																`%s` ll  
+															LEFT JOIN `%s` ls ON ll.location_id=ls.location_id
+															LEFT JOIN `%s` la ON ls.parent_id=la.location_id
+															WHERE ll.location_type='SITE' AND ls.location_type='SITE'
+															UNION ALL
+															SELECT
+																ll.location_id,
+																NULL AS loc_room_id,
+																NULL AS loc_floor_id,
+																NULL AS loc_building_id,
+																NULL AS city,
+																NULL AS country,
+																NULL AS loc_site_id,
+																la.location_id AS loc_area_id
+															FROM  
+																`%s` ll
+															LEFT JOIN `%s` la ON ll.location_id=la.location_id
+															WHERE ll.location_type='AREA' AND la.location_type='AREA' 
+														)
+														SELECT 
+															DISTINCT l.location_id AS wp_location_id,
+															l.location_type AS wp_location_type,
+															CASE 
+																WHEN l.location_type = 'BUILDING' THEN l.building_type_ref
+															END AS wp_building_type,
+															b.prop_ownership_type_code AS wp_ownership_type,
+															b.accommodation AS wp_Accommodation,
+															CAST(b.year_build AS INT) AS wp_year_built,
+															b.re_zone AS wp_real_estate_zone,
+															EXTRACT(YEAR FROM CURRENT_DATE) - CAST(b.year_build AS INT) AS WP_BUILDING_AGE,
+															l.room_cat_ref AS wp_room_category_reference,
+															l.room_purpose_ref AS wp_room_purpose_reference,
+															CAST(l.room_area AS numeric) AS wp_room_Area,
+															CAST(l.workplaces_nr AS int) AS wp_nr_of_workplaces,
+															CAST(l.employees_nr AS int) AS wp_nr_of_employees,
+															l.room_cat_group_ref AS wp_room_category_group_reference,
+															loc.loc_room_id AS wp_loc_room_id,
+															l.room_ref AS wp_loc_room_ref,
+															loc.loc_floor_id AS wp_loc_floor_id,
+															l.floor_ref AS wp_loc_floor_Ref,
+															loc.loc_building_id AS wp_loc_building_id,
+															l.building_ref AS wp_loc_building_ref,
+															loc.loc_site_id AS wp_loc_site_id,
+															l.site_ref AS wp_loc_site_Ref,
+															loc.loc_area_id AS wp_loc_area_id,
+															l.area_Ref AS wp_loc_area_ref,
+															CASE 
+																WHEN l.location_type = 'BUILDING' THEN loc.city
+															END AS wp_city,
+															CASE 
+																WHEN l.location_type = 'BUILDING' THEN loc.country
+															END AS wp_country,
+															CAST(b.en15221_gross_floor_area AS float64) AS wp_gross_floor_area,
+															CAST(b.en15221_net_room_area  AS float64)AS wp_net_room_area,
+															CAST(b.en15221_net_floor_area  AS float64) AS wp_net_floor_area,
+															CAST(b.iso9836_net_area AS float64) AS wp_net_area,
+															CAST(b.iso9836_gross_external_area  AS float64)AS wp_gross_external_area,
+															CAST(b.iso9836_usable_Area AS float64) AS wp_usable_area,
+															CAST(b.en15221_gross_floor_area AS float64) as en15221_gross_floor_area,
+															CAST(b.en15221_net_room_area  AS float64) as en15221_net_room_area,
+															CAST(b.en15221_net_floor_area  AS float64) as en15221_net_floor_area,
+															CAST(b.iso9836_net_area AS float64) as iso9836_net_area,
+															CAST(b.iso9836_gross_external_area  AS float64) as iso9836_gross_external_area,
+															CAST(b.iso9836_usable_Area AS float64) as iso9836_usable_Area,
+															CAST(b.en15221_level_area AS float64) as en15221_level_area,
+															CAST(b.en15221_internal_floor_area AS float64) as en15221_internal_floor_area,
+															CAST(b.en15221_techical_area AS float64) as en15221_techical_area,
+															CAST(b.en15221_circulation_area AS float64) as en15221_circulation_area,
+															CAST(b.en15221_amenity_area AS float64) as en15221_amenity_area,
+															CAST(b.en15221_primary_area AS float64) as en15221_primary_area,
+															CAST(b.en15221_nonfunc_level_area AS float64) as en15221_nonfunc_level_area,
+															CAST(b.en15221_ext_construct_area AS float64) as en15221_ext_construct_area,
+															CAST(b.en15221_int_construct_area AS float64) as en15221_int_construct_area,
+															CAST(b.en15221_partition_wall_area AS float64) as en15221_partition_wall_area,
+															CAST(b.iso9836_gross_internal_area AS float64) as iso9836_gross_internal_area,
+															CAST(b.iso9836_main_usable_area AS float64) as iso9836_main_usable_area,
+															CAST(b.iso9836_subsidiary_usage_area AS float64) as iso9836_subsidiary_usage_area,
+															CAST(b.iso9836_services_area AS float64) as iso9836_services_area,
+															CAST(b.iso9836_circulations_area AS float64) as iso9836_circulations_area,
+															CAST(b.iso9836_exterior_walls_area AS float64) as iso9836_exterior_walls_area,
+															CAST(b.iso9836_int_construction_area AS float64) as iso9836_int_construction_area
+														FROM 
+															`%s` l 
+														LEFT JOIN loc ON l.location_id = loc.location_id
+														LEFT JOIN `%s` b ON l.location_id = b.location_id
+														WHERE 
+															l.LOC_STATUS_CLASS = 'Active') 
+														 s on 
+															s.wp_location_id = d.wp_location_id 
+															when not matched then
+															insert (
+														wp_location_id,
+														wp_location_type,
+														wp_building_type,
+														wp_ownership_type,
+														wp_Accommodation,
+														wp_year_built,
+														wp_real_estate_zone,
+														WP_BUILDING_AGE,
+														wp_room_category_reference,
+														wp_room_purpose_reference,
+														wp_room_Area,
+														wp_nr_of_workplaces,
+														wp_nr_of_employees,
+														wp_room_category_group_reference,
+														wp_loc_room_id,
+														wp_loc_room_ref,
+														wp_loc_floor_id,
+														wp_loc_floor_Ref,
+														wp_loc_building_id,
+														wp_loc_building_ref,
+														wp_loc_site_id,
+														wp_loc_site_Ref,
+														wp_loc_area_id,
+														wp_loc_area_ref,
+														wp_city,
+														wp_country,
+														wp_gross_floor_area,
+														wp_net_room_area,
+														wp_net_floor_area,
+														wp_net_area,
+														wp_gross_external_area,
+														wp_usable_area,
+														en15221_gross_floor_area,
+														en15221_net_room_area,
+														en15221_net_floor_area,
+														iso9836_net_area,
+														iso9836_gross_external_area,
+														iso9836_usable_Area,
+														en15221_level_area,
+														en15221_internal_floor_area,
+														en15221_techical_area,
+														en15221_circulation_area,
+														en15221_amenity_area,
+														en15221_primary_area,
+														en15221_nonfunc_level_area,
+														en15221_ext_construct_area,
+														en15221_int_construct_area,
+														en15221_partition_wall_area,
+														iso9836_gross_internal_area,
+														iso9836_main_usable_area,
+														iso9836_subsidiary_usage_area,
+														iso9836_services_area,
+														iso9836_circulations_area,
+														iso9836_exterior_walls_area,
+														iso9836_int_construction_area,
+														is_deleted,
+														last_modified_timestamp
+
+															)
+															values 
+															(wp_location_id,
+														wp_location_type,
+														wp_building_type,
+														wp_ownership_type,
+														wp_Accommodation,
+														wp_year_built,
+														wp_real_estate_zone,
+														WP_BUILDING_AGE,
+														wp_room_category_reference,
+														wp_room_purpose_reference,
+														wp_room_Area,
+														wp_nr_of_workplaces,
+														wp_nr_of_employees,
+														wp_room_category_group_reference,
+														wp_loc_room_id,
+														wp_loc_room_ref,
+														wp_loc_floor_id,
+														wp_loc_floor_Ref,
+														wp_loc_building_id,
+														wp_loc_building_ref,
+														wp_loc_site_id,
+														wp_loc_site_Ref,
+														wp_loc_area_id,
+														wp_loc_area_ref,
+														wp_city,
+														wp_country,
+														wp_gross_floor_area,
+														wp_net_room_area,
+														wp_net_floor_area,
+														wp_net_area,
+														wp_gross_external_area,
+														wp_usable_area,
+														en15221_gross_floor_area,
+														en15221_net_room_area,
+														en15221_net_floor_area,
+														iso9836_net_area,
+														iso9836_gross_external_area,
+														iso9836_usable_Area,
+														en15221_level_area,
+														en15221_internal_floor_area,
+														en15221_techical_area,
+														en15221_circulation_area,
+														en15221_amenity_area,
+														en15221_primary_area,
+														en15221_nonfunc_level_area,
+														en15221_ext_construct_area,
+														en15221_int_construct_area,
+														en15221_partition_wall_area,
+														iso9836_gross_internal_area,
+														iso9836_main_usable_area,
+														iso9836_subsidiary_usage_area,
+														iso9836_services_area,
+														iso9836_circulations_area,
+														iso9836_exterior_walls_area,
+														iso9836_int_construction_area,
+														'N',
+														TIMESTAMP_TRUNC(datetime(current_timestamp(),"CET"), SECOND))												
+														""",
+														fact_wp_buildings,
+														MV_REP_INT_LOCATIONS,
+														MV_REP_INT_LOCATIONS,
+														MV_REP_INT_LOCATIONS,
+														MV_REP_INT_LOCATIONS,
+														MV_REP_INT_LOCATIONS,
+														MV_REP_INT_LOCATIONS,
+														MV_REP_BUILDING_STATS,
+														MV_REP_INT_LOCATIONS,
+														MV_REP_INT_LOCATIONS,
+														MV_REP_INT_LOCATIONS,
+														MV_REP_INT_LOCATIONS,
+														MV_REP_INT_LOCATIONS,
+														MV_REP_BUILDING_STATS,
+														MV_REP_INT_LOCATIONS,
+														MV_REP_INT_LOCATIONS,
+														MV_REP_INT_LOCATIONS,
+														MV_REP_BUILDING_STATS,
+														MV_REP_INT_LOCATIONS,
+														MV_REP_INT_LOCATIONS,
+														MV_REP_INT_LOCATIONS,
+														MV_REP_INT_LOCATIONS,
+														MV_REP_INT_LOCATIONS,
+														MV_REP_INT_LOCATIONS,
+														MV_REP_BUILDING_STATS
+														);
+
+
+				EXECUTE IMMEDIATE mcs_fact_building_insert;
+		
+		EXCEPTION WHEN ERROR THEN
+			
+		  SET strRemarks 		= 'Failed in '||strProcName||', check error_log table for more info';
+		  SET strErrorMessage 	= @@error.message;
+		  SET error_txt		  	= 'Failed in mcs_fact_building_insert full load '||'~'||@@error.statement_text;
+		  
+		  CALL `cobundu-bi-playground.mcs_procedures.Execution_log`(p_dataset_name, strProcName, 'E', strRemarks);
+		  CALL `cobundu-bi-playground.mcs_procedures.Error_log`(p_dataset_name, strErrorMessage, error_txt);
+
+		END;
+	ELSE 
+
+		SET MV_REP_INT_LOCATIONS 		  	= 	IFNULL(`cobundu-bi-playground.dataform_sd_procedure.get_variable_name`(p_project_id, p_dataset_name, 'MV_REP_INT_LOCATIONS_DAILY_'||p_num,1),p_project_id||'.'||p_dataset_name||'.MV_REP_INT_LOCATIONS_DAILY_'||p_num); --Hemanth
+		SET MV_REP_BUILDING_STATS 	  	= 	IFNULL(`cobundu-bi-playground.dataform_sd_procedure.get_variable_name`(p_project_id, p_dataset_name, 'MV_REP_BUILDING_STATS_DAILY_'||p_num,1),p_project_id||'.'||p_dataset_name||'.MV_REP_BUILDING_STATS_DAILY_'||p_num); --Hemanth
+		
+		IF MV_REP_INT_LOCATIONS IS NOT NULL
+		OR MV_REP_BUILDING_STATS IS NOT NULL
+		THEN
+			--######################################
+			--FACT_WP_BUILDINGS  -- UPDATE CURRENT DAY
+			--######################################
+				
+			BEGIN
+				SET mcs_fact_building_update = FORMAT("""merge into `%s` d
+													using (WITH loc AS (
+														SELECT 
+															ll.location_id,
+															ll.location_id AS loc_room_id,
+															lf.location_id AS loc_floor_id,
+															lb.location_id AS loc_building_id,
+															b.city,
+															b.country,
+															ls.location_id AS loc_site_id,
+															la.location_id AS loc_area_id 
+														FROM 
+															`%s` ll
+														LEFT JOIN `%s` lr ON ll.location_id = lr.location_id 
+														LEFT JOIN `%s` lf ON lr.parent_id = lf.location_id
+														LEFT JOIN `%s` lb ON lf.parent_id = lb.location_id
+														LEFT JOIN `%s` ls ON lb.parent_id = ls.location_id
+														LEFT JOIN `%s` la ON ls.parent_id = la.location_id
+														LEFT JOIN `%s` b ON lb.location_id = b.location_id
+														WHERE ll.location_type = 'ROOM' AND lr.location_type = 'ROOM'
+														UNION ALL
+														SELECT 
+															ll.location_id, 
+															NULL AS loc_room_id,
+															ll.location_id AS loc_floor_id,
+															lb.location_id AS loc_building_id,
+															b.city,
+															b.country,
+															ls.location_id AS loc_site_id,
+															la.location_id AS loc_Area_id
+														FROM
+															`%s` ll
+														LEFT JOIN `%s` lf ON ll.location_id=lf.location_id
+														LEFT JOIN `%s` lb ON lf.parent_id=lb.location_id
+														LEFT JOIN `%s` ls ON lb.parent_id=ls.location_id
+														LEFT JOIN `%s` la ON ls.parent_id=la.location_id
+														LEFT JOIN `%s` b ON lb.location_id=b.location_id
+														WHERE ll.location_type='FLOOR' AND lf.location_type='FLOOR' AND lb.location_type='BUILDING'
+														UNION ALL
+														SELECT 
+															ll.location_id,
+															NULL AS loc_room_id,
+															NULL AS loc_floor_id,
+															ll.location_id AS loc_building_id,
+															b.city,
+															b.country,
+															ls.location_id AS loc_site_id,
+															la.location_id AS loc_area_id
+														FROM
+															`%s` ll 
+														LEFT JOIN `%s` ls ON ll.parent_id=ls.location_id
+														LEFT JOIN `%s` la ON ls.parent_id=la.location_id
+														LEFT JOIN `%s` b ON ll.location_id=b.location_id
+														WHERE ll.location_type='BUILDING'
+														UNION ALL
+														SELECT 
+															ll.location_id, 
+															NULL AS loc_room_id,
+															NULL AS loc_floor_id,
+															NULL AS loc_building_id,
+															NULL AS city,
+															NULL AS country,
+															ls.location_id AS  loc_site_id,
+															la.location_id AS loc_area_id
+														FROM  
+															`%s` ll  
+														LEFT JOIN `%s` ls ON ll.location_id=ls.location_id
+														LEFT JOIN `%s` la ON ls.parent_id=la.location_id
+														WHERE ll.location_type='SITE' AND ls.location_type='SITE'
+														UNION ALL
+														SELECT
+															ll.location_id,
+															NULL AS loc_room_id,
+															NULL AS loc_floor_id,
+															NULL AS loc_building_id,
+															NULL AS city,
+															NULL AS country,
+															NULL AS loc_site_id,
+															la.location_id AS loc_area_id
+														FROM  
+															`%s` ll
+														LEFT JOIN `%s` la ON ll.location_id=la.location_id
+														WHERE ll.location_type='AREA' AND la.location_type='AREA' 
+													)
+													SELECT 
+														DISTINCT l.location_id AS wp_location_id,
+														l.location_type AS wp_location_type,
+														CASE 
+															WHEN l.location_type = 'BUILDING' THEN l.building_type_ref
+														END AS wp_building_type,
+														b.prop_ownership_type_code AS wp_ownership_type,
+														b.accommodation AS wp_Accommodation,
+														CAST(b.year_build AS INT) AS wp_year_built,
+														b.re_zone AS wp_real_estate_zone,
+														EXTRACT(YEAR FROM CURRENT_DATE) - CAST(b.year_build AS INT) AS WP_BUILDING_AGE,
+														l.room_cat_ref AS wp_room_category_reference,
+														l.room_purpose_ref AS wp_room_purpose_reference,
+														CAST(l.room_area AS numeric) AS wp_room_Area,
+														CAST(l.workplaces_nr AS int) AS wp_nr_of_workplaces,
+														CAST(l.employees_nr AS int) AS wp_nr_of_employees,
+														l.room_cat_group_ref AS wp_room_category_group_reference,
+														loc.loc_room_id AS wp_loc_room_id,
+														l.room_ref AS wp_loc_room_ref,
+														loc.loc_floor_id AS wp_loc_floor_id,
+														l.floor_ref AS wp_loc_floor_Ref,
+														loc.loc_building_id AS wp_loc_building_id,
+														l.building_ref AS wp_loc_building_ref,
+														loc.loc_site_id AS wp_loc_site_id,
+														l.site_ref AS wp_loc_site_Ref,
+														loc.loc_area_id AS wp_loc_area_id,
+														l.area_Ref AS wp_loc_area_ref,
+														CASE 
+															WHEN l.location_type = 'BUILDING' THEN loc.city
+														END AS wp_city,
+														CASE 
+															WHEN l.location_type = 'BUILDING' THEN loc.country
+														END AS wp_country,
+														CAST(b.en15221_gross_floor_area AS float64) AS wp_gross_floor_area,
+														CAST(b.en15221_net_room_area  AS float64)AS wp_net_room_area,
+														CAST(b.en15221_net_floor_area  AS float64) AS wp_net_floor_area,
+														CAST(b.iso9836_net_area AS float64) AS wp_net_area,
+														CAST(b.iso9836_gross_external_area  AS float64)AS wp_gross_external_area,
+														CAST(b.iso9836_usable_Area AS float64) AS wp_usable_area,
+														CAST(b.en15221_gross_floor_area AS float64) as en15221_gross_floor_area,
+														CAST(b.en15221_net_room_area  AS float64) as en15221_net_room_area,
+														CAST(b.en15221_net_floor_area  AS float64) as en15221_net_floor_area,
+														CAST(b.iso9836_net_area AS float64) as iso9836_net_area,
+														CAST(b.iso9836_gross_external_area  AS float64) as iso9836_gross_external_area,
+														CAST(b.iso9836_usable_Area AS float64) as iso9836_usable_Area,
+														CAST(b.en15221_level_area AS float64) as en15221_level_area,
+														CAST(b.en15221_internal_floor_area AS float64) as en15221_internal_floor_area,
+														CAST(b.en15221_techical_area AS float64) as en15221_techical_area,
+														CAST(b.en15221_circulation_area AS float64) as en15221_circulation_area,
+														CAST(b.en15221_amenity_area AS float64) as en15221_amenity_area,
+														CAST(b.en15221_primary_area AS float64) as en15221_primary_area,
+														CAST(b.en15221_nonfunc_level_area AS float64) as en15221_nonfunc_level_area,
+														CAST(b.en15221_ext_construct_area AS float64) as en15221_ext_construct_area,
+														CAST(b.en15221_int_construct_area AS float64) as en15221_int_construct_area,
+														CAST(b.en15221_partition_wall_area AS float64) as en15221_partition_wall_area,
+														CAST(b.iso9836_gross_internal_area AS float64) as iso9836_gross_internal_area,
+														CAST(b.iso9836_main_usable_area AS float64) as iso9836_main_usable_area,
+														CAST(b.iso9836_subsidiary_usage_area AS float64) as iso9836_subsidiary_usage_area,
+														CAST(b.iso9836_services_area AS float64) as iso9836_services_area,
+														CAST(b.iso9836_circulations_area AS float64) as iso9836_circulations_area,
+														CAST(b.iso9836_exterior_walls_area AS float64) as iso9836_exterior_walls_area,
+														CAST(b.iso9836_int_construction_area AS float64) as iso9836_int_construction_area
+													FROM 
+														`%s` l 
+													LEFT JOIN loc ON l.location_id = loc.location_id
+													LEFT JOIN `%s` b ON l.location_id = b.location_id
+													WHERE 
+														l.LOC_STATUS_CLASS = 'Active') s on 
+														s.wp_location_id = d.wp_location_id and d.is_deleted = 'N'
+														when  matched and
+													   s.wp_location_id <> d.wp_location_id OR
+													s.wp_location_type <> d.wp_location_type OR
+													s.wp_building_type <> d.wp_building_type OR
+													s.wp_ownership_type <> d.wp_ownership_type OR
+													s.wp_Accommodation <> d.wp_Accommodation OR
+													s.wp_year_built <> d.wp_year_built OR
+													s.wp_real_estate_zone <> d.wp_real_estate_zone OR
+													s.WP_BUILDING_AGE <> d.WP_BUILDING_AGE OR
+													s.wp_room_category_reference <> d.wp_room_category_reference OR
+													s.wp_room_purpose_reference <> d.wp_room_purpose_reference OR
+													s.wp_room_Area <> d.wp_room_Area OR
+													s.wp_nr_of_workplaces <> d.wp_nr_of_workplaces OR
+													s.wp_nr_of_employees <> d.wp_nr_of_employees OR
+													s.wp_room_category_group_reference <> d.wp_room_category_group_reference OR
+													s.wp_loc_room_id <> d.wp_loc_room_id OR
+													s.wp_loc_room_ref <> d.wp_loc_room_ref OR
+													s.wp_loc_floor_id <> d.wp_loc_floor_id OR
+													s.wp_loc_floor_Ref <> d.wp_loc_floor_Ref OR
+													s.wp_loc_building_id <> d.wp_loc_building_id OR
+													s.wp_loc_building_ref <> d.wp_loc_building_ref OR
+													s.wp_loc_site_id <> d.wp_loc_site_id OR
+													s.wp_loc_site_Ref <> d.wp_loc_site_Ref OR
+													s.wp_loc_area_id <> d.wp_loc_area_id OR
+													s.wp_loc_area_ref <> d.wp_loc_area_ref OR
+													s.wp_city <> d.wp_city OR
+													s.wp_country <> d.wp_country OR
+													s.wp_gross_floor_area <> d.wp_gross_floor_area OR
+													s.wp_net_room_area <> d.wp_net_room_area OR
+													s.wp_net_floor_area <> d.wp_net_floor_area OR
+													s.wp_net_area <> d.wp_net_area OR
+													s.wp_gross_external_area <> d.wp_gross_external_area OR
+													s.wp_usable_area <> d.wp_usable_area OR
+													s.en15221_gross_floor_area <> d.en15221_gross_floor_area OR
+													s.en15221_net_room_area <> d.en15221_net_room_area OR
+													s.en15221_net_floor_area <> d.en15221_net_floor_area OR
+													s.iso9836_net_area <> d.iso9836_net_area OR
+													s.iso9836_gross_external_area <> d.iso9836_gross_external_area OR
+													s.iso9836_usable_Area <> d.iso9836_usable_Area OR
+													s.en15221_level_area <> d.en15221_level_area OR
+													s.en15221_internal_floor_area <> d.en15221_internal_floor_area OR
+													s.en15221_techical_area <> d.en15221_techical_area OR
+													s.en15221_circulation_area <> d.en15221_circulation_area OR
+													s.en15221_amenity_area <> d.en15221_amenity_area OR
+													s.en15221_primary_area <> d.en15221_primary_area OR
+													s.en15221_nonfunc_level_area <> d.en15221_nonfunc_level_area OR
+													s.en15221_ext_construct_area <> d.en15221_ext_construct_area OR
+													s.en15221_int_construct_area <> d.en15221_int_construct_area OR
+													s.en15221_partition_wall_area <> d.en15221_partition_wall_area OR
+													s.iso9836_gross_internal_area <> d.iso9836_gross_internal_area OR
+													s.iso9836_main_usable_area <> d.iso9836_main_usable_area OR
+													s.iso9836_subsidiary_usage_area <> d.iso9836_subsidiary_usage_area OR
+													s.iso9836_services_area <> d.iso9836_services_area OR
+													s.iso9836_circulations_area <> d.iso9836_circulations_area OR
+													s.iso9836_exterior_walls_area <> d.iso9836_exterior_walls_area OR
+													s.iso9836_int_construction_area <> d.iso9836_int_construction_area
+													then update set is_deleted = 'Y' """
+														,
+														fact_wp_buildings,
+														MV_REP_INT_LOCATIONS,
+														MV_REP_INT_LOCATIONS,
+														MV_REP_INT_LOCATIONS,
+														MV_REP_INT_LOCATIONS,
+														MV_REP_INT_LOCATIONS,
+														MV_REP_INT_LOCATIONS,
+														MV_REP_BUILDING_STATS,
+														MV_REP_INT_LOCATIONS,
+														MV_REP_INT_LOCATIONS,
+														MV_REP_INT_LOCATIONS,
+														MV_REP_INT_LOCATIONS,
+														MV_REP_INT_LOCATIONS,
+														MV_REP_BUILDING_STATS,
+														MV_REP_INT_LOCATIONS,
+														MV_REP_INT_LOCATIONS,
+														MV_REP_INT_LOCATIONS,
+														MV_REP_BUILDING_STATS,
+														MV_REP_INT_LOCATIONS,
+														MV_REP_INT_LOCATIONS,
+														MV_REP_INT_LOCATIONS,
+														MV_REP_INT_LOCATIONS,
+														MV_REP_INT_LOCATIONS,
+														MV_REP_INT_LOCATIONS,
+														MV_REP_BUILDING_STATS
+														);
+
+				EXECUTE IMMEDIATE mcs_fact_building_update;
+			
+			EXCEPTION WHEN ERROR THEN
+
+			  SET strRemarks 		= 'Failed in '||strProcName||', check error_log table for more info';
+			  SET strErrorMessage 	= @@error.message;
+			  SET error_txt		  	= 'Failed in mcs_fact_building_update for current day load '||CURRENT_DATE||' ~'||@@error.statement_text;
+			  
+			  CALL `cobundu-bi-playground.mcs_procedures.Execution_log`(p_dataset_name, strProcName, 'E', strRemarks);
+			  CALL `cobundu-bi-playground.mcs_procedures.Error_log`(p_dataset_name, strErrorMessage, error_txt);
+
+			END;
+			
+			--######################################
+			--FACT_WP_BUILDINGS  -- INSERT CURRENT DAY
+			--######################################
+			BEGIN
+
+				SET mcs_fact_building_insert = FORMAT("""merge into `%s` d
+														using (WITH loc AS (
+															SELECT 
+																ll.location_id,
+																ll.location_id AS loc_room_id,
+																lf.location_id AS loc_floor_id,
+																lb.location_id AS loc_building_id,
+																b.city,
+																b.country,
+																ls.location_id AS loc_site_id,
+																la.location_id AS loc_area_id 
+															FROM 
+																`%s` ll
+															LEFT JOIN `%s` lr ON ll.location_id = lr.location_id 
+															LEFT JOIN `%s` lf ON lr.parent_id = lf.location_id
+															LEFT JOIN `%s` lb ON lf.parent_id = lb.location_id
+															LEFT JOIN `%s` ls ON lb.parent_id = ls.location_id
+															LEFT JOIN `%s` la ON ls.parent_id = la.location_id
+															LEFT JOIN `%s` b ON lb.location_id = b.location_id
+															WHERE ll.location_type = 'ROOM' AND lr.location_type = 'ROOM'
+															UNION ALL
+															SELECT 
+																ll.location_id, 
+																NULL AS loc_room_id,
+																ll.location_id AS loc_floor_id,
+																lb.location_id AS loc_building_id,
+																b.city,
+																b.country,
+																ls.location_id AS loc_site_id,
+																la.location_id AS loc_Area_id
+															FROM
+																`%s` ll
+															LEFT JOIN `%s` lf ON ll.location_id=lf.location_id
+															LEFT JOIN `%s` lb ON lf.parent_id=lb.location_id
+															LEFT JOIN `%s` ls ON lb.parent_id=ls.location_id
+															LEFT JOIN `%s` la ON ls.parent_id=la.location_id
+															LEFT JOIN `%s` b ON lb.location_id=b.location_id
+															WHERE ll.location_type='FLOOR' AND lf.location_type='FLOOR' AND lb.location_type='BUILDING'
+															UNION ALL
+															SELECT 
+																ll.location_id,
+																NULL AS loc_room_id,
+																NULL AS loc_floor_id,
+																ll.location_id AS loc_building_id,
+																b.city,
+																b.country,
+																ls.location_id AS loc_site_id,
+																la.location_id AS loc_area_id
+															FROM
+																`%s` ll 
+															LEFT JOIN `%s` ls ON ll.parent_id=ls.location_id
+															LEFT JOIN `%s` la ON ls.parent_id=la.location_id
+															LEFT JOIN `%s` b ON ll.location_id=b.location_id
+															WHERE ll.location_type='BUILDING'
+															UNION ALL
+															SELECT 
+																ll.location_id, 
+																NULL AS loc_room_id,
+																NULL AS loc_floor_id,
+																NULL AS loc_building_id,
+																NULL AS city,
+																NULL AS country,
+																ls.location_id AS  loc_site_id,
+																la.location_id AS loc_area_id
+															FROM  
+																`%s` ll  
+															LEFT JOIN `%s` ls ON ll.location_id=ls.location_id
+															LEFT JOIN `%s` la ON ls.parent_id=la.location_id
+															WHERE ll.location_type='SITE' AND ls.location_type='SITE'
+															UNION ALL
+															SELECT
+																ll.location_id,
+																NULL AS loc_room_id,
+																NULL AS loc_floor_id,
+																NULL AS loc_building_id,
+																NULL AS city,
+																NULL AS country,
+																NULL AS loc_site_id,
+																la.location_id AS loc_area_id
+															FROM  
+																`%s` ll
+															LEFT JOIN `%s` la ON ll.location_id=la.location_id
+															WHERE ll.location_type='AREA' AND la.location_type='AREA' 
+														)
+														SELECT 
+															DISTINCT l.location_id AS wp_location_id,
+															l.location_type AS wp_location_type,
+															CASE 
+																WHEN l.location_type = 'BUILDING' THEN l.building_type_ref
+															END AS wp_building_type,
+															b.prop_ownership_type_code AS wp_ownership_type,
+															b.accommodation AS wp_Accommodation,
+															CAST(b.year_build AS INT) AS wp_year_built,
+															b.re_zone AS wp_real_estate_zone,
+															EXTRACT(YEAR FROM CURRENT_DATE) - CAST(b.year_build AS INT) AS WP_BUILDING_AGE,
+															l.room_cat_ref AS wp_room_category_reference,
+															l.room_purpose_ref AS wp_room_purpose_reference,
+															CAST(l.room_area AS numeric) AS wp_room_Area,
+															CAST(l.workplaces_nr AS int) AS wp_nr_of_workplaces,
+															CAST(l.employees_nr AS int) AS wp_nr_of_employees,
+															l.room_cat_group_ref AS wp_room_category_group_reference,
+															loc.loc_room_id AS wp_loc_room_id,
+															l.room_ref AS wp_loc_room_ref,
+															loc.loc_floor_id AS wp_loc_floor_id,
+															l.floor_ref AS wp_loc_floor_Ref,
+															loc.loc_building_id AS wp_loc_building_id,
+															l.building_ref AS wp_loc_building_ref,
+															loc.loc_site_id AS wp_loc_site_id,
+															l.site_ref AS wp_loc_site_Ref,
+															loc.loc_area_id AS wp_loc_area_id,
+															l.area_Ref AS wp_loc_area_ref,
+															CASE 
+																WHEN l.location_type = 'BUILDING' THEN loc.city
+															END AS wp_city,
+															CASE 
+																WHEN l.location_type = 'BUILDING' THEN loc.country
+															END AS wp_country,
+															CAST(b.en15221_gross_floor_area AS float64) AS wp_gross_floor_area,
+															CAST(b.en15221_net_room_area  AS float64)AS wp_net_room_area,
+															CAST(b.en15221_net_floor_area  AS float64) AS wp_net_floor_area,
+															CAST(b.iso9836_net_area AS float64) AS wp_net_area,
+															CAST(b.iso9836_gross_external_area  AS float64)AS wp_gross_external_area,
+															CAST(b.iso9836_usable_Area AS float64) AS wp_usable_area,
+															CAST(b.en15221_gross_floor_area AS float64) as en15221_gross_floor_area,
+															CAST(b.en15221_net_room_area  AS float64) as en15221_net_room_area,
+															CAST(b.en15221_net_floor_area  AS float64) as en15221_net_floor_area,
+															CAST(b.iso9836_net_area AS float64) as iso9836_net_area,
+															CAST(b.iso9836_gross_external_area  AS float64) as iso9836_gross_external_area,
+															CAST(b.iso9836_usable_Area AS float64) as iso9836_usable_Area,
+															CAST(b.en15221_level_area AS float64) as en15221_level_area,
+															CAST(b.en15221_internal_floor_area AS float64) as en15221_internal_floor_area,
+															CAST(b.en15221_techical_area AS float64) as en15221_techical_area,
+															CAST(b.en15221_circulation_area AS float64) as en15221_circulation_area,
+															CAST(b.en15221_amenity_area AS float64) as en15221_amenity_area,
+															CAST(b.en15221_primary_area AS float64) as en15221_primary_area,
+															CAST(b.en15221_nonfunc_level_area AS float64) as en15221_nonfunc_level_area,
+															CAST(b.en15221_ext_construct_area AS float64) as en15221_ext_construct_area,
+															CAST(b.en15221_int_construct_area AS float64) as en15221_int_construct_area,
+															CAST(b.en15221_partition_wall_area AS float64) as en15221_partition_wall_area,
+															CAST(b.iso9836_gross_internal_area AS float64) as iso9836_gross_internal_area,
+															CAST(b.iso9836_main_usable_area AS float64) as iso9836_main_usable_area,
+															CAST(b.iso9836_subsidiary_usage_area AS float64) as iso9836_subsidiary_usage_area,
+															CAST(b.iso9836_services_area AS float64) as iso9836_services_area,
+															CAST(b.iso9836_circulations_area AS float64) as iso9836_circulations_area,
+															CAST(b.iso9836_exterior_walls_area AS float64) as iso9836_exterior_walls_area,
+															CAST(b.iso9836_int_construction_area AS float64) as iso9836_int_construction_area
+														FROM 
+															`%s` l 
+														LEFT JOIN loc ON l.location_id = loc.location_id
+														LEFT JOIN `%s` b ON l.location_id = b.location_id
+														WHERE 
+															l.LOC_STATUS_CLASS = 'Active') 
+														 s on 
+															s.wp_location_id = d.wp_location_id 
+															when not matched then
+															insert (
+														wp_location_id,
+														wp_location_type,
+														wp_building_type,
+														wp_ownership_type,
+														wp_Accommodation,
+														wp_year_built,
+														wp_real_estate_zone,
+														WP_BUILDING_AGE,
+														wp_room_category_reference,
+														wp_room_purpose_reference,
+														wp_room_Area,
+														wp_nr_of_workplaces,
+														wp_nr_of_employees,
+														wp_room_category_group_reference,
+														wp_loc_room_id,
+														wp_loc_room_ref,
+														wp_loc_floor_id,
+														wp_loc_floor_Ref,
+														wp_loc_building_id,
+														wp_loc_building_ref,
+														wp_loc_site_id,
+														wp_loc_site_Ref,
+														wp_loc_area_id,
+														wp_loc_area_ref,
+														wp_city,
+														wp_country,
+														wp_gross_floor_area,
+														wp_net_room_area,
+														wp_net_floor_area,
+														wp_net_area,
+														wp_gross_external_area,
+														wp_usable_area,
+														en15221_gross_floor_area,
+														en15221_net_room_area,
+														en15221_net_floor_area,
+														iso9836_net_area,
+														iso9836_gross_external_area,
+														iso9836_usable_Area,
+														en15221_level_area,
+														en15221_internal_floor_area,
+														en15221_techical_area,
+														en15221_circulation_area,
+														en15221_amenity_area,
+														en15221_primary_area,
+														en15221_nonfunc_level_area,
+														en15221_ext_construct_area,
+														en15221_int_construct_area,
+														en15221_partition_wall_area,
+														iso9836_gross_internal_area,
+														iso9836_main_usable_area,
+														iso9836_subsidiary_usage_area,
+														iso9836_services_area,
+														iso9836_circulations_area,
+														iso9836_exterior_walls_area,
+														iso9836_int_construction_area,
+														is_deleted,
+														last_modified_timestamp
+
+															)
+															values 
+															(wp_location_id,
+														wp_location_type,
+														wp_building_type,
+														wp_ownership_type,
+														wp_Accommodation,
+														wp_year_built,
+														wp_real_estate_zone,
+														WP_BUILDING_AGE,
+														wp_room_category_reference,
+														wp_room_purpose_reference,
+														wp_room_Area,
+														wp_nr_of_workplaces,
+														wp_nr_of_employees,
+														wp_room_category_group_reference,
+														wp_loc_room_id,
+														wp_loc_room_ref,
+														wp_loc_floor_id,
+														wp_loc_floor_Ref,
+														wp_loc_building_id,
+														wp_loc_building_ref,
+														wp_loc_site_id,
+														wp_loc_site_Ref,
+														wp_loc_area_id,
+														wp_loc_area_ref,
+														wp_city,
+														wp_country,
+														wp_gross_floor_area,
+														wp_net_room_area,
+														wp_net_floor_area,
+														wp_net_area,
+														wp_gross_external_area,
+														wp_usable_area,
+														en15221_gross_floor_area,
+														en15221_net_room_area,
+														en15221_net_floor_area,
+														iso9836_net_area,
+														iso9836_gross_external_area,
+														iso9836_usable_Area,
+														en15221_level_area,
+														en15221_internal_floor_area,
+														en15221_techical_area,
+														en15221_circulation_area,
+														en15221_amenity_area,
+														en15221_primary_area,
+														en15221_nonfunc_level_area,
+														en15221_ext_construct_area,
+														en15221_int_construct_area,
+														en15221_partition_wall_area,
+														iso9836_gross_internal_area,
+														iso9836_main_usable_area,
+														iso9836_subsidiary_usage_area,
+														iso9836_services_area,
+														iso9836_circulations_area,
+														iso9836_exterior_walls_area,
+														iso9836_int_construction_area,
+														'N',
+														TIMESTAMP_TRUNC(datetime(current_timestamp(),"CET"), SECOND))												
+														""",
+														fact_wp_buildings,
+														MV_REP_INT_LOCATIONS,
+														MV_REP_INT_LOCATIONS,
+														MV_REP_INT_LOCATIONS,
+														MV_REP_INT_LOCATIONS,
+														MV_REP_INT_LOCATIONS,
+														MV_REP_INT_LOCATIONS,
+														MV_REP_BUILDING_STATS,
+														MV_REP_INT_LOCATIONS,
+														MV_REP_INT_LOCATIONS,
+														MV_REP_INT_LOCATIONS,
+														MV_REP_INT_LOCATIONS,
+														MV_REP_INT_LOCATIONS,
+														MV_REP_BUILDING_STATS,
+														MV_REP_INT_LOCATIONS,
+														MV_REP_INT_LOCATIONS,
+														MV_REP_INT_LOCATIONS,
+														MV_REP_BUILDING_STATS,
+														MV_REP_INT_LOCATIONS,
+														MV_REP_INT_LOCATIONS,
+														MV_REP_INT_LOCATIONS,
+														MV_REP_INT_LOCATIONS,
+														MV_REP_INT_LOCATIONS,
+														MV_REP_INT_LOCATIONS,
+														MV_REP_BUILDING_STATS
+														);
+
+
+				EXECUTE IMMEDIATE mcs_fact_building_insert;
+			
+			EXCEPTION WHEN ERROR THEN
+				
+			  SET strRemarks 		= 'Failed in '||strProcName||', check error_log table for more info';
+			  SET strErrorMessage 	= @@error.message;
+			  SET error_txt		  	= 'Failed in mcs_fact_building_insert for current day load '||CURRENT_DATE||' ~'||@@error.statement_text;
+			  
+			  CALL `cobundu-bi-playground.mcs_procedures.Execution_log`(p_dataset_name, strProcName, 'E', strRemarks);
+			  CALL `cobundu-bi-playground.mcs_procedures.Error_log`(p_dataset_name, strErrorMessage, error_txt);
+
+			END;
+		END IF;
+	END IF;
+	
+	SET strRemarks = 'Completed Successfully';
+	CALL `cobundu-bi-playground.mcs_procedures.Execution_log`(p_dataset_name, strProcName, 'E', strRemarks);
+	
+EXCEPTION WHEN ERROR THEN
+
+	CALL `cobundu-bi-playground.mcs_procedures.Execution_log`(p_dataset_name, 'pr_fact_reservations', 'E', 'Failed');
+	CALL `cobundu-bi-playground.mcs_procedures.Error_log`(p_dataset_name, @@error.message, @@error.statement_text);
+
+END;

@@ -1,0 +1,703 @@
+CREATE OR REPLACE PROCEDURE `cobundu-bi-playground.mcs_procedures.pr_fact_maintenance`(IN p_project_id STRING, IN p_dataset_name STRING, IN p_num INT64)
+BEGIN
+	DECLARE 	nCount					INT64;
+	DECLARE		strSqlSnt				STRING;
+	DECLARE 	mcs_fact_resrv_update 	STRING;
+	DECLARE		mcs_fact_resrv_insert	STRING;
+	DECLARE		fact_reservations		STRING;
+	DECLARE		dim_location			STRING;
+	DECLARE		fact_maintenance			STRING;
+	DECLARE		MV_REP_MO			STRING;
+	DECLARE		mcs_fact_maintenance_update			STRING;
+	DECLARE		mcs_fact_maintenance_insert			STRING;
+	DECLARE		strRemarks				STRING;
+	DECLARE 	error_txt				STRING;
+	DECLARE 	strErrorMessage         STRING;
+	DECLARE		strProcName				STRING;
+	
+	SET strProcName 		= 'pr_fact_reservations';
+	SET dim_location 		= p_project_id||'.'||p_dataset_name||'.dim_locations';	
+	SET fact_reservations 	= p_project_id||'.'||p_dataset_name||'.fact_reservations';
+  SET fact_maintenance 	= p_project_id||'.'||p_dataset_name||'.FACT_MAINTENANCE';
+	
+	
+	CALL `cobundu-bi-playground.dataform_sd_procedure.Execution_log`(p_dataset_name, strProcName, 'S', '');
+	
+	SET strSqlSnt = FORMAT("""SELECT COUNT(*) FROM `%s` """,fact_maintenance);
+	
+	EXECUTE IMMEDIATE strSqlSnt INTO nCount;
+			
+	IF nCount <= 1
+	THEN
+		
+		SET MV_REP_MO				= p_project_id||'.'||p_dataset_name||'.MV_REP_MO_DAILY_'||p_num; --Hemanth
+		
+			--##############################
+			--FACT_MAINTENANCE -- UPDATE FULL LOAD
+			--##############################
+
+			BEGIN  
+				SET mcs_fact_maintenance_update = FORMAT("""MERGE INTO `%s` m
+														using
+														(
+																	   SELECT
+																		 mo_id 
+																	   , guid   AS mo_guid 
+																	   , code  AS mo_code
+																	   , reference        AS mo_reference
+																	   , brand               AS mo_brand
+																	   , serial_nbr       AS mo_serial_nbr
+																	   , category_reference         AS mo_category_reference
+																	   , category_code                AS mo_category_code
+																	   , classification_reference  AS mo_classification_reference
+																	   , classification_code           AS mo_classification_code
+																	   , criticality_reference     AS mo_criticality_reference
+																	   , criticality_code                AS mo_criticality_code
+																	   , group_reference             AS mo_group_reference
+																	   , group_code    AS mo_group_code 
+																	   , supplier_name                AS mo_supplier_name 
+																	   , supplier_code   AS mo_supplier_code
+																	   , fiscal_entity_reference   AS mo_fiscal_entity_reference
+																	   , fiscal_entity_code            AS mo_fiscal_entity_code
+																	   , cost_center    AS mo_cost_center 
+																	   , cost_category_reference AS mo_cost_category_reference 
+																	   , cost_category_code        AS mo_cost_category_code
+																	   --, CAST(investment_date AS DATETIME)                AS mo_investment_date
+																	   , CAST(construction_date  AS DATETIME)   AS mo_construction_date
+																	   , CAST(warranty_date AS DATETIME)          AS mo_warranty_date
+																	   , CAST(expected_lifetime AS INT64)            AS mo_expected_lifetime
+																	   , CAST(expected_replacement_year AS INT64)  AS mo_expected_replacement_year
+																	   , CAST(expected_replacement_cost AS NUMERIC)             AS mo_expected_replacement_cost
+																	   , expected_replacement_currency              AS mo_expected_replacement_currency
+																	   , CAST(yearly_cost AS NUMERIC)               AS mo_yearly_cost
+																	   , yearly_cost_currency      AS mo_yearly_cost_currency
+																	   , area_code      AS mo_area_code
+																	   , area_reference               AS mo_area_reference
+																	   , site_code        AS mo_site_code
+																	   , site_reference                 AS mo_site_reference
+																	   , building_code   AS mo_building_code 
+																	   , building_reference           AS mo_building_reference
+																	   , floor_code      AS mo_floor_code
+																	   , floor_reference               AS mo_floor_reference
+																	   , room_code    AS mo_room_code
+																	   , room_reference             AS mo_room_reference
+																	   , exterior_location_code   AS mo_exterior_location_code 
+																	   , exterior_location_ref  AS mo_exterior_location_ref
+																	   , land_code      AS mo_land_code
+																	   , land_reference               AS mo_land_reference
+																	   , status_code   AS mo_status_code
+																	   , status_reference            AS mo_status_reference
+																	   , status_class    AS mo_status_class
+																	   , parent_id        AS mo_parent_id
+																	   , location_id     AS mo_location_id     
+																	   FROM `%s`
+																	   ) s
+														ON s.mo_id = m.mo_id 
+																	   AND s.mo_guid = m.mo_guid
+																	   AND m.is_deleted = 'N'
+														WHEN matched AND
+																	   s.mo_id <> m.mo_id OR 
+																	   s.mo_guid              <> m.mo_guid OR 
+																	   s.mo_code            <> m.mo_code OR 
+																	   s.mo_reference                 <> m.mo_reference OR 
+																	   s.mo_brand           <> m.mo_brand OR 
+																	   s.mo_serial_nbr   <> m.mo_serial_nbr OR 
+																	   s.mo_category_reference               <> m.mo_category_reference OR 
+																	   s.mo_category_code       <> m.mo_category_code OR 
+																	   s.mo_classification_reference    <> m.mo_classification_reference OR 
+																	   s.mo_classification_code  <> m.mo_classification_code OR 
+																	   s.mo_criticality_reference        <> m.mo_criticality_reference OR 
+																	   s.mo_criticality_code        <> m.mo_criticality_code OR 
+																	   s.mo_group_reference      <> m.mo_group_reference OR 
+																	   s.mo_group_code  <> m.mo_group_code OR 
+																	   s.mo_supplier_name       <> m.mo_supplier_name OR 
+																	   s.mo_supplier_code         <> m.mo_supplier_code OR 
+																	   s.mo_fiscal_entity_reference     <> m.mo_fiscal_entity_reference OR 
+																	   s.mo_fiscal_entity_code <> m.mo_fiscal_entity_code OR 
+																	   s.mo_cost_center             <> m.mo_cost_center OR 
+																	   s.mo_cost_category_reference <> m.mo_cost_category_reference OR 
+																	   s.mo_cost_category_code               <> m.mo_cost_category_code OR 
+																	   --s.mo_investment_date     <> m.mo_investment_date OR 
+																	   s.mo_construction_date <> m.mo_construction_date OR 
+																	   s.mo_warranty_date       <> m.mo_warranty_date OR 
+																	   s.mo_expected_lifetime   <> m.mo_expected_lifetime OR 
+																	   s.mo_expected_replacement_year         <> m.mo_expected_replacement_year OR 
+																	   s.mo_expected_replacement_cost         <> m.mo_expected_replacement_cost OR 
+																	   s.mo_expected_replacement_currency   <> m.mo_expected_replacement_currency OR 
+																	   s.mo_yearly_cost             <> m.mo_yearly_cost OR 
+																	   s.mo_yearly_cost_currency     <> m.mo_yearly_cost_currency OR 
+																	   s.mo_area_code   <> m.mo_area_code OR 
+																	   s.mo_area_reference      <> m.mo_area_reference OR 
+																	   s.mo_site_code                 <> m.mo_site_code OR 
+																	   s.mo_site_reference        <> m.mo_site_reference OR 
+																	   s.mo_building_code         <> m.mo_building_code OR 
+																	   s.mo_building_reference                 <> m.mo_building_reference OR 
+																	   s.mo_floor_code  <> m.mo_floor_code OR 
+																	   s.mo_floor_reference        <> m.mo_floor_reference OR 
+																	   s.mo_room_code <> m.mo_room_code OR 
+																	   s.mo_room_reference     <> m.mo_room_reference OR 
+																	   s.mo_exterior_location_code  <> m.mo_exterior_location_code OR 
+																	   s.mo_exterior_location_ref     <> m.mo_exterior_location_ref OR 
+																	   s.mo_land_code  <> m.mo_land_code OR 
+																	   s.mo_land_reference       <> m.mo_land_reference OR 
+																	   s.mo_status_code            <> m.mo_status_code OR 
+																	   s.mo_status_reference     <> m.mo_status_reference OR 
+																	   s.mo_status_class            <> m.mo_status_class OR 
+																	   s.mo_parent_id                 <> m.mo_parent_id OR 
+																	   s.mo_location_id              <> m.mo_location_id 
+														 THEN UPDATE SET is_deleted = 'Y',
+														 modification_timestamp = CURRENT_DATETIME
+														"""
+														,fact_maintenance,MV_REP_MO);
+
+				EXECUTE IMMEDIATE mcs_fact_maintenance_update;
+		
+		EXCEPTION WHEN ERROR THEN
+
+		  SET strRemarks = 'Failed in '||strProcName||', check error_log table for more info';
+		  SET strErrorMessage = @@error.message;
+		  SET error_txt		  = 'Failed in mcs_fact_maintenance_update full load '||'~'||@@error.statement_text;
+		  
+		  CALL `cobundu-bi-playground.mcs_procedures.Execution_log`(p_dataset_name, strProcName, 'E', strRemarks);
+		  CALL `cobundu-bi-playground.mcs_procedures.Error_log`(p_dataset_name, strErrorMessage, error_txt);
+
+		END;
+		
+			--##############################
+			--FACT_MAINTENANCE -- INSERT FULL LOAD
+			--##############################
+
+			BEGIN
+				SET mcs_fact_maintenance_insert = FORMAT("""MERGE INTO `%s` m
+														using
+														(
+																	   SELECT
+																		 mo_id 
+																	   , guid   AS mo_guid 
+																	   , code  AS mo_code
+																	   , reference        AS mo_reference
+																	   , brand               AS mo_brand
+																	   , serial_nbr       AS mo_serial_nbr
+																	   , category_reference         AS mo_category_reference
+																	   , category_code                AS mo_category_code
+																	   , class as mo_class
+																	   , classification_reference  AS mo_classification_reference
+																	   , classification_code           AS mo_classification_code
+																	   , criticality_reference     AS mo_criticality_reference
+																	   , criticality_code                AS mo_criticality_code
+																	   , group_reference             AS mo_group_reference
+																	   , group_code    AS mo_group_code 
+																	   , supplier_name                AS mo_supplier_name 
+																	   , supplier_code   AS mo_supplier_code
+																	   , fiscal_entity_reference   AS mo_fiscal_entity_reference
+																	   , fiscal_entity_code            AS mo_fiscal_entity_code
+																	   , cost_center    AS mo_cost_center 
+																	   , cost_category_reference AS mo_cost_category_reference 
+																	   , cost_category_code        AS mo_cost_category_code
+																	   --, CAST(investment_date AS DATETIME)                AS mo_investment_date
+																	   , CAST(construction_date  AS DATETIME)   AS mo_construction_date
+																	   , CAST(warranty_date AS DATETIME)          AS mo_warranty_date
+																	   , CAST(expected_lifetime AS INT64)            AS mo_expected_lifetime
+																	   , CAST(expected_replacement_year AS INT64)  AS mo_expected_replacement_year
+																	   , CAST(expected_replacement_cost AS NUMERIC)             AS mo_expected_replacement_cost
+																	   , expected_replacement_currency              AS mo_expected_replacement_currency
+																	   , CAST(yearly_cost AS NUMERIC)               AS mo_yearly_cost
+																	   , yearly_cost_currency      AS mo_yearly_cost_currency
+																	   , area_code      AS mo_area_code
+																	   , area_reference               AS mo_area_reference
+																	   , site_code        AS mo_site_code
+																	   , site_reference                 AS mo_site_reference
+																	   , building_code   AS mo_building_code 
+																	   , building_reference           AS mo_building_reference
+																	   , floor_code      AS mo_floor_code
+																	   , floor_reference               AS mo_floor_reference
+																	   , room_code    AS mo_room_code
+																	   , room_reference             AS mo_room_reference
+																	   , exterior_location_code   AS mo_exterior_location_code 
+																	   , exterior_location_ref  AS mo_exterior_location_ref
+																	   , land_code      AS mo_land_code
+																	   , land_reference               AS mo_land_reference
+																	   , status_code   AS mo_status_code
+																	   , status_reference            AS mo_status_reference
+																	   , status_class    AS mo_status_class
+																	   , parent_id        AS mo_parent_id
+																	   , location_id     AS mo_location_id 
+																	   --,modification_timestamp    
+																	   FROM `%s`
+																	   
+														) s 
+																	   ON s.mo_id = m.mo_id 
+																	   AND s.mo_guid = m.mo_guid
+																	   AND m.is_deleted = 'N'
+														WHEN NOT matched THEN
+														INSERT
+														(             
+																	   mo_id,
+																	   mo_guid,
+																	   mo_code,
+																	   mo_reference,
+																	   mo_brand,
+																	   mo_serial_nbr,
+																	   mo_category_reference,
+																	   mo_category_code,
+																	   mo_class,
+																	   mo_classification_reference,
+																	   mo_classification_code,
+																	   mo_criticality_reference,
+																	   mo_criticality_code,
+																	   mo_group_reference,
+																	   mo_group_code,
+																	   mo_supplier_name,
+																	   mo_supplier_code,
+																	   mo_fiscal_entity_reference,
+																	   mo_fiscal_entity_code,
+																	   mo_cost_center,
+																	   mo_cost_category_reference,
+																	   mo_cost_category_code,
+																	   --mo_investment_date,
+																	   --mo_construction_date,
+																	   --mo_warranty_date,
+																	   mo_expected_lifetime,
+																	   mo_expected_replacement_year,
+																	   mo_expected_replacement_cost,
+																	   mo_expected_replacement_currency,
+																	   mo_yearly_cost,
+																	   mo_yearly_cost_currency,
+																	   mo_area_code,
+																	   mo_area_reference,
+																	   mo_site_code,
+																	   mo_site_reference,
+																	   mo_building_code,
+																	   mo_building_reference,
+																	   mo_floor_code,
+																	   mo_floor_reference,
+																	   mo_room_code,
+																	   mo_room_reference,
+																	   mo_exterior_location_code,
+																	   mo_exterior_location_ref,
+																	   mo_land_code,
+																	   mo_land_reference,
+																	   mo_status_code,
+																	   mo_status_reference,
+																	   mo_status_class,
+																	   mo_parent_id,
+																	   is_deleted,
+																	   mo_location_id,
+																	   --creation_timestamp,
+																	   --modification_timestamp
+																	   last_modified_timestamp
+																	   )  
+														VALUES
+														(             mo_id,
+																	   mo_guid,
+																	   mo_code,
+																	   mo_reference,
+																	   mo_brand,
+																	   mo_serial_nbr,
+																	   mo_category_reference,
+																	   mo_category_code,
+																	   mo_class,
+																	   mo_classification_reference,
+																	   mo_classification_code,
+																	   mo_criticality_reference,
+																	   mo_criticality_code,
+																	   mo_group_reference,
+																	   mo_group_code,
+																	   mo_supplier_name,
+																	   mo_supplier_code,
+																	   mo_fiscal_entity_reference,
+																	   mo_fiscal_entity_code,
+																	   mo_cost_center,
+																	   mo_cost_category_reference,
+																	   mo_cost_category_code,
+																	   --mo_investment_date,
+																	   --mo_construction_date,
+																	   --mo_warranty_date,
+																	   mo_expected_lifetime,
+																	   mo_expected_replacement_year,
+																	   mo_expected_replacement_cost,
+																	   mo_expected_replacement_currency,
+																	   mo_yearly_cost,
+																	   mo_yearly_cost_currency,
+																	   mo_area_code,
+																	   mo_area_reference,
+																	   mo_site_code,
+																	   mo_site_reference,
+																	   mo_building_code,
+																	   mo_building_reference,
+																	   mo_floor_code,
+																	   mo_floor_reference,
+																	   mo_room_code,
+																	   mo_room_reference,
+																	   mo_exterior_location_code,
+																	   mo_exterior_location_ref,
+																	   mo_land_code,
+																	   mo_land_reference,
+																	   mo_status_code,
+																	   mo_status_reference,
+																	   mo_status_class,
+																	   mo_parent_id,
+																	   'N'  ,
+																	   mo_location_id,
+																	   --creation_timestamp,
+																	   --modification_timestamp
+																	   TIMESTAMP_TRUNC(datetime(current_timestamp(),"CET"), SECOND)
+																	   )
+														"""
+														,fact_maintenance,MV_REP_MO);
+
+				EXECUTE IMMEDIATE mcs_fact_maintenance_insert; 
+		
+		EXCEPTION WHEN ERROR THEN
+			
+		  SET strRemarks 		= 'Failed in '||strProcName||', check error_log table for more info';
+		  SET strErrorMessage 	= @@error.message;
+		  SET error_txt		  	= 'Failed in mcs_fact_maintenance_insert full load '||'~'||@@error.statement_text;
+		  
+		  CALL `cobundu-bi-playground.mcs_procedures.Execution_log`(p_dataset_name, strProcName, 'E', strRemarks);
+		  CALL `cobundu-bi-playground.mcs_procedures.Error_log`(p_dataset_name, strErrorMessage, error_txt);
+
+		END;
+	ELSE 
+		SET MV_REP_MO 		  	= 	IFNULL(`cobundu-bi-playground.dataform_sd_procedure.get_variable_name`(p_project_id, p_dataset_name, 'MV_REP_MO_DAILY_'||p_num,1),p_project_id||'.'||p_dataset_name||'.MV_REP_MO_DAILY_'||p_num); --Hemanth
+
+		IF MV_REP_MO IS NOT NULL
+		THEN
+			--##############################
+			--FACT_MAINTENANCE -- UPDATE CURRENT DAY
+			--##############################
+
+			BEGIN  
+				SET mcs_fact_maintenance_update = FORMAT("""MERGE INTO `%s` m
+														using
+														(
+																	   SELECT
+																		 mo_id 
+																	   , guid   AS mo_guid 
+																	   , code  AS mo_code
+																	   , reference        AS mo_reference
+																	   , brand               AS mo_brand
+																	   , serial_nbr       AS mo_serial_nbr
+																	   , category_reference         AS mo_category_reference
+																	   , category_code                AS mo_category_code
+																	   , classification_reference  AS mo_classification_reference
+																	   , classification_code           AS mo_classification_code
+																	   , criticality_reference     AS mo_criticality_reference
+																	   , criticality_code                AS mo_criticality_code
+																	   , group_reference             AS mo_group_reference
+																	   , group_code    AS mo_group_code 
+																	   , supplier_name                AS mo_supplier_name 
+																	   , supplier_code   AS mo_supplier_code
+																	   , fiscal_entity_reference   AS mo_fiscal_entity_reference
+																	   , fiscal_entity_code            AS mo_fiscal_entity_code
+																	   , cost_center    AS mo_cost_center 
+																	   , cost_category_reference AS mo_cost_category_reference 
+																	   , cost_category_code        AS mo_cost_category_code
+																	   --, CAST(investment_date AS DATETIME)                AS mo_investment_date
+																	   , CAST(construction_date  AS DATETIME)   AS mo_construction_date
+																	   , CAST(warranty_date AS DATETIME)          AS mo_warranty_date
+																	   , CAST(expected_lifetime AS INT64)            AS mo_expected_lifetime
+																	   , CAST(expected_replacement_year AS INT64)  AS mo_expected_replacement_year
+																	   , CAST(expected_replacement_cost AS NUMERIC)             AS mo_expected_replacement_cost
+																	   , expected_replacement_currency              AS mo_expected_replacement_currency
+																	   , CAST(yearly_cost AS NUMERIC)               AS mo_yearly_cost
+																	   , yearly_cost_currency      AS mo_yearly_cost_currency
+																	   , area_code      AS mo_area_code
+																	   , area_reference               AS mo_area_reference
+																	   , site_code        AS mo_site_code
+																	   , site_reference                 AS mo_site_reference
+																	   , building_code   AS mo_building_code 
+																	   , building_reference           AS mo_building_reference
+																	   , floor_code      AS mo_floor_code
+																	   , floor_reference               AS mo_floor_reference
+																	   , room_code    AS mo_room_code
+																	   , room_reference             AS mo_room_reference
+																	   , exterior_location_code   AS mo_exterior_location_code 
+																	   , exterior_location_ref  AS mo_exterior_location_ref
+																	   , land_code      AS mo_land_code
+																	   , land_reference               AS mo_land_reference
+																	   , status_code   AS mo_status_code
+																	   , status_reference            AS mo_status_reference
+																	   , status_class    AS mo_status_class
+																	   , parent_id        AS mo_parent_id
+																	   , location_id     AS mo_location_id     
+																	   FROM `%s`
+																	   ) s
+														ON s.mo_id = m.mo_id 
+																	   AND s.mo_guid = m.mo_guid
+																	   AND m.is_deleted = 'N'
+														WHEN matched AND
+																	   s.mo_id <> m.mo_id OR 
+																	   s.mo_guid              <> m.mo_guid OR 
+																	   s.mo_code            <> m.mo_code OR 
+																	   s.mo_reference                 <> m.mo_reference OR 
+																	   s.mo_brand           <> m.mo_brand OR 
+																	   s.mo_serial_nbr   <> m.mo_serial_nbr OR 
+																	   s.mo_category_reference               <> m.mo_category_reference OR 
+																	   s.mo_category_code       <> m.mo_category_code OR 
+																	   s.mo_classification_reference    <> m.mo_classification_reference OR 
+																	   s.mo_classification_code  <> m.mo_classification_code OR 
+																	   s.mo_criticality_reference        <> m.mo_criticality_reference OR 
+																	   s.mo_criticality_code        <> m.mo_criticality_code OR 
+																	   s.mo_group_reference      <> m.mo_group_reference OR 
+																	   s.mo_group_code  <> m.mo_group_code OR 
+																	   s.mo_supplier_name       <> m.mo_supplier_name OR 
+																	   s.mo_supplier_code         <> m.mo_supplier_code OR 
+																	   s.mo_fiscal_entity_reference     <> m.mo_fiscal_entity_reference OR 
+																	   s.mo_fiscal_entity_code <> m.mo_fiscal_entity_code OR 
+																	   s.mo_cost_center             <> m.mo_cost_center OR 
+																	   s.mo_cost_category_reference <> m.mo_cost_category_reference OR 
+																	   s.mo_cost_category_code               <> m.mo_cost_category_code OR 
+																	   --s.mo_investment_date     <> m.mo_investment_date OR 
+																	   s.mo_construction_date <> m.mo_construction_date OR 
+																	   s.mo_warranty_date       <> m.mo_warranty_date OR 
+																	   s.mo_expected_lifetime   <> m.mo_expected_lifetime OR 
+																	   s.mo_expected_replacement_year         <> m.mo_expected_replacement_year OR 
+																	   s.mo_expected_replacement_cost         <> m.mo_expected_replacement_cost OR 
+																	   s.mo_expected_replacement_currency   <> m.mo_expected_replacement_currency OR 
+																	   s.mo_yearly_cost             <> m.mo_yearly_cost OR 
+																	   s.mo_yearly_cost_currency     <> m.mo_yearly_cost_currency OR 
+																	   s.mo_area_code   <> m.mo_area_code OR 
+																	   s.mo_area_reference      <> m.mo_area_reference OR 
+																	   s.mo_site_code                 <> m.mo_site_code OR 
+																	   s.mo_site_reference        <> m.mo_site_reference OR 
+																	   s.mo_building_code         <> m.mo_building_code OR 
+																	   s.mo_building_reference                 <> m.mo_building_reference OR 
+																	   s.mo_floor_code  <> m.mo_floor_code OR 
+																	   s.mo_floor_reference        <> m.mo_floor_reference OR 
+																	   s.mo_room_code <> m.mo_room_code OR 
+																	   s.mo_room_reference     <> m.mo_room_reference OR 
+																	   s.mo_exterior_location_code  <> m.mo_exterior_location_code OR 
+																	   s.mo_exterior_location_ref     <> m.mo_exterior_location_ref OR 
+																	   s.mo_land_code  <> m.mo_land_code OR 
+																	   s.mo_land_reference       <> m.mo_land_reference OR 
+																	   s.mo_status_code            <> m.mo_status_code OR 
+																	   s.mo_status_reference     <> m.mo_status_reference OR 
+																	   s.mo_status_class            <> m.mo_status_class OR 
+																	   s.mo_parent_id                 <> m.mo_parent_id OR 
+																	   s.mo_location_id              <> m.mo_location_id 
+														 THEN UPDATE SET is_deleted = 'Y',
+														 modification_timestamp = CURRENT_DATETIME
+														"""
+														,fact_maintenance,MV_REP_MO);
+
+				EXECUTE IMMEDIATE mcs_fact_maintenance_update;
+			
+			EXCEPTION WHEN ERROR THEN
+
+			  SET strRemarks 		= 'Failed in '||strProcName||', check error_log table for more info';
+			  SET strErrorMessage 	= @@error.message;
+			  SET error_txt		  	= 'Failed in mcs_fact_maintenance_update for current day load '||CURRENT_DATE||' ~'||@@error.statement_text;
+			  
+			  CALL `cobundu-bi-playground.mcs_procedures.Execution_log`(p_dataset_name, strProcName, 'E', strRemarks);
+			  CALL `cobundu-bi-playground.mcs_procedures.Error_log`(p_dataset_name, strErrorMessage, error_txt);
+
+			END;
+			
+			--##############################
+			--FACT_MAINTENANCE -- INSERT CURRENT DAY
+			--##############################
+
+			BEGIN
+				SET mcs_fact_maintenance_insert = FORMAT("""MERGE INTO `%s` m
+														using
+														(
+																	   SELECT
+																		 mo_id 
+																	   , guid   AS mo_guid 
+																	   , code  AS mo_code
+																	   , reference        AS mo_reference
+																	   , brand               AS mo_brand
+																	   , serial_nbr       AS mo_serial_nbr
+																	   , category_reference         AS mo_category_reference
+																	   , category_code                AS mo_category_code
+																	   , class as mo_class
+																	   , classification_reference  AS mo_classification_reference
+																	   , classification_code           AS mo_classification_code
+																	   , criticality_reference     AS mo_criticality_reference
+																	   , criticality_code                AS mo_criticality_code
+																	   , group_reference             AS mo_group_reference
+																	   , group_code    AS mo_group_code 
+																	   , supplier_name                AS mo_supplier_name 
+																	   , supplier_code   AS mo_supplier_code
+																	   , fiscal_entity_reference   AS mo_fiscal_entity_reference
+																	   , fiscal_entity_code            AS mo_fiscal_entity_code
+																	   , cost_center    AS mo_cost_center 
+																	   , cost_category_reference AS mo_cost_category_reference 
+																	   , cost_category_code        AS mo_cost_category_code
+																	   --, CAST(investment_date AS DATETIME)                AS mo_investment_date
+																	   , CAST(construction_date  AS DATETIME)   AS mo_construction_date
+																	   , CAST(warranty_date AS DATETIME)          AS mo_warranty_date
+																	   , CAST(expected_lifetime AS INT64)            AS mo_expected_lifetime
+																	   , CAST(expected_replacement_year AS INT64)  AS mo_expected_replacement_year
+																	   , CAST(expected_replacement_cost AS NUMERIC)             AS mo_expected_replacement_cost
+																	   , expected_replacement_currency              AS mo_expected_replacement_currency
+																	   , CAST(yearly_cost AS NUMERIC)               AS mo_yearly_cost
+																	   , yearly_cost_currency      AS mo_yearly_cost_currency
+																	   , area_code      AS mo_area_code
+																	   , area_reference               AS mo_area_reference
+																	   , site_code        AS mo_site_code
+																	   , site_reference                 AS mo_site_reference
+																	   , building_code   AS mo_building_code 
+																	   , building_reference           AS mo_building_reference
+																	   , floor_code      AS mo_floor_code
+																	   , floor_reference               AS mo_floor_reference
+																	   , room_code    AS mo_room_code
+																	   , room_reference             AS mo_room_reference
+																	   , exterior_location_code   AS mo_exterior_location_code 
+																	   , exterior_location_ref  AS mo_exterior_location_ref
+																	   , land_code      AS mo_land_code
+																	   , land_reference               AS mo_land_reference
+																	   , status_code   AS mo_status_code
+																	   , status_reference            AS mo_status_reference
+																	   , status_class    AS mo_status_class
+																	   , parent_id        AS mo_parent_id
+																	   , location_id     AS mo_location_id 
+																	   --,modification_timestamp    
+																	   FROM `%s`
+																	   
+														) s 
+																	   ON s.mo_id = m.mo_id 
+																	   AND s.mo_guid = m.mo_guid
+																	   AND m.is_deleted = 'N'
+														WHEN NOT matched THEN
+														INSERT
+														(             
+																	   mo_id,
+																	   mo_guid,
+																	   mo_code,
+																	   mo_reference,
+																	   mo_brand,
+																	   mo_serial_nbr,
+																	   mo_category_reference,
+																	   mo_category_code,
+																	   mo_class,
+																	   mo_classification_reference,
+																	   mo_classification_code,
+																	   mo_criticality_reference,
+																	   mo_criticality_code,
+																	   mo_group_reference,
+																	   mo_group_code,
+																	   mo_supplier_name,
+																	   mo_supplier_code,
+																	   mo_fiscal_entity_reference,
+																	   mo_fiscal_entity_code,
+																	   mo_cost_center,
+																	   mo_cost_category_reference,
+																	   mo_cost_category_code,
+																	   --mo_investment_date,
+																	   --mo_construction_date,
+																	   --mo_warranty_date,
+																	   mo_expected_lifetime,
+																	   mo_expected_replacement_year,
+																	   mo_expected_replacement_cost,
+																	   mo_expected_replacement_currency,
+																	   mo_yearly_cost,
+																	   mo_yearly_cost_currency,
+																	   mo_area_code,
+																	   mo_area_reference,
+																	   mo_site_code,
+																	   mo_site_reference,
+																	   mo_building_code,
+																	   mo_building_reference,
+																	   mo_floor_code,
+																	   mo_floor_reference,
+																	   mo_room_code,
+																	   mo_room_reference,
+																	   mo_exterior_location_code,
+																	   mo_exterior_location_ref,
+																	   mo_land_code,
+																	   mo_land_reference,
+																	   mo_status_code,
+																	   mo_status_reference,
+																	   mo_status_class,
+																	   mo_parent_id,
+																	   is_deleted,
+																	   mo_location_id,
+																	   --creation_timestamp,
+																	   --modification_timestamp
+																	   last_modified_timestamp
+																	   )  
+														VALUES
+														(             mo_id,
+																	   mo_guid,
+																	   mo_code,
+																	   mo_reference,
+																	   mo_brand,
+																	   mo_serial_nbr,
+																	   mo_category_reference,
+																	   mo_category_code,
+																	   mo_class,
+																	   mo_classification_reference,
+																	   mo_classification_code,
+																	   mo_criticality_reference,
+																	   mo_criticality_code,
+																	   mo_group_reference,
+																	   mo_group_code,
+																	   mo_supplier_name,
+																	   mo_supplier_code,
+																	   mo_fiscal_entity_reference,
+																	   mo_fiscal_entity_code,
+																	   mo_cost_center,
+																	   mo_cost_category_reference,
+																	   mo_cost_category_code,
+																	   --mo_investment_date,
+																	   --mo_construction_date,
+																	   --mo_warranty_date,
+																	   mo_expected_lifetime,
+																	   mo_expected_replacement_year,
+																	   mo_expected_replacement_cost,
+																	   mo_expected_replacement_currency,
+																	   mo_yearly_cost,
+																	   mo_yearly_cost_currency,
+																	   mo_area_code,
+																	   mo_area_reference,
+																	   mo_site_code,
+																	   mo_site_reference,
+																	   mo_building_code,
+																	   mo_building_reference,
+																	   mo_floor_code,
+																	   mo_floor_reference,
+																	   mo_room_code,
+																	   mo_room_reference,
+																	   mo_exterior_location_code,
+																	   mo_exterior_location_ref,
+																	   mo_land_code,
+																	   mo_land_reference,
+																	   mo_status_code,
+																	   mo_status_reference,
+																	   mo_status_class,
+																	   mo_parent_id,
+																	   'N'  ,
+																	   mo_location_id,
+																	   --creation_timestamp,
+																	   --modification_timestamp
+																	   TIMESTAMP_TRUNC(datetime(current_timestamp(),"CET"), SECOND)
+																	   )
+														"""
+														,fact_maintenance,MV_REP_MO);
+
+				EXECUTE IMMEDIATE mcs_fact_maintenance_insert; 
+			
+			EXCEPTION WHEN ERROR THEN
+				
+			  SET strRemarks 		= 'Failed in '||strProcName||', check error_log table for more info';
+			  SET strErrorMessage 	= @@error.message;
+			  SET error_txt		  	= 'Failed in mcs_fact_maintenance_insert for current day load '||CURRENT_DATE||' ~'||@@error.statement_text;
+			  
+			  CALL `cobundu-bi-playground.mcs_procedures.Execution_log`(p_dataset_name, strProcName, 'E', strRemarks);
+			  CALL `cobundu-bi-playground.mcs_procedures.Error_log`(p_dataset_name, strErrorMessage, error_txt);
+
+			END;
+		END IF;
+	END IF;
+	
+	SET strRemarks = 'Completed Successfully';
+	CALL `cobundu-bi-playground.mcs_procedures.Execution_log`(p_dataset_name, strProcName, 'E', strRemarks);
+	
+EXCEPTION WHEN ERROR THEN
+
+	CALL `cobundu-bi-playground.mcs_procedures.Execution_log`(p_dataset_name, 'pr_fact_reservations', 'E', 'Failed');
+	CALL `cobundu-bi-playground.mcs_procedures.Error_log`(p_dataset_name, @@error.message, @@error.statement_text);
+
+END;

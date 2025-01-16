@@ -1,0 +1,78 @@
+CREATE OR REPLACE PROCEDURE `cobundu-bi-playground.mcs_procedures.mcs_stream_22`(IN p_project_id STRING, IN p_dataset_name STRING, IN p_num INT64)
+BEGIN
+
+	IF p_dataset_name IS NOT NULL
+	  AND p_project_id IS NOT NULL
+	  AND p_num IS NOT NULL 
+	THEN
+		CALL `cobundu-bi-playground.dataform_sd_procedure.Execution_log`(p_dataset_name,
+																		'mcs_stream_22',
+																		'S',
+																		''); 
+			
+		--DIM_LOCATIONS 
+		CALL `cobundu-bi-playground.mcs_procedures.pr_dim_locations`(p_project_id,
+																			p_dataset_name,
+																			p_num); 
+			
+		--fact_reservations, has dependency on dim_locations,to re-check
+		CALL `cobundu-bi-playground.mcs_procedures.pr_fact_reservations`(p_project_id,
+																				p_dataset_name,
+																				p_num); 
+			
+		--fact_wp_buildings
+		CALL `cobundu-bi-playground.mcs_procedures.pr_fact_wp_buildings`(p_project_id,
+																				p_dataset_name,
+																				p_num); 
+			
+		--fact_helpdesk
+		CALL `cobundu-bi-playground.mcs_procedures.pr_fact_helpdesk`(p_project_id,
+																			p_dataset_name,
+																			p_num); 
+			
+		--fact_maintenance
+		CALL `cobundu-bi-playground.mcs_procedures.pr_fact_maintenance`( p_project_id,
+																				p_dataset_name,
+																				p_num); 
+			
+		--fact_financials
+		CALL `cobundu-bi-playground.mcs_procedures.pr_fact_financials`(	p_project_id,
+																				p_dataset_name,
+																				p_num); 
+			
+		--fact_wo_mo_lnk
+		CALL `cobundu-bi-playground.mcs_procedures.pr_fact_wo_mo_lnk`(p_project_id,
+																			 p_dataset_name,
+																			 p_num); 
+		/*	
+		--fact_int_space_tenancy
+		CALL `cobundu-bi-playground.dataform_sd_procedure.pr_fact_int_space_tenancy`(p_project_id,
+																					 p_dataset_name,
+																					 p_num); 
+			
+		--fact_corporate_real_estate
+		CALL `cobundu-bi-playground.dataform_sd_procedure.pr_fact_corporate_real_estate`(p_project_id,
+																						 p_dataset_name,
+																						 p_num); 
+																						
+		--fact_sla_workorders	
+		CALL `cobundu-bi-playground.dataform_sd_procedure.pr_fact_sla_workorders`(p_project_id,
+																				  p_dataset_name,
+																				  p_num); 
+			
+		--fact_workorders	
+		CALL `cobundu-bi-playground.dataform_sd_procedure.pr_fact_workorders`(p_project_id,
+																			  p_dataset_name,
+																			  p_num);
+		*/
+		CALL `cobundu-bi-playground.dataform_sd_procedure.Execution_log`(p_dataset_name,
+																		'mcs_stream_v4',
+																		'E',
+																		'Completed');
+	END IF; 
+  
+EXCEPTION
+  WHEN ERROR THEN 
+	CALL `cobundu-bi-playground.dataform_sd_procedure.Execution_log`(p_dataset_name, 'mcs_stream_v4', 'E', 'Failed'); 
+	CALL `cobundu-bi-playground.dataform_sd_procedure.Error_log`(p_dataset_name, @@error.message, @@error.statement_text);
+END;

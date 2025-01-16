@@ -1,0 +1,485 @@
+CREATE OR REPLACE PROCEDURE `cobundu-bi-playground.mcs_procedures.pr_dim_locations`(IN p_project_id STRING, IN p_dataset_name STRING, IN p_num INT64)
+BEGIN
+	DECLARE 	nCount					INT64;
+	DECLARE		strSqlSnt				STRING;
+	DECLARE   mcs_dim_loc_update STRING;
+	DECLARE   mcs_dim_loc_insert STRING;
+	DECLARE		dim_location			STRING;
+	DECLARE		MV_REP_INT_LOCATIONS			STRING;
+	DECLARE		MV_REP_BUILDING_STATS			STRING;
+	DECLARE		strRemarks				STRING;
+	DECLARE 	error_txt				STRING;
+	DECLARE 	strErrorMessage         STRING;
+	DECLARE		strProcName				STRING;
+	
+	SET strProcName 		= 'pr_dim_locations';
+	SET dim_location 		= p_project_id||'.'||p_dataset_name||'.dim_locations';	
+	
+	CALL `cobundu-bi-playground.dataform_sd_procedure.Execution_log`(p_dataset_name, strProcName, 'S', '');
+	
+	SET strSqlSnt = FORMAT("""SELECT COUNT(*) FROM `%s` """,dim_location);
+	
+	EXECUTE IMMEDIATE strSqlSnt INTO nCount;
+			
+	IF nCount <= 1
+	THEN
+		SET MV_REP_INT_LOCATIONS  		= p_project_id||'.'||p_dataset_name||'.MV_REP_INT_LOCATIONS_DAILY_'||p_num; --Hemanth
+		SET MV_REP_BUILDING_STATS				= p_project_id||'.'||p_dataset_name||'.MV_REP_BUILDING_STATS_DAILY_'||p_num; --Hemanth
+		--SET vw_rep_space_workplaces_21 FIX
+			--######################################
+			--DIM_LOCATIONS  -- UPDATE UPDATE FULL LOAD
+			--######################################
+		BEGIN
+
+		set mcs_dim_loc_update = FORMAT("""
+																			MERGE INTO `%s` d
+																			using 
+																			(
+																			select  l.room_Cat_ref as loc_room_category,
+																			l.location_id,
+																			--r.resource_id,
+																			l.location_type as loc_type,
+																			--null as loc_region_code,
+																			--null as loc_Region,
+																			CONCAT('loc-',l.LOCATION_ID) as LOC_SVG_LOCATION_ID,
+																			l.area_code as loc_area_code,
+																			l.area_ref as loc_area,
+																			l.site_code as loc_site_code,
+																			l.site_ref as loc_site,
+																			l.building_code as loc_building_code,
+																			l.building_ref as loc_building,
+																			l.floor_code as loc_floor_code,
+																			l.floor_ref as loc_floor,
+																			l.room_code as loc_room_code,
+																			l.room_ref as loc_room,
+																			l.floor_ref||'['||l.building_ref||']' as loc_flr_bld,
+																			--w.ref as loc_workplace, FIX
+																			--null as is_reservable,
+																			--null as loc_street_nr,
+																			--null as loc_zip ,
+																			b.city as loc_city,
+																			b.country as loc_country,
+																			--r.resource_out_of_use as loc_rsrv_out_of_use,
+																			--null as loc_rsrv_out_of_use,
+																			cast(l.room_area as numeric) as loc_area_sqm,
+																			cast(null as numeric) loc_drawing_area_sqm,
+																			CASE WHEN l.LOC_STATUS_CLASS IN ('Archived','Canceled') THEN 'Y' ELSE 'N' END AS IS_ARCHIVED --,
+																			--'Y' as current_flag, 
+																			--1 as version, 
+																			from `%s` l
+																			--left join vw_rep_reservations_17 r
+																			-- on l.location_id=r.resource_id
+																			--left join vw_rep_space_workplaces_21 w   FIX IT IMMEDITELY
+																			--on l.location_id=w.workplace_id  FIX IT IMMEDITELY
+																			left join `%s` b
+																			on l.building_ref=b.building_name and l.site_ref=b.site_ref ) s 
+																			on s.location_id = d.location_id and d.current_flag = 'Y' 
+																			when matched and 
+																			s.loc_room_category <> d.loc_room_category OR
+																			s.loc_type <> d.loc_type OR
+																			--coalesce(s.loc_region_code,'0') <> coalesce(d.loc_region_code,'0') OR
+																			--s.loc_Region <> d.loc_Region OR
+																			s.LOC_SVG_LOCATION_ID <> d.LOC_SVG_LOCATION_ID OR
+																			s.loc_area_code <> d.loc_area_code OR
+																			s.loc_area <> d.loc_area OR
+																			s.loc_site_code <> d.loc_site_code OR
+																			s.loc_site <> d.loc_site OR
+																			s.loc_building_code <> d.loc_building_code OR
+																			s.loc_building <> d.loc_building OR
+																			s.loc_floor_code <> d.loc_floor_code OR
+																			s.loc_floor <> d.loc_floor OR
+																			s.loc_room_code <> d.loc_room_code OR
+																			s.loc_room <> d.loc_room OR
+																			--s.loc_workplace <> d.loc_workplace OR FIX
+																			--s.is_reservable <> d.is_reservable OR
+																			--s.loc_street_nr <> d.loc_street_nr OR
+																			--s.loc_zip <> d.loc_zip OR
+																			s.loc_city <> d.loc_city OR
+																			s.loc_country <> d.loc_country OR
+																			--s.loc_rsrv_out_of_use <> d.loc_rsrv_out_of_use OR
+																			s.loc_area_sqm <> d.loc_area_sqm OR
+																			s.loc_drawing_area_sqm <> d.loc_drawing_area_sqm OR
+																			s.IS_ARCHIVED <> d.IS_ARCHIVED 
+																				
+																			then update set current_flag = 'N'
+																			"""
+																			,dim_location,MV_REP_INT_LOCATIONS,  MV_REP_BUILDING_STATS);
+
+			EXECUTE IMMEDIATE mcs_dim_loc_update;
+		
+		EXCEPTION WHEN ERROR THEN
+
+		  SET strRemarks = 'Failed in '||strProcName||', check error_log table for more info';
+		  SET strErrorMessage = @@error.message;
+		  SET error_txt		  = 'Failed in mcs_dim_loc_update full load '||'~'||@@error.statement_text;
+		  
+		  CALL `cobundu-bi-playground.mcs_procedures.Execution_log`(p_dataset_name, strProcName, 'E', strRemarks);
+		  CALL `cobundu-bi-playground.mcs_procedures.Error_log`(p_dataset_name, strErrorMessage, error_txt);
+
+		END;
+		
+			--######################################
+			--DIM_LOCATIONS  -- INSERT FULL LOAD
+			--######################################
+
+		BEGIN
+
+		set mcs_dim_loc_insert = FORMAT("""
+																		MERGE INTO `%s` d
+																using 
+																(
+																select  l.room_Cat_ref as loc_room_category,
+																l.location_id,
+																--r.resource_id,
+																l.location_type as loc_type,
+																--null as loc_region_code,
+																--null as loc_Region,
+																CONCAT('loc-',l.LOCATION_ID) as loc_svg_location_id,
+																l.area_code as loc_area_code,
+																l.area_ref as loc_area,
+																l.site_code as loc_site_code,
+																l.site_ref as loc_site,
+																l.building_code as loc_building_code,
+																l.building_ref as loc_building,
+																l.floor_code as loc_floor_code,
+																l.floor_ref as loc_floor,
+																l.room_code as loc_room_code,
+																l.room_ref as loc_room,
+																l.floor_ref||'['||l.building_ref||']' as loc_flr_bld,
+																--w.ref as loc_workplace, FIX
+																--null as is_reservable,
+																--null as loc_street_nr,
+																--null as loc_zip ,
+																b.city as loc_city,
+																b.country as loc_country,
+																--r.resource_out_of_use as loc_rsrv_out_of_use,
+																--null as loc_rsrv_out_of_use,
+																cast(l.room_area as numeric) as loc_area_sqm,
+																cast(null as numeric) loc_drawing_area_sqm,
+																CASE WHEN l.LOC_STATUS_CLASS IN ('Archived','Canceled') THEN 'Y' ELSE 'N' END AS IS_ARCHIVED ,
+																'Y' as current_flag, 
+																1 as version
+																from `%s` l
+																--left join vw_rep_reservations_17 r
+																-- on l.location_id=r.resource_id
+																--left join vw_rep_space_workplaces_21 w    FIX IT IMMEDIATELY
+																--on l.location_id=w.workplace_id FIX IT IMMEDIATELY
+																left join `%s` b
+																on l.building_ref=b.building_name and l.site_ref=b.site_ref ) s 
+																on s.location_id = d.location_id and d.current_flag = 'Y' 
+																when not matched then 
+																insert 
+																(loc_room_category,
+																location_id,
+																loc_type,
+																loc_region_code,
+																loc_region,
+																loc_svg_location_id,
+																loc_area_code,
+																loc_area,
+																loc_site_code,
+																loc_site,
+																loc_building_code,
+																loc_building,
+																loc_floor_code,
+																loc_floor,
+																loc_room_code,
+																loc_room,
+																loc_flr_bld,
+																--loc_workplace, FIX
+																is_reservable,
+																loc_street_nr,
+																loc_zip,
+																loc_city,
+																loc_country,
+																--loc_rsrv_out_of_use,
+																loc_area_sqm,
+																loc_drawing_area_sqm,
+																is_archived,
+																current_flag,
+																version
+																)  
+																VALUES
+																(loc_room_category,
+																location_id,
+																loc_type,
+																null ,
+																null ,
+																loc_svg_location_id,
+																loc_area_code,
+																loc_area,
+																loc_site_code,
+																loc_site,
+																loc_building_code,
+																loc_building,
+																loc_floor_code,
+																loc_floor,
+																loc_room_code,
+																loc_room,
+																loc_flr_bld,
+																--loc_workplace,
+																null ,
+																null,
+																null,
+																loc_city,
+																loc_country,
+																--loc_rsrv_out_of_use,
+																loc_area_sqm,
+																loc_drawing_area_sqm,
+																is_archived,
+																current_flag,
+																version
+																)
+																"""
+																,dim_location,MV_REP_INT_LOCATIONS,  MV_REP_BUILDING_STATS);
+
+EXECUTE IMMEDIATE mcs_dim_loc_insert;
+		
+		EXCEPTION WHEN ERROR THEN
+			
+		  SET strRemarks 		= 'Failed in '||strProcName||', check error_log table for more info';
+		  SET strErrorMessage 	= @@error.message;
+		  SET error_txt		  	= 'Failed in mcs_dim_loc_insert full load '||'~'||@@error.statement_text;
+		  
+		  CALL `cobundu-bi-playground.mcs_procedures.Execution_log`(p_dataset_name, strProcName, 'E', strRemarks);
+		  CALL `cobundu-bi-playground.mcs_procedures.Error_log`(p_dataset_name, strErrorMessage, error_txt);
+
+		END;
+	ELSE 
+		SET MV_REP_INT_LOCATIONS 		  	= 	IFNULL(`cobundu-bi-playground.dataform_sd_procedure.get_variable_name`(p_project_id, p_dataset_name, 'MV_REP_INT_LOCATIONS_DAILY_'||p_num,1),p_project_id||'.'||p_dataset_name||'.MV_REP_INT_LOCATIONS_DAILY_'||p_num); --Hemanth
+		SET MV_REP_BUILDING_STATS 	  	= 	IFNULL(`cobundu-bi-playground.dataform_sd_procedure.get_variable_name`(p_project_id, p_dataset_name, 'MV_REP_BUILDING_STATS_DAILY_'||p_num,1),p_project_id||'.'||p_dataset_name||'.MV_REP_BUILDING_STATS_DAILY_'||p_num); --Hemanth
+		
+		IF MV_REP_INT_LOCATIONS IS NOT NULL
+		OR MV_REP_BUILDING_STATS IS NOT NULL
+		THEN
+			--######################################
+			--DIM_LOCATIONS  -- UPDATE CURRENT DAY
+			--######################################
+		BEGIN
+
+		set mcs_dim_loc_update = FORMAT("""
+																		MERGE INTO `%s` d
+																		using 
+																		(
+																		select  l.room_Cat_ref as loc_room_category,
+																		l.location_id,
+																		--r.resource_id,
+																		l.location_type as loc_type,
+																		--null as loc_region_code,
+																		--null as loc_Region,
+																		CONCAT('loc-',l.LOCATION_ID) as LOC_SVG_LOCATION_ID,
+																		l.area_code as loc_area_code,
+																		l.area_ref as loc_area,
+																		l.site_code as loc_site_code,
+																		l.site_ref as loc_site,
+																		l.building_code as loc_building_code,
+																		l.building_ref as loc_building,
+																		l.floor_code as loc_floor_code,
+																		l.floor_ref as loc_floor,
+																		l.room_code as loc_room_code,
+																		l.room_ref as loc_room,
+																		l.floor_ref||'['||l.building_ref||']' as loc_flr_bld,
+																		--w.ref as loc_workplace, FIX
+																		--null as is_reservable,
+																		--null as loc_street_nr,
+																		--null as loc_zip ,
+																		b.city as loc_city,
+																		b.country as loc_country,
+																		--r.resource_out_of_use as loc_rsrv_out_of_use,
+																		--null as loc_rsrv_out_of_use,
+																		cast(l.room_area as numeric) as loc_area_sqm,
+																		cast(null as numeric) loc_drawing_area_sqm,
+																		CASE WHEN l.LOC_STATUS_CLASS IN ('Archived','Canceled') THEN 'Y' ELSE 'N' END AS IS_ARCHIVED --,
+																		--'Y' as current_flag, 
+																		--1 as version, 
+																		from `%s` l
+																		--left join vw_rep_reservations_17 r
+																		-- on l.location_id=r.resource_id
+																		--left join vw_rep_space_workplaces_21 w   FIX IT IMMEDITELY
+																		--on l.location_id=w.workplace_id  FIX IT IMMEDITELY
+																		left join `%s` b
+																		on l.building_ref=b.building_name and l.site_ref=b.site_ref ) s 
+																		on s.location_id = d.location_id and d.current_flag = 'Y' 
+																		when matched and 
+																		s.loc_room_category <> d.loc_room_category OR
+																		s.loc_type <> d.loc_type OR
+																		--coalesce(s.loc_region_code,'0') <> coalesce(d.loc_region_code,'0') OR
+																		--s.loc_Region <> d.loc_Region OR
+																		s.LOC_SVG_LOCATION_ID <> d.LOC_SVG_LOCATION_ID OR
+																		s.loc_area_code <> d.loc_area_code OR
+																		s.loc_area <> d.loc_area OR
+																		s.loc_site_code <> d.loc_site_code OR
+																		s.loc_site <> d.loc_site OR
+																		s.loc_building_code <> d.loc_building_code OR
+																		s.loc_building <> d.loc_building OR
+																		s.loc_floor_code <> d.loc_floor_code OR
+																		s.loc_floor <> d.loc_floor OR
+																		s.loc_room_code <> d.loc_room_code OR
+																		s.loc_room <> d.loc_room OR
+																		--s.loc_workplace <> d.loc_workplace OR FIX
+																		--s.is_reservable <> d.is_reservable OR
+																		--s.loc_street_nr <> d.loc_street_nr OR
+																		--s.loc_zip <> d.loc_zip OR
+																		s.loc_city <> d.loc_city OR
+																		s.loc_country <> d.loc_country OR
+																		--s.loc_rsrv_out_of_use <> d.loc_rsrv_out_of_use OR
+																		s.loc_area_sqm <> d.loc_area_sqm OR
+																		s.loc_drawing_area_sqm <> d.loc_drawing_area_sqm OR
+																		s.IS_ARCHIVED <> d.IS_ARCHIVED 
+																			
+																		then update set current_flag = 'N'
+																		"""
+																		,dim_location,MV_REP_INT_LOCATIONS,  MV_REP_BUILDING_STATS);
+
+EXECUTE IMMEDIATE mcs_dim_loc_update;
+			
+			EXCEPTION WHEN ERROR THEN
+
+			  SET strRemarks 		= 'Failed in '||strProcName||', check error_log table for more info';
+			  SET strErrorMessage 	= @@error.message;
+			  SET error_txt		  	= 'Failed in mcs_dim_loc_update for current day load '||CURRENT_DATE||' ~'||@@error.statement_text;
+			  
+			  CALL `cobundu-bi-playground.mcs_procedures.Execution_log`(p_dataset_name, strProcName, 'E', strRemarks);
+			  CALL `cobundu-bi-playground.mcs_procedures.Error_log`(p_dataset_name, strErrorMessage, error_txt);
+
+			END;
+			
+			--######################################
+			--DIM_LOCATIONS  -- INSERT CURRENT DAY
+			--######################################
+
+		BEGIN
+
+		set mcs_dim_loc_insert = FORMAT("""
+																				MERGE INTO `%s` d
+																				using 
+																		(
+																		select  l.room_Cat_ref as loc_room_category,
+																		l.location_id,
+																		--r.resource_id,
+																		l.location_type as loc_type,
+																		--null as loc_region_code,
+																		--null as loc_Region,
+																		CONCAT('loc-',l.LOCATION_ID) as loc_svg_location_id,
+																		l.area_code as loc_area_code,
+																		l.area_ref as loc_area,
+																		l.site_code as loc_site_code,
+																		l.site_ref as loc_site,
+																		l.building_code as loc_building_code,
+																		l.building_ref as loc_building,
+																		l.floor_code as loc_floor_code,
+																		l.floor_ref as loc_floor,
+																		l.room_code as loc_room_code,
+																		l.room_ref as loc_room,
+																		l.floor_ref||'['||l.building_ref||']' as loc_flr_bld,
+																		--w.ref as loc_workplace, FIX
+																		--null as is_reservable,
+																		--null as loc_street_nr,
+																		--null as loc_zip ,
+																		b.city as loc_city,
+																		b.country as loc_country,
+																		--r.resource_out_of_use as loc_rsrv_out_of_use,
+																		--null as loc_rsrv_out_of_use,
+																		cast(l.room_area as numeric) as loc_area_sqm,
+																		cast(null as numeric) loc_drawing_area_sqm,
+																		CASE WHEN l.LOC_STATUS_CLASS IN ('Archived','Canceled') THEN 'Y' ELSE 'N' END AS IS_ARCHIVED ,
+																		'Y' as current_flag, 
+																		1 as version
+																		from `%s` l
+																		--left join vw_rep_reservations_17 r
+																		-- on l.location_id=r.resource_id
+																		--left join vw_rep_space_workplaces_21 w    FIX IT IMMEDIATELY
+																		--on l.location_id=w.workplace_id FIX IT IMMEDIATELY
+																		left join `%s` b
+																		on l.building_ref=b.building_name and l.site_ref=b.site_ref ) s 
+																		on s.location_id = d.location_id and d.current_flag = 'Y' 
+																		when not matched then 
+																		insert 
+																		(loc_room_category,
+																		location_id,
+																		loc_type,
+																		loc_region_code,
+																		loc_region,
+																		loc_svg_location_id,
+																		loc_area_code,
+																		loc_area,
+																		loc_site_code,
+																		loc_site,
+																		loc_building_code,
+																		loc_building,
+																		loc_floor_code,
+																		loc_floor,
+																		loc_room_code,
+																		loc_room,
+																		loc_flr_bld,
+																		--loc_workplace, FIX
+																		is_reservable,
+																		loc_street_nr,
+																		loc_zip,
+																		loc_city,
+																		loc_country,
+																		--loc_rsrv_out_of_use,
+																		loc_area_sqm,
+																		loc_drawing_area_sqm,
+																		is_archived,
+																		current_flag,
+																		version
+																		)  
+																		VALUES
+																		(loc_room_category,
+																		location_id,
+																		loc_type,
+																		null ,
+																		null ,
+																		loc_svg_location_id,
+																		loc_area_code,
+																		loc_area,
+																		loc_site_code,
+																		loc_site,
+																		loc_building_code,
+																		loc_building,
+																		loc_floor_code,
+																		loc_floor,
+																		loc_room_code,
+																		loc_room,
+																		loc_flr_bld,
+																		--loc_workplace,
+																		null ,
+																		null,
+																		null,
+																		loc_city,
+																		loc_country,
+																		--loc_rsrv_out_of_use,
+																		loc_area_sqm,
+																		loc_drawing_area_sqm,
+																		is_archived,
+																		current_flag,
+																		version
+																		)
+																		"""
+,dim_location,MV_REP_INT_LOCATIONS,  MV_REP_BUILDING_STATS);
+
+EXECUTE IMMEDIATE mcs_dim_loc_insert;
+			
+			EXCEPTION WHEN ERROR THEN
+				
+			  SET strRemarks 		= 'Failed in '||strProcName||', check error_log table for more info';
+			  SET strErrorMessage 	= @@error.message;
+			  SET error_txt		  	= 'Failed in mcs_dim_loc_insert for current day load '||CURRENT_DATE||' ~'||@@error.statement_text;
+			  
+			  CALL `cobundu-bi-playground.mcs_procedures.Execution_log`(p_dataset_name, strProcName, 'E', strRemarks);
+			  CALL `cobundu-bi-playground.mcs_procedures.Error_log`(p_dataset_name, strErrorMessage, error_txt);
+
+			END;
+		END IF;
+	END IF;
+	
+	SET strRemarks = 'Completed Successfully';
+	CALL `cobundu-bi-playground.mcs_procedures.Execution_log`(p_dataset_name, strProcName, 'E', strRemarks);
+	
+EXCEPTION WHEN ERROR THEN
+
+	CALL `cobundu-bi-playground.mcs_procedures.Execution_log`(p_dataset_name, 'pr_fact_reservations', 'E', 'Failed');
+	CALL `cobundu-bi-playground.mcs_procedures.Error_log`(p_dataset_name, @@error.message, @@error.statement_text);
+
+END;

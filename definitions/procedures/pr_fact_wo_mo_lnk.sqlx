@@ -1,0 +1,235 @@
+CREATE OR REPLACE PROCEDURE `cobundu-bi-playground.mcs_procedures.pr_fact_wo_mo_lnk`(IN p_project_id STRING, IN p_dataset_name STRING, IN p_num INT64)
+BEGIN
+	DECLARE 	nCount					INT64;
+	DECLARE		strSqlSnt				STRING;
+	DECLARE 	MV_REP_CLIENT_ORG		STRING;
+	DECLARE		MV_REP_RESERVATIONS		STRING;
+	DECLARE 	mcs_fact_resrv_update 	STRING;
+	DECLARE		mcs_fact_resrv_insert	STRING;
+	DECLARE		fact_reservations		STRING;
+	DECLARE		dim_location			STRING;
+	DECLARE		FACT_WO_MO_LNK			STRING;
+	DECLARE		MV_REP_MO_WO_LINK			STRING;
+	DECLARE		mcs_fact_wo_mo_lnk_update			STRING;
+	DECLARE		mcs_fact_wo_mo_lnk_insert			STRING;
+	DECLARE		strRemarks				STRING;
+	DECLARE 	error_txt				STRING;
+	DECLARE 	strErrorMessage         STRING;
+	DECLARE		strProcName				STRING;
+	
+	SET strProcName 		= 'pr_fact_reservations';
+	SET dim_location 		= p_project_id||'.'||p_dataset_name||'.dim_locations';	
+	SET FACT_WO_MO_LNK 	= p_project_id||'.'||p_dataset_name||'.FACT_WO_MO_LNK';
+	
+	CALL `cobundu-bi-playground.dataform_sd_procedure.Execution_log`(p_dataset_name, strProcName, 'S', '');
+	
+	SET strSqlSnt = FORMAT("""SELECT COUNT(*) FROM `%s` """,FACT_WO_MO_LNK);
+	
+	EXECUTE IMMEDIATE strSqlSnt INTO nCount;
+			
+	IF nCount <= 1
+	THEN
+		SET MV_REP_MO_WO_LINK 	  		= p_project_id||'.'||p_dataset_name||'.MV_REP_MO_WO_LINK_'||p_num; --Hemanth
+		
+			--##############################
+			--FACT_WO_MO_LNK -- UPDATE FULL LOAD 
+			--##############################
+
+			BEGIN	
+				SET mcs_fact_wo_mo_lnk_update = FORMAT("""
+													MERGE INTO `%s` d
+													using 
+													(
+													select mo_id, 
+													  mo_code ,
+													  mo_reference, 
+													  wo_id ,
+													  wo_class 
+													  from `%s`
+													  ) s 
+													  ON s.mo_id = d.mo_id and s.wo_id = d.wo_id and is_deleted = 'N'
+													  when matched and 
+													  s.mo_code <> d.mo_code OR
+													  s.mo_reference <> d.mo_reference OR
+													  s.wo_class <> d.wo_class
+													  then update set 
+													  is_deleted = 'Y' , 
+													  last_modified_timestamp = TIMESTAMP_TRUNC(datetime(current_timestamp(),"CET"), SECOND)
+"""
+,FACT_WO_MO_LNK,MV_REP_MO_WO_LINK);
+
+					EXECUTE IMMEDIATE mcs_fact_wo_mo_lnk_update;
+		
+		EXCEPTION WHEN ERROR THEN
+
+		  SET strRemarks = 'Failed in '||strProcName||', check error_log table for more info';
+		  SET strErrorMessage = @@error.message;
+		  SET error_txt		  = 'Failed in mcs_fact_wo_mo_lnk_update full load '||'~'||@@error.statement_text;
+		  
+		  CALL `cobundu-bi-playground.mcs_procedures.Execution_log`(p_dataset_name, strProcName, 'E', strRemarks);
+		  CALL `cobundu-bi-playground.mcs_procedures.Error_log`(p_dataset_name, strErrorMessage, error_txt);
+
+		END;
+		
+			--##############################
+			--FACT_WO_MO_LNK -- INSERT FULL LOAD 
+			--##############################
+
+				BEGIN	
+				SET mcs_fact_wo_mo_lnk_insert = FORMAT("""
+												MERGE INTO `%s` d
+												using 
+												(
+												select mo_id, 
+												  mo_code ,
+												  mo_reference, 
+												  wo_id ,
+												  wo_class 
+												  from `%s`
+												  ) s 
+												  ON s.mo_id = d.mo_id and s.wo_id = d.wo_id and is_deleted = 'N'
+												  when NOT matched THEN 
+												  INSERT 
+												  (
+												  mo_id, 
+												  mo_code ,
+												  mo_reference, 
+												  wo_id ,
+												  wo_class,
+												  IS_DELETED,
+												  LAST_MODIFIED_TIMESTAMP)
+												  VALUES 
+												  (
+												  mo_id, 
+												  mo_code ,
+												  mo_reference, 
+												  wo_id ,
+												  wo_class,
+												  'N',
+												  TIMESTAMP_TRUNC(datetime(current_timestamp(),"CET"), SECOND)
+												  )
+"""
+,FACT_WO_MO_LNK,MV_REP_MO_WO_LINK);
+
+					EXECUTE IMMEDIATE mcs_fact_wo_mo_lnk_insert;
+		
+		EXCEPTION WHEN ERROR THEN
+			
+		  SET strRemarks 		= 'Failed in '||strProcName||', check error_log table for more info';
+		  SET strErrorMessage 	= @@error.message;
+		  SET error_txt		  	= 'Failed in mcs_fact_wo_mo_lnk_insert full load '||'~'||@@error.statement_text;
+		  
+		  CALL `cobundu-bi-playground.mcs_procedures.Execution_log`(p_dataset_name, strProcName, 'E', strRemarks);
+		  CALL `cobundu-bi-playground.mcs_procedures.Error_log`(p_dataset_name, strErrorMessage, error_txt);
+
+		END;
+	ELSE 
+		SET MV_REP_MO_WO_LINK 		  	= 	IFNULL(`cobundu-bi-playground.dataform_sd_procedure.get_variable_name`(p_project_id, p_dataset_name, 'MV_REP_MO_WO_LINK_'||p_num,1),p_project_id||'.'||p_dataset_name||'.MV_REP_MO_WO_LINK_'||p_num); --Hemanth
+		SET MV_REP_RESERVATIONS 	  	= 	IFNULL(`cobundu-bi-playground.dataform_sd_procedure.get_variable_name`(p_project_id, p_dataset_name, 'MV_REP_RESERVATIONS_DAILY_'||p_num,1),p_project_id||'.'||p_dataset_name||'.MV_REP_RESERVATIONS_DAILY_'||p_num); --Hemanth
+		
+		IF FACT_WO_MO_LNK IS NOT NULL
+		
+		THEN
+			--##############################
+			--FACT_WO_MO_LNK -- UPDATE CURRENT DAY
+			--##############################
+
+			BEGIN	
+				SET mcs_fact_wo_mo_lnk_update = FORMAT("""
+													MERGE INTO `%s` d
+													using 
+													(
+													select mo_id, 
+													  mo_code ,
+													  mo_reference, 
+													  wo_id ,
+													  wo_class 
+													  from `%s`
+													  ) s 
+													  ON s.mo_id = d.mo_id and s.wo_id = d.wo_id and is_deleted = 'N'
+													  when matched and 
+													  s.mo_code <> d.mo_code OR
+													  s.mo_reference <> d.mo_reference OR
+													  s.wo_class <> d.wo_class
+													  then update set 
+													  is_deleted = 'Y' , 
+													  last_modified_timestamp = TIMESTAMP_TRUNC(datetime(current_timestamp(),"CET"), SECOND)
+"""
+,FACT_WO_MO_LNK,MV_REP_MO_WO_LINK);
+
+					EXECUTE IMMEDIATE mcs_fact_wo_mo_lnk_update;
+			EXCEPTION WHEN ERROR THEN
+
+			  SET strRemarks 		= 'Failed in '||strProcName||', check error_log table for more info';
+			  SET strErrorMessage 	= @@error.message;
+			  SET error_txt		  	= 'Failed in mcs_fact_wo_mo_lnk_update for current day load '||CURRENT_DATE||' ~'||@@error.statement_text;
+			  
+			  CALL `cobundu-bi-playground.mcs_procedures.Execution_log`(p_dataset_name, strProcName, 'E', strRemarks);
+			  CALL `cobundu-bi-playground.mcs_procedures.Error_log`(p_dataset_name, strErrorMessage, error_txt);
+
+			END;
+			
+			--##############################
+			--FACT_WO_MO_LNK -- INSERT CURRENT DAY
+			--##############################
+
+				BEGIN	
+				SET mcs_fact_wo_mo_lnk_insert = FORMAT("""
+												MERGE INTO `%s` d
+												using 
+												(
+												select mo_id, 
+												  mo_code ,
+												  mo_reference, 
+												  wo_id ,
+												  wo_class 
+												  from `%s`
+												  ) s 
+												  ON s.mo_id = d.mo_id and s.wo_id = d.wo_id and is_deleted = 'N'
+												  when NOT matched THEN 
+												  INSERT 
+												  (
+												  mo_id, 
+												  mo_code ,
+												  mo_reference, 
+												  wo_id ,
+												  wo_class,
+												  IS_DELETED,
+												  LAST_MODIFIED_TIMESTAMP)
+												  VALUES 
+												  (
+												  mo_id, 
+												  mo_code ,
+												  mo_reference, 
+												  wo_id ,
+												  wo_class,
+												  'N',
+												  TIMESTAMP_TRUNC(datetime(current_timestamp(),"CET"), SECOND)
+												  )
+"""
+,FACT_WO_MO_LNK,MV_REP_MO_WO_LINK);
+
+					EXECUTE IMMEDIATE mcs_fact_wo_mo_lnk_insert;
+			
+			EXCEPTION WHEN ERROR THEN
+				
+			  SET strRemarks 		= 'Failed in '||strProcName||', check error_log table for more info';
+			  SET strErrorMessage 	= @@error.message;
+			  SET error_txt		  	= 'Failed in mcs_fact_wo_mo_lnk_insert for current day load '||CURRENT_DATE||' ~'||@@error.statement_text;
+			  
+			  CALL `cobundu-bi-playground.mcs_procedures.Execution_log`(p_dataset_name, strProcName, 'E', strRemarks);
+			  CALL `cobundu-bi-playground.mcs_procedures.Error_log`(p_dataset_name, strErrorMessage, error_txt);
+
+			END;
+		END IF;
+	END IF;
+	
+	SET strRemarks = 'Completed Successfully';
+	CALL `cobundu-bi-playground.mcs_procedures.Execution_log`(p_dataset_name, strProcName, 'E', strRemarks);
+	
+EXCEPTION WHEN ERROR THEN
+
+	CALL `cobundu-bi-playground.mcs_procedures.Execution_log`(p_dataset_name, 'pr_fact_reservations', 'E', 'Failed');
+	CALL `cobundu-bi-playground.mcs_procedures.Error_log`(p_dataset_name, @@error.message, @@error.statement_text);
+
+END;
