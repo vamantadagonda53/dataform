@@ -1,13 +1,13 @@
 js {
   const params = require("definitions/env_var.js");
   const parameter1 = params.project_id;
-  const parameter2 = params.nordea_p_dataset_name;
+  const parameter2 = params.db_schenker_dataset_name;
   const parameter3 = params.nordea_p_ver_num;
 }
 
 config {
   type: "operations",
-  description: "Job for Nordea_P"
+  description: "Job for db_schenker"
 }
 
 DECLARE param INT64 DEFAULT CAST(${parameter3} AS INT64);
