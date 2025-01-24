@@ -1,0 +1,15 @@
+CREATE OR REPLACE FUNCTION
+  `cobundu-bi-playground.dataform_sd_procedure.get_variable_name`(p_project_id STRING,
+    p_dataset_name STRING,
+    p_table_name STRING,
+    p_days INT64)
+  RETURNS STRING AS ( (
+    SELECT
+      p_project_id||'.'||p_dataset_name||'.'||table_name AS table_name
+    FROM
+      `cobundu-bi-playground.dataform_sd_procedure.table_flag`
+    WHERE
+      dataset_name = p_dataset_name
+      AND populated_date = current_date-p_days
+      AND table_name = p_table_name
+      AND is_populated = TRUE) );

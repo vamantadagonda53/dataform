@@ -1,0 +1,80 @@
+CREATE OR REPLACE PROCEDURE `cobundu-bi-playground.dataform_sd_procedure.populate_flag`(IN p_dataset STRING, IN p_table_name STRING)
+BEGIN
+    DECLARE strDuration		    STRING;
+    DECLARE strProcName		    STRING;
+    DECLARE flag_uuid         STRING;
+    DECLARE strErrorMessage   STRING;
+    DECLARE strErrorStatement STRING;
+    DECLARE strRemarks        STRING;
+
+    SET strProcName = 'populate_flag';
+    
+    CALL `cobundu-bi-playground.dataform_sd_procedure.Execution_log`(p_dataset,strProcName,'S','');
+
+    IF EXISTS (
+        SELECT 1
+        FROM `cobundu-bi-playground.dataform_sd_procedure.table_flag`
+        WHERE table_name = p_table_name 
+        AND dataset_name = p_dataset
+        AND populated_date = current_date
+    ) THEN
+        IF NOT EXISTS(        
+                      SELECT 1
+                      FROM `cobundu-bi-playground.dataform_sd_procedure.table_flag`
+                      WHERE table_name = p_table_name 
+                      AND dataset_name = p_dataset
+                      AND populated_date = current_date
+                      AND is_populated = TRUE)
+        THEN
+          UPDATE `cobundu-bi-playground.dataform_sd_procedure.table_flag`
+          SET is_populated = TRUE
+          WHERE table_name = p_table_name 
+          AND dataset_name = p_dataset
+          AND populated_date = current_date
+          AND (is_populated = FALSE OR is_populated IS NULL);
+        END IF;
+    ELSE
+        SET flag_uuid = GENERATE_UUID();
+        INSERT INTO `cobundu-bi-playground.dataform_sd_procedure.table_flag` (FLAG_ID, dataset_name, table_name, populated_date, is_populated)
+        VALUES (flag_uuid, p_dataset, p_table_name, current_date, TRUE);
+    END IF;
+
+    IF EXISTS(
+      WITH ranked_data AS (
+        SELECT 
+          *, 
+          ROW_NUMBER() OVER (PARTITION BY table_name,populated_date) AS row_num
+        FROM `cobundu-bi-playground.dataform_sd_procedure.table_flag`
+        ORDER BY populated_date desc
+      )
+      SELECT FLAG_ID
+      FROM ranked_data
+      WHERE row_num > 1)
+    THEN
+      DELETE FROM 
+      `cobundu-bi-playground.dataform_sd_procedure.table_flag`
+      WHERE FLAG_ID IN 
+      (WITH ranked_data AS (
+        SELECT 
+          *, 
+          ROW_NUMBER() OVER (PARTITION BY table_name,populated_date) AS row_num
+        FROM `cobundu-bi-playground.dataform_sd_procedure.table_flag`
+        ORDER BY populated_date desc
+      )
+      SELECT FLAG_ID
+      FROM ranked_data
+      WHERE row_num > 1);
+    END IF;
+
+	SET strRemarks = 'Completed successfully';
+
+	CALL `cobundu-bi-playground.dataform_sd_procedure.Execution_log`(p_dataset,strProcName,'E',strRemarks);
+
+EXCEPTION WHEN ERROR THEN
+  SET strErrorMessage = @@error.message;
+  SET strErrorStatement = 'Failed in populate_flag '||'~'||@@error.statement_text;
+
+  CALL `cobundu-bi-playground.dataform_sd_procedure.Error_log`(p_dataset,strErrorMessage,strErrorStatement);
+  SET strRemarks = 'Failed in populate_flag, check error_log table for more info';
+  CALL `cobundu-bi-playground.dataform_sd_procedure.Execution_log`(p_dataset,strProcName,'E',strRemarks);
+END;

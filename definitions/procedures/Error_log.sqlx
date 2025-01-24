@@ -1,0 +1,18 @@
+CREATE OR REPLACE PROCEDURE
+  `cobundu-bi-playground.dataform_sd_procedure.Error_log`(IN p_tenant STRING,
+    IN p_message STRING,
+    IN p_sql_text STRING)
+BEGIN
+DECLARE
+  dInsertTime DATETIME;
+SET
+  dInsertTime = TIMESTAMP_TRUNC(DATETIME(CURRENT_TIMESTAMP(),"CET"), SECOND);
+INSERT INTO
+  `cobundu-bi-playground.dataform_sd_procedure.error_log` (tenant,
+    message,
+    sql_text,
+    insert_time)
+VALUES
+  (p_tenant, p_message, p_sql_text, dInsertTime);
+END
+  ;

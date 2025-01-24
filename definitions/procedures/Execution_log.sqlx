@@ -1,0 +1,51 @@
+CREATE OR REPLACE PROCEDURE `cobundu-bi-playground.dataform_sd_procedure.Execution_log`(IN p_dataset_name STRING, p_routine_name STRING, p_flag STRING, IN p_remarks STRING)
+BEGIN
+    DECLARE nProcId			  INT64;
+    DECLARE dStartTime	  DATETIME;
+    DECLARE dEndTime		  DATETIME;
+    DECLARE strDuration		STRING;
+
+    IF EXISTS( SELECT 1 FROM `cobundu-bi-playground.dataform_sd_procedure.enable_logs`
+               WHERE DATASET_NAME = p_dataset_name
+               AND ROUTINE_NAME = p_routine_name
+               AND ENABLE = TRUE)
+    THEN
+      IF p_flag = 'S'
+      THEN
+        SET dStartTime  = DATETIME(CURRENT_TIMESTAMP(),"CET");
+        SET nProcId = (SELECT (IFNULL(max(ID),0)+1) FROM `cobundu-bi-playground.dataform_sd_procedure.proc_run_details` 
+                        WHERE PROCEDURE_NAME = p_routine_name
+                        AND dataset_name = p_dataset_name);
+        INSERT INTO `cobundu-bi-playground.dataform_sd_procedure.proc_run_details`(	ID,
+                                                                                    PROCEDURE_NAME,
+                                                                                    START_TIME,
+                                                                                    DATASET_NAME)
+                                                                      VALUES( nProcId,
+                                                                              p_routine_name,
+                                                                              dStartTime,
+                                                                              p_dataset_name);
+      ELSEIF p_flag = 'E'
+      THEN
+        SET nProcId = (SELECT (IFNULL(max(ID),0)) FROM `cobundu-bi-playground.dataform_sd_procedure.proc_run_details` 
+                        WHERE PROCEDURE_NAME = p_routine_name
+                        AND dataset_name = p_dataset_name);
+        SET dStartTime  = (SELECT START_TIME FROM `cobundu-bi-playground.dataform_sd_procedure.proc_run_details` 
+                        WHERE PROCEDURE_NAME = p_routine_name
+                        AND dataset_name = p_dataset_name
+                        and ID = nProcId);
+        SET dEndTime = DATETIME(CURRENT_TIMESTAMP(),"CET");
+
+        SET strDuration =  CONCAT(FLOOR(DATETIME_DIFF(dEndTime, dStartTime, SECOND) / 3600), ' hours, ',
+                                    FLOOR(MOD(DATETIME_DIFF(dEndTime, dStartTime, SECOND), 3600) / 60), ' minutes, ',
+                                    MOD(DATETIME_DIFF(dEndTime, dStartTime, SECOND) , 60), ' seconds') ;
+
+        UPDATE `cobundu-bi-playground.dataform_sd_procedure.proc_run_details`
+        SET END_TIME = dEndTime,
+            DURATION = strDuration,
+            REMARKS = p_remarks
+        WHERE PROCEDURE_NAME = p_routine_name
+        AND ID = nProcId
+        AND DATASET_NAME = p_dataset_name;
+      END IF;
+    END IF;
+END;
