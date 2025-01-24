@@ -114,7 +114,9 @@ BEGIN
 												 r.Client_Organization_Name as rsrv_Client_Organization_Name
 												FROM `%s` r
 												left join `%s` c
-												on r.responsible_department_code = c.department_code
+												ON (r.responsible_department_code = c.department_code
+													AND r.DEPARTMENT_ID = c.DEPARTMENT_ID
+													AND r.RESPONSIBLE_COMPANY_CODE = c.COMPANY_CODE)
 												left join (select  DISTINCT LOC_SITE, LOC_aREA from `%s` where loc_type='SITE' AND CURRENT_FLAG='Y') d
 												on r.site_reference=d.loc_site
 												--left join  stg_api_location_id st
@@ -308,7 +310,9 @@ BEGIN
 												r.Client_Organization_Name as rsrv_Client_Organization_Name
 												FROM `%s` r
 												left join `%s` c
-												on r.responsible_department_code = c.department_code
+												ON (r.responsible_department_code = c.department_code
+													AND r.DEPARTMENT_ID = c.DEPARTMENT_ID
+													AND r.RESPONSIBLE_COMPANY_CODE = c.COMPANY_CODE)
 												left join (select  DISTINCT LOC_SITE, LOC_aREA from `%s` where loc_type='SITE' AND CURRENT_FLAG='Y') d
 												on r.site_reference=d.loc_site
 												--left join  stg_api_location_id st
@@ -571,7 +575,9 @@ BEGIN
 												 r.Client_Organization_Name as rsrv_Client_Organization_Name
 												FROM `%s` r
 												left join `%s` c
-												on r.responsible_department_code = c.department_code
+												ON (r.responsible_department_code = c.department_code
+													AND r.DEPARTMENT_ID = c.DEPARTMENT_ID
+													AND r.RESPONSIBLE_COMPANY_CODE = c.COMPANY_CODE)
 												left join (select  DISTINCT LOC_SITE, LOC_aREA from `%s` where loc_type='SITE' AND CURRENT_FLAG='Y') d
 												on r.site_reference=d.loc_site
 												--left join  stg_api_location_id st
@@ -765,7 +771,9 @@ BEGIN
 												r.Client_Organization_Name as rsrv_Client_Organization_Name
 												FROM `%s` r
 												left join `%s` c
-												on r.responsible_department_code = c.department_code
+												ON (r.responsible_department_code = c.department_code
+													AND r.DEPARTMENT_ID = c.DEPARTMENT_ID
+													AND r.RESPONSIBLE_COMPANY_CODE = c.COMPANY_CODE)
 												left join (select  DISTINCT LOC_SITE, LOC_aREA from `%s` where loc_type='SITE' AND CURRENT_FLAG='Y') d
 												on r.site_reference=d.loc_site
 												--left join  stg_api_location_id st
