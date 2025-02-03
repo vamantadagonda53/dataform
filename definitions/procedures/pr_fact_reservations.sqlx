@@ -576,7 +576,7 @@ BEGIN
 												FROM `%s` r
 												left join `%s` c
 												ON (r.responsible_department_code = c.department_code
-													AND r.DEPARTMENT_ID = c.DEPARTMENT_ID
+													AND r.DEPARTMENT_ID = c.DEPARTMENT_ID 
 													AND r.RESPONSIBLE_COMPANY_CODE = c.COMPANY_CODE)
 												left join (select  DISTINCT LOC_SITE, LOC_aREA from `%s` where loc_type='SITE' AND CURRENT_FLAG='Y') d
 												on r.site_reference=d.loc_site
