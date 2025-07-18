@@ -4,4 +4,4 @@ defaultDataset: dataform
 defaultAssertionDataset: dataform_assertions
 dataformCoreVersion: 3.0.0-beta.4
 vars:
-    variable_1: axx_spacewell
+    setting: axx_spacewell
