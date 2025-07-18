@@ -1,1 +1,1 @@
-SELECT * FROM ${dataform.projectConfig.vars.myVariableName}
+SELECT * FROM `${dataform.projectConfig.vars.myVariableName}`
