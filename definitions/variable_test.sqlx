@@ -1,0 +1,12 @@
+
+config {
+  type: "table"
+}
+
+
+--select ${dataform.projectConfig.vars.cob_var}
+--select SUBSTR(${dataform.projectConfig.vars.cob_var}, 4)
+
+select '${compilationVariable("cob_var")}'
+
+--${ref(dataform.projectConfig.vars.mcs_22_transformation_target_tenant_dataset, 'DIM_LOCATIONS')}
