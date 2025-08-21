@@ -1,12 +1,134 @@
-
 config {
-  type: "table"
+  type: "incremental",
+  schema: dataform.projectConfig.vars.transformation_target_tenant_dataset,
+  tags: ["axxerion"]
+}
+
+js {
+  const source_database = dataform.projectConfig.vars.location_schema;
+  const dim_settings = ref('dim_settings');
+}
+
+pre_operations {
+  TRUNCATE TABLE ${self()};
 }
 
 
---select ${dataform.projectConfig.vars.cob_var}
---select SUBSTR(${dataform.projectConfig.vars.cob_var}, 4)
+WITH tenant_info AS (
+  SELECT
+    '${source_database}' AS source_database,
+    CASE
+      WHEN REGEXP_CONTAINS('${source_database}', r"^cob_") THEN
+        UPPER(REGEXP_EXTRACT('${source_database}', r"^cob_(.+)"))
+      ELSE "UNKNOWN"
+    END AS tenant_name
+),
+space_categories AS (
+  SELECT
+    t.tenant_name,
+    JSON_VALUE(s.value_json, "$.workDuration") AS workDuration,
+    JSON_VALUE(s.value_json, "$.concentrationDuration") AS concentrationDuration,
+    JSON_VALUE(s.value_json, "$.collaborationDuration") AS collaborationDuration,
+    JSON_VALUE(s.value_json, "$.sanitaryDuration") AS sanitaryDuration,
+    JSON_VALUE(s.value_json, "$.unclassifiedDuration") AS unclassifiedDuration
+  FROM ${dim_settings} s
+  JOIN tenant_info t ON TRUE
+  WHERE s.setting = "space_categories"
+),
+rs_default AS (
+  SELECT
+    t.tenant_name,
+    JSON_VALUE(s.value_json, "$.startOfBusinessDay") AS startOfBusinessDay,
+    JSON_VALUE(s.value_json, "$.endOfBusinessDay") AS endOfBusinessDay,
+    JSON_VALUE(s.value_json, "$.language") AS language,
+    JSON_VALUE(s.value_json, "$.timeZoneId") AS timeZoneId,
+    JSON_VALUE(s.value_json, "$.dateFormat") AS dateFormat,
+    JSON_VALUE(s.value_json, "$.timeFormat") AS timeFormat,
+    JSON_VALUE(s.value_json, "$.numberSeparator") AS numberSeparator,
+    JSON_VALUE(s.value_json, "$.lengthUOM") AS lengthUOM,
+    JSON_VALUE(s.value_json, "$.temperatureUOM") AS temperatureUOM,
+    JSON_VALUE(s.value_json, "$.measurementSystem") AS measurementSystem
+  FROM ${dim_settings} s
+  JOIN tenant_info t ON TRUE
+  WHERE s.setting = "rs_default"
+),
+ps_default AS (
+  SELECT
+    t.tenant_name,
+    JSON_VALUE(s.value_json, "$.lowerTemp") AS lowerTemp,
+    JSON_VALUE(s.value_json, "$.upperTemp") AS upperTemp,
+    JSON_VALUE(s.value_json, "$.lowerHumidity") AS lowerHumidity,
+    JSON_VALUE(s.value_json, "$.upperHumidity") AS upperHumidity,
+    JSON_VALUE(s.value_json, "$.lowerCO2") AS lowerCO2,
+    JSON_VALUE(s.value_json, "$.upperCO2") AS upperCO2,
+    JSON_VALUE(s.value_json, "$.upperTVOC") AS upperTVOC,
+    JSON_VALUE(s.value_json, "$.criticalTVOC") AS criticalTVOC,
+    JSON_VALUE(s.value_json, "$.upperRadon") AS upperRadon,
+    JSON_VALUE(s.value_json, "$.criticalRadon") AS criticalRadon
+  FROM ${dim_settings} s
+  JOIN tenant_info t ON TRUE
+  WHERE s.setting = "ps_default"
+)
+SELECT tenant_name, setting, value
+FROM (
+  SELECT tenant_name, setting, value
+  FROM space_categories
+  UNPIVOT (value FOR setting IN (
+    workDuration,
+    concentrationDuration,
+    collaborationDuration,
+    sanitaryDuration,
+    unclassifiedDuration
+  ))
+  UNION ALL
+  SELECT tenant_name, setting, value
+  FROM rs_default
+  UNPIVOT (value FOR setting IN (
+    startOfBusinessDay,
+    endOfBusinessDay,
+    language,
+    timeZoneId,
+    dateFormat,
+    timeFormat,
+    numberSeparator,
+    lengthUOM,
+    temperatureUOM,
+    measurementSystem
+  ))
+  UNION ALL
+  SELECT tenant_name, setting, value
+  FROM ps_default
+  UNPIVOT (value FOR setting IN (
+    lowerTemp,
+    upperTemp,
+    lowerHumidity,
+    upperHumidity,
+    lowerCO2,
+    upperCO2,
+    upperTVOC,
+    criticalTVOC,
+    upperRadon,
+    criticalRadon
+  ))
+  UNION ALL
+  -- Static/default settings
+  SELECT tenant_name, setting, value
+  FROM tenant_info,
+       UNNEST([
+         STRUCT("last_updated_timestamp" AS setting, "tobeadded" AS value),
+         STRUCT("Sensorsource", "GBQ"),
+         STRUCT("rolling_months", "12"),
+         STRUCT("RSRV_INCR_DATE", NULL),
+         STRUCT("gbq_last_updated_date", NULL),
+         STRUCT("isWorkAssistantEnabled", NULL),
+         STRUCT("is_pir", "0"),
+         STRUCT("Enable_client_org_section_access", "0"),
+         STRUCT("Tenant_WorkingDays", "5"),
+         STRUCT("rolling_months_SPAR", "6"),
+         STRUCT("rolling_months_extended", "12"),
+         STRUCT("vSeatDefinition", "CONFERENCE ROOM SEATS"),
+         STRUCT("IWMS Source", "AXX")
+       ])
+) AS all_settings
+WHERE value IS NULL OR NOT REGEXP_CONTAINS(value, r"\.\d+")
 
-select '${compilationVariable("cob_var")}'
-
---${ref(dataform.projectConfig.vars.mcs_22_transformation_target_tenant_dataset, 'DIM_LOCATIONS')}

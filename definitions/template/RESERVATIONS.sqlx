@@ -1,0 +1,361 @@
+config {
+  type: "incremental",
+  schema: dataform.projectConfig.vars.transformation_target_tenant_dataset,
+  tags: ["axxerion"],
+  assertions: {
+    nonNull: ["status_code", "status_name"]
+  }
+  
+}
+
+TRUNCATE TABLE ${self()}; 
+
+INSERT INTO
+  ${self()} (user_reference,
+    Reference,
+    binEId,
+    Subject,
+    Description,
+    status_code,
+    status_name,
+    Result,
+    NrOfParticipants,
+    Building_Reference,
+    Building_Name,
+    Start_Timestamp,
+    End_Timestamp,
+    Cancel_Timestamp,
+    Create_Timestamp,
+    Update_Timestamp,
+    Organizer_reference,
+    Organizer_name,
+    Organizer_email,
+    Organizer_organization_name,
+    Creator_reference,
+    Creator_name,
+    Creator_email,
+    Creator_organisation_name,
+    Item_Nr,
+    Item_Object_Reference,
+    Item_Object_Capacity,
+    Item_name,
+    Item_description,
+    Item_type,
+    Item_Object_Category_Name,
+    Item_Object_Category_Reference,
+    Item_quantity,
+    id,
+    objectname,
+    clientid,
+    closetime,
+    objectnameid,
+    client_id,
+    name,
+    parentclientid,
+    partnerclientid,
+    client_ref,
+    url,
+    projectSettingsId,
+    tz_iana_timezone,
+    itemid )
+WITH
+  RECURSIVE hierarchy AS (
+  SELECT
+    c.clientId,
+    c.reference,
+    parentClientId,
+    1 AS level,
+    uniqueReference,
+    reservationStatusCode,
+  FROM
+    `dev-sw-dwh-raw-data.axx_axdb17.client` c
+  JOIN
+    `dev-sw-dwh-raw-data.axx_axdb17.reservation` r
+  ON
+    r.clientId = c.clientId
+  WHERE
+    r.clientId = 1610000000000002
+  UNION ALL
+  SELECT
+    parent.clientId,
+    parent.reference,
+    parent.parentClientId,
+    h.level + 1 AS level,
+    h.uniqueReference,
+    h.reservationStatusCode
+  FROM
+    `dev-sw-dwh-raw-data.axx_axdb17.client` parent
+  JOIN
+    hierarchy h
+  ON
+    parent.clientId = h.parentClientId --and parent.clientId = ${dataform.projectConfig.vars.client_id}
+    ),
+    max_level AS (
+    SELECT
+      MAX(level) AS max_level,
+      uniqueReference,
+      reservationStatusCode
+    FROM
+      hierarchy
+    GROUP BY
+      uniqueReference,
+      reservationStatusCode ),
+    extended AS (
+    SELECT
+      *
+    FROM
+      hierarchy
+    UNION ALL
+    SELECT
+      c.clientId,
+      c.reference,
+      c.parentClientId,
+      m.max_level + 1 AS level,
+      m.uniqueReference,
+      m.reservationStatusCode
+    FROM
+      `dev-sw-dwh-raw-data.axx_axdb17.client` c
+    CROSS JOIN
+      max_level m
+    WHERE
+      c.clientId = 1
+      AND NOT EXISTS (
+      SELECT
+        1
+      FROM
+        hierarchy h
+      WHERE
+        h.clientId = c.clientId ) ),
+    status_code AS (
+    SELECT
+      *
+    FROM (
+      SELECT
+        e.level,
+        e.uniqueReference,
+        e.reservationStatusCode,
+        e.clientId AS rsrc_client_id,
+        eVal.clientId AS eval_clientid,
+        eVal.intValue,
+        eVal.name,
+        eVal.reference,
+        DENSE_RANK() OVER (PARTITION BY e.uniqueReference ORDER BY e.level ) AS RN
+      FROM
+        extended e
+      INNER JOIN
+        `prod-sw-dwh-raw-data.axx_axdb08.enumerationvalue` AS eVal
+      ON
+        e.reservationStatusCode = eVal.intValue
+      INNER JOIN
+        `prod-sw-dwh-raw-data.axx_axdb08.enumerationtype` AS eType
+      ON
+        eType.id = eVal.enumerationTypeId
+      WHERE
+        eType.name = "ReservationStatus"
+        AND e.clientId = eVal.clientId
+        AND uniqueReference IS NOT NULL --order BY uniqueReference,level
+         )
+    WHERE
+      RN = 1 --order BY uniqueReference,level
+       ),
+    reservable_details AS (
+    SELECT
+      reservable.id,
+      reservable.uniqueReference,
+      reservable.objectNameId,
+      t1area.id AS area_id,
+      t1area.capacity AS area_capacity,
+      t1area.areatypecode,
+      t1area.categoryfolderid AS area_categoryfolderid,
+      t1area.name AS area_name,
+      asset.id AS asset_id,
+      asset.quantity AS asset_quantity,
+      asset.categoryfolderid AS asset_categoryfolderid,
+      asset.name AS asset_name,
+      catalogitem.id AS catalogitem_id,
+      catalogitem.categoryfolderid AS catalogitem_categoryfolderid,
+      catalogitem.name AS catalogitem_name,
+      area_category_folder.name AS area_category_folder_name,
+      area_category_folder.reference AS area_category_folder_reference,
+      asset_folder.name AS asset_folder_name,
+      asset_folder.reference AS asset_folder_reference,
+      catalogitem_folder.name AS catalogitem_folder_name,
+      catalogitem_folder.reference AS catalogitem_folder_reference,
+      objectname.name AS objectname_name,
+      -- Pre-computed CASE statements
+      CASE
+        WHEN reservable.objectnameid = 50 THEN CAST(t1area.capacity AS INT64)
+        WHEN reservable.objectnameid = 3 THEN CAST(asset.quantity AS INT64)
+        WHEN reservable.objectnameid = 63 THEN 1
+    END
+      AS item_object_capacity,
+      CASE
+        WHEN reservable.objectnameid = 50 THEN CASE
+        WHEN t1area.areatypecode = 2 THEN 'Room'
+        WHEN t1area.areatypecode = 3 THEN 'Workplace'
+        WHEN t1area.areatypecode = 1 THEN 'Floor'
+        WHEN t1area.areatypecode = 1 THEN 'Floor'
+        WHEN t1area.areatypecode = 9 THEN 'Parking'
+        WHEN t1area.areatypecode = 5 THEN 'Building'
+        WHEN t1area.areatypecode = 4 THEN 'Section'
+        ELSE 'Area'
+    END
+        WHEN reservable.objectnameid = 3 THEN 'equipment'
+        WHEN reservable.objectnameid = 63 THEN 'service'
+    END
+      AS item_type,
+      CASE
+        WHEN reservable.objectnameid = 50 THEN area_category_folder.name
+        WHEN reservable.objectnameid = 3 THEN asset_folder.name
+        WHEN reservable.objectnameid = 63 THEN catalogitem_folder.name
+    END
+      AS item_object_category_name,
+      CASE
+        WHEN reservable.objectnameid = 50 THEN area_category_folder.reference
+        WHEN reservable.objectnameid = 3 THEN asset_folder.reference
+        WHEN reservable.objectnameid = 63 THEN catalogitem_folder.reference
+    END
+      AS item_object_category_reference
+    FROM
+      `dev-sw-dwh-raw-data.axx_axdb17.reservable` AS reservable
+    LEFT JOIN
+      `dev-sw-dwh-raw-data.axx_axdb17.area` AS t1area
+    ON
+      reservable.instanceid = t1area.id
+    LEFT JOIN
+      `dev-sw-dwh-raw-data.axx_axdb17.asset` AS asset
+    ON
+      reservable.instanceid = asset.id
+    LEFT JOIN
+      `dev-sw-dwh-raw-data.axx_axdb17.catalogitem` AS catalogitem
+    ON
+      reservable.instanceid = catalogitem.id
+    LEFT JOIN
+      `dev-sw-dwh-raw-data.axx_axdb17.folder` AS area_category_folder
+    ON
+      t1area.categoryfolderid = area_category_folder.id
+    LEFT JOIN
+      `dev-sw-dwh-raw-data.axx_axdb17.folder` AS asset_folder
+    ON
+      asset.categoryfolderid = asset_folder.id
+    LEFT JOIN
+      `dev-sw-dwh-raw-data.axx_axdb17.folder` AS catalogitem_folder
+    ON
+      catalogitem.categoryfolderid = catalogitem_folder.id
+    LEFT JOIN
+      `dev-sw-dwh-raw-data.axx_axdb17.objectname` AS objectname
+    ON
+      reservable.objectnameid = objectname.id )
+  SELECT
+    reservation.reference AS user_reference,
+    reservation.uniqueReference AS Reference,
+    reservation.binEntryId AS binEId,
+    reservation.name AS Subject,
+    reservation.description AS Description,
+    status_code.reference AS status_code,
+    status_code.name AS status_name,
+    CASE
+      WHEN TIMESTAMP(reservation.endTime) < CURRENT_TIMESTAMP() THEN 'Completed'
+      WHEN reservation.cancelTime IS NULL THEN 'Cancelled'
+      WHEN reservation.noShow = 1 THEN 'No_show'
+      ELSE ""
+  END
+    AS Result,
+    reservation.persons AS NrOfParticipants,
+    property.reference AS Building_Reference,
+    property.name AS Building_Name,
+    FORMAT_TIMESTAMP("%Y-%m-%dT%H:%M:%SZ", TIMESTAMP(reservation.startTime)) AS Start_Timestamp,
+    FORMAT_TIMESTAMP("%Y-%m-%dT%H:%M:%SZ", TIMESTAMP(reservation.endTime)) AS End_Timestamp,
+    FORMAT_TIMESTAMP("%Y-%m-%dT%H:%M:%SZ", TIMESTAMP(reservation.cancelTime)) AS Cancel_Timestamp,
+    FORMAT_TIMESTAMP("%Y-%m-%dT%H:%M:%SZ", TIMESTAMP(reservation.createTime)) AS Create_Timestamp,
+    FORMAT_TIMESTAMP("%Y-%m-%dT%H:%M:%SZ", TIMESTAMP(reservation.updateTime)) AS Update_Timestamp,
+    organizer.reference AS Organizer_reference,
+    organizer.wholeName AS Organizer_name,
+    organizer.email AS Organizer_email,
+    organizer_organization_contact.wholeName AS Organizer_organization_name,
+    creator.reference AS Creator_reference,
+    creator.wholeName AS Creator_name,
+    creator.email AS Creator_email,
+    creator_organization_contact.wholeName AS Creator_organisation_name,
+    reservationItem.reference AS Item_Nr,
+    reservable_details.uniqueReference AS Item_Object_Reference,
+    reservable_details.item_object_capacity AS Item_Object_Capacity,
+    reservationItem.name AS Item_name,
+    reservationItem.description AS Item_description,
+    reservable_details.item_type AS Item_type,
+    reservable_details.item_object_category_name AS Item_Object_Category_Name,
+    reservable_details.item_object_category_reference AS Item_Object_Category_Reference,
+    CAST(reservationItem.items AS int64) AS Item_quantity,
+    CAST(reservation.id AS STRING) AS id,
+    346 AS objectname,
+    reservation.clientid AS clientid,
+    reservation.closetime AS closetime,
+    CAST(reservable_details.objectnameid AS string) AS objectnameid,
+    client.id AS client_id,
+    client.name,
+    client.parentclientid,
+    client.partnerclientid,
+    client.reference AS client_ref,
+    client.url,
+    client.projectSettingsId,
+    client.timeZone_ AS tz_iana_timezone,
+    reservationItem.id AS itemid
+  FROM
+    `dev-sw-dwh-raw-data.axx_axdb17.reservationitem` AS reservationItem
+  LEFT JOIN
+    `dev-sw-dwh-raw-data.axx_axdb17.reservation` AS RESERVATION
+  ON
+    reservationItem.reservationId = reservation.id
+  LEFT JOIN
+    `dev-sw-dwh-raw-data.axx_axdb17.property` AS property
+  ON
+    reservation.propertyId = property.id
+  LEFT JOIN
+    `dev-sw-dwh-raw-data.axx_axdb17.contact` AS organizer
+  ON
+    reservation.contactId=organizer.id
+  LEFT JOIN
+    `dev-sw-dwh-raw-data.axx_axdb17.organization` AS organizer_organization
+  ON
+    organizer.organizationId=organizer_organization.id
+  LEFT JOIN
+    `dev-sw-dwh-raw-data.axx_axdb17.contact` AS organizer_organization_contact
+  ON
+    organizer_organization.contactId=organizer_organization_contact.id
+  LEFT JOIN
+    `dev-sw-dwh-raw-data.axx_axdb17.systemuser` AS systemuser_contact
+  ON
+    reservation.createsystemuserid = systemuser_contact.id
+  LEFT JOIN
+    `dev-sw-dwh-raw-data.axx_axdb17.contact` AS creator
+  ON
+    systemuser_contact.contactId = creator.id
+  LEFT OUTER JOIN
+    `dev-sw-dwh-raw-data.axx_axdb17.organization` AS creator_organization
+  ON
+    creator.organizationId = creator_organization.id
+  LEFT OUTER JOIN
+    `dev-sw-dwh-raw-data.axx_axdb17.contact` AS creator_organization_contact
+  ON
+    creator_organization.contactId = creator_organization_contact.id
+  LEFT JOIN
+    reservable_details
+  ON
+    reservationItem.reservableId = reservable_details.id
+  LEFT JOIN
+    `dev-sw-dwh-raw-data.axx_axdb17.client` AS client
+  ON
+    client.id = reservation.clientid
+  LEFT JOIN
+    status_code
+  ON
+    reservation.uniqueReference = status_code.uniqueReference
+  WHERE
+    client.id = 1610000000000002
+    AND reservation.binEntryId = 0
+    AND reservationItem.reservableid != 0
+    AND reservationItem.reservationId != 0
+    AND reservation.reservationstatuscode != 1
+    AND reservation.starttime >= current_datetime - INTERVAL 1 YEAR
+    AND reservation.starttime < current_datetime + INTERVAL 6 MONTH
+    AND reservation.updatetime >= current_datetime - INTERVAL 1 YEAR

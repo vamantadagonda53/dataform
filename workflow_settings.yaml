@@ -6,3 +6,5 @@ dataformCoreVersion: 3.0.0
 vars:
     myVariableName : abc
     tartget_var : vaman
+    location_schema : cob_spacewell
+    transformation_target_tenant_dataset : curated_dataset

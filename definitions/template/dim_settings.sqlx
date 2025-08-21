@@ -1,0 +1,6 @@
+config {
+  type: "declaration",
+  schema: dataform.projectConfig.vars.location_schema,
+  database: dataform.projectConfig.vars.source_database,
+  name: "dim_settings"
+}
