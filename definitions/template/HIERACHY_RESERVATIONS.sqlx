@@ -1,10 +1,11 @@
 config {
-  type: "incremental",
+  type: "table",
   schema: dataform.projectConfig.vars.transformation_target_tenant_dataset,
   tags: ["axxerion"],
   assertions: {
     nonNull: ["status_code", "status_name"]
   }
+  
   
 }
 
