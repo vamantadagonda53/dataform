@@ -142,11 +142,11 @@ WITH
       FROM
         extended e
       INNER JOIN
-        `prod-sw-dwh-raw-data.axx_axdb08.enumerationvalue` AS eVal
+        `cobundu-bi-playground.axx_axdb17.enumerationvalue` AS eVal
       ON
         e.reservationStatusCode = eVal.intValue
       INNER JOIN
-        `prod-sw-dwh-raw-data.axx_axdb08.enumerationtype` AS eType
+        `cobundu-bi-playground.axx_axdb17.enumerationtype` AS eType
       ON
         eType.id = eVal.enumerationTypeId
       WHERE
