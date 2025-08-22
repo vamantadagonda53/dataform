@@ -67,9 +67,9 @@ WITH
     uniqueReference,
     reservationStatusCode,
   FROM
-    `dev-sw-dwh-raw-data.axx_axdb17.client` c
+    `cobundu-bi-playground.axx_axdb17.client` c
   JOIN
-    `dev-sw-dwh-raw-data.axx_axdb17.reservation` r
+    `cobundu-bi-playground.axx_axdb17.reservation` r
   ON
     r.clientId = c.clientId
   WHERE
@@ -83,7 +83,7 @@ WITH
     h.uniqueReference,
     h.reservationStatusCode
   FROM
-    `dev-sw-dwh-raw-data.axx_axdb17.client` parent
+    `cobundu-bi-playground.axx_axdb17.client` parent
   JOIN
     hierarchy h
   ON
@@ -113,7 +113,7 @@ WITH
       m.uniqueReference,
       m.reservationStatusCode
     FROM
-      `dev-sw-dwh-raw-data.axx_axdb17.client` c
+      `cobundu-bi-playground.axx_axdb17.client` c
     CROSS JOIN
       max_level m
     WHERE
@@ -216,33 +216,33 @@ WITH
     END
       AS item_object_category_reference
     FROM
-      `dev-sw-dwh-raw-data.axx_axdb17.reservable` AS reservable
+      `cobundu-bi-playground.axx_axdb17.reservable` AS reservable
     LEFT JOIN
-      `dev-sw-dwh-raw-data.axx_axdb17.area` AS t1area
+      `cobundu-bi-playground.axx_axdb17.area` AS t1area
     ON
       reservable.instanceid = t1area.id
     LEFT JOIN
-      `dev-sw-dwh-raw-data.axx_axdb17.asset` AS asset
+      `cobundu-bi-playground.axx_axdb17.asset` AS asset
     ON
       reservable.instanceid = asset.id
     LEFT JOIN
-      `dev-sw-dwh-raw-data.axx_axdb17.catalogitem` AS catalogitem
+      `cobundu-bi-playground.axx_axdb17.catalogitem` AS catalogitem
     ON
       reservable.instanceid = catalogitem.id
     LEFT JOIN
-      `dev-sw-dwh-raw-data.axx_axdb17.folder` AS area_category_folder
+      `cobundu-bi-playground.axx_axdb17.folder` AS area_category_folder
     ON
       t1area.categoryfolderid = area_category_folder.id
     LEFT JOIN
-      `dev-sw-dwh-raw-data.axx_axdb17.folder` AS asset_folder
+      `cobundu-bi-playground.axx_axdb17.folder` AS asset_folder
     ON
       asset.categoryfolderid = asset_folder.id
     LEFT JOIN
-      `dev-sw-dwh-raw-data.axx_axdb17.folder` AS catalogitem_folder
+      `cobundu-bi-playground.axx_axdb17.folder` AS catalogitem_folder
     ON
       catalogitem.categoryfolderid = catalogitem_folder.id
     LEFT JOIN
-      `dev-sw-dwh-raw-data.axx_axdb17.objectname` AS objectname
+      `cobundu-bi-playground.axx_axdb17.objectname` AS objectname
     ON
       reservable.objectnameid = objectname.id )
   SELECT
@@ -300,41 +300,41 @@ WITH
     client.timeZone_ AS tz_iana_timezone,
     reservationItem.id AS itemid
   FROM
-    `dev-sw-dwh-raw-data.axx_axdb17.reservationitem` AS reservationItem
+    `cobundu-bi-playground.axx_axdb17.reservationitem` AS reservationItem
   LEFT JOIN
-    `dev-sw-dwh-raw-data.axx_axdb17.reservation` AS RESERVATION
+    `cobundu-bi-playground.axx_axdb17.reservation` AS RESERVATION
   ON
     reservationItem.reservationId = reservation.id
   LEFT JOIN
-    `dev-sw-dwh-raw-data.axx_axdb17.property` AS property
+    `cobundu-bi-playground.axx_axdb17.property` AS property
   ON
     reservation.propertyId = property.id
   LEFT JOIN
-    `dev-sw-dwh-raw-data.axx_axdb17.contact` AS organizer
+    `cobundu-bi-playground.axx_axdb17.contact` AS organizer
   ON
     reservation.contactId=organizer.id
   LEFT JOIN
-    `dev-sw-dwh-raw-data.axx_axdb17.organization` AS organizer_organization
+    `cobundu-bi-playground.axx_axdb17.organization` AS organizer_organization
   ON
     organizer.organizationId=organizer_organization.id
   LEFT JOIN
-    `dev-sw-dwh-raw-data.axx_axdb17.contact` AS organizer_organization_contact
+    `cobundu-bi-playground.axx_axdb17.contact` AS organizer_organization_contact
   ON
     organizer_organization.contactId=organizer_organization_contact.id
   LEFT JOIN
-    `dev-sw-dwh-raw-data.axx_axdb17.systemuser` AS systemuser_contact
+    `cobundu-bi-playground.axx_axdb17.systemuser` AS systemuser_contact
   ON
     reservation.createsystemuserid = systemuser_contact.id
   LEFT JOIN
-    `dev-sw-dwh-raw-data.axx_axdb17.contact` AS creator
+    `cobundu-bi-playground.axx_axdb17.contact` AS creator
   ON
     systemuser_contact.contactId = creator.id
   LEFT OUTER JOIN
-    `dev-sw-dwh-raw-data.axx_axdb17.organization` AS creator_organization
+    `cobundu-bi-playground.axx_axdb17.organization` AS creator_organization
   ON
     creator.organizationId = creator_organization.id
   LEFT OUTER JOIN
-    `dev-sw-dwh-raw-data.axx_axdb17.contact` AS creator_organization_contact
+    `cobundu-bi-playground.axx_axdb17.contact` AS creator_organization_contact
   ON
     creator_organization.contactId = creator_organization_contact.id
   LEFT JOIN
@@ -342,7 +342,7 @@ WITH
   ON
     reservationItem.reservableId = reservable_details.id
   LEFT JOIN
-    `dev-sw-dwh-raw-data.axx_axdb17.client` AS client
+    `cobundu-bi-playground.axx_axdb17.client` AS client
   ON
     client.id = reservation.clientid
   LEFT JOIN
