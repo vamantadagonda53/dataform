@@ -5,9 +5,7 @@ config {
   assertions: {
     nonNull: ["status_code", "status_name"]
   }
-  
-  
-}
+  }
 
 WITH
   RECURSIVE hierarchy AS ( 
