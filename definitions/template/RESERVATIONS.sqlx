@@ -1,19 +1,13 @@
 config {
-  type: "operations",
-  --schema: dataform.projectConfig.vars.transformation_target_tenant_dataset,
-  tags: ["truncate"]
-    }
-DELETE FROM ${self()} WHERE TRUE ;
-
-config {
   type: "incremental",
   schema: dataform.projectConfig.vars.transformation_target_tenant_dataset,
   tags: ["axxerion"],
   assertions: {
     nonNull: ["status_code", "status_name"]
   }
-  
-}
+  }
+
+DELETE FROM ${self()} WHERE TRUE ;
 
 INSERT INTO
   ${self()} (user_reference,
