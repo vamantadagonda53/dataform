@@ -6,6 +6,9 @@ config {
   
   }
 
+  -- truncate first
+TRUNCATE TABLE ${self()};
+
 INSERT INTO
   ${self()} (user_reference,
     Reference,
