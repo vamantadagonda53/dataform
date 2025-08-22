@@ -7,7 +7,9 @@ config {
   }
   }
 
-DELETE FROM ${self()} WHERE TRUE ;
+pre_operations {
+  TRUNCATE TABLE ${self()};
+}
 
 INSERT INTO
   ${self()} (user_reference,
