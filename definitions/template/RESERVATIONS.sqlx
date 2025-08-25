@@ -254,7 +254,8 @@ WITH
     reservation.binEntryId AS binEId,
     reservation.name AS Subject,
     reservation.description AS Description,
-    status_code.reference AS status_code,
+    --status_code.reference AS status_code,
+    CAST(null as string) as status_code,
     status_code.name AS status_name,
     CASE
       WHEN TIMESTAMP(reservation.endTime) < CURRENT_TIMESTAMP() THEN 'Completed'
