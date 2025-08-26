@@ -1,12 +1,14 @@
 config {
-  type: "assertion",
-  tags: ["axxerion"],
-  schema: "dataform_assertions"
+    type: "assertion",
+    tags: ["axxerion"],
+    schema: "dataform_assertions"
 }
 
 SELECT
-    status_code,
-    status_name
-    FROM ${ref('RESERVATIONS')}
-WHERE status_code is null or 
-    status_name is null 
+  status_code,
+  status_name
+FROM
+  ${ref('RESERVATIONS')}
+WHERE
+  status_code IS NULL
+  OR status_name IS NULL
