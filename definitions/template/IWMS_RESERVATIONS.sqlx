@@ -1,201 +1,178 @@
 config {
-  type: "operations",
-  hasOutput: true,
-  schema: dataform.projectConfig.vars.transformation_target_tenant_dataset,
-  tags: ["axxerion", "iwms_reservations"]
+    type: "operations",
+    hasOutput: true,
+    schema: dataform.projectConfig.vars.transformation_target_tenant_dataset,
+    tags: ["axxerion", "iwms_reservations"]
 }
 
-      MERGE INTO `cobundu-bi-playground.SPACEWELL.IWMS_RESERVATIONS` as target
-USING (
-    WITH stg AS (
-        SELECT * FROM
-            (
-                SELECT
-                    user_reference 						AS res_userreference,
-                    reference 							AS res_reference,
-                    subject 							AS res_subject,
-                    description 						AS res_description,
-                    status_code 						AS res_statuscode,
-                    status_name 						AS res_statusname,
-                    cast(nrofparticipants as int) 		AS res_nrofparticipants,
-                    building_reference 					AS res_buildingreference,
-                    building_name 						AS res_buildingname,
-                    organizer_organization_name 		AS res_organizerorganizationname,
-                    Creator_organisation_name			AS res_creatororganizationname,
-                    item_nr 							AS res_itemnr,
-                    item_object_reference 				AS res_itemobjectreference,
-                    cast(item_object_capacity as INT) 	AS res_itemcapacity,
-                    item_name 							AS res_itemname,
-                    item_description 					AS res_itemdescription,
-                    item_type 							AS res_itemtype,
-                    item_object_category_name 			AS res_itemobjectcategoryname,
-                    item_object_category_reference 		AS res_itemobjectcategoryreference,
-                    cast(item_quantity as INT) 			AS res_itemquantity,
-                    id 									AS res_id,
-                    objectnameid 						AS res_objectnameid,
-                    cast(datetime(SAFE.PARSE_TIMESTAMP("%Y-%m-%dT%H:%M:%SZ",start_timestamp),  tz_iana_timezone) as timestamp) AS res_starttimestamp,
-                    cast(datetime(SAFE.PARSE_TIMESTAMP("%Y-%m-%dT%H:%M:%SZ",end_timestamp),    tz_iana_timezone) as timestamp) AS res_endtimestamp,
-                    cast(datetime(SAFE.PARSE_TIMESTAMP("%Y-%m-%dT%H:%M:%SZ",cancel_timestamp), tz_iana_timezone) as timestamp) AS res_canceltimestamp,
-                    cast(datetime(SAFE.PARSE_TIMESTAMP("%Y-%m-%dT%H:%M:%SZ",create_timestamp), tz_iana_timezone) as timestamp) AS res_createtimestamp,
-                    cast(datetime(SAFE.PARSE_TIMESTAMP("%Y-%m-%dT%H:%M:%SZ",update_timestamp), tz_iana_timezone) as timestamp) AS res_updatetimestamp,
-                    itemid 								AS res_itemid,
-                    Result 								AS res_result
-                FROM `cobundu-bi-playground.SPACEWELL.RESERVATIONS`
-            ) AS stg
-        WHERE NOT EXISTS (
-            SELECT 1
-            FROM `cobundu-bi-playground.SPACEWELL.IWMS_RESERVATIONS` AS ft
-            WHERE
-                coalesce(stg.res_userreference, 'a') 		 					 = coalesce(ft.res_userreference, 'a')
-                AND coalesce(stg.res_reference, 'a') 		 					 = coalesce(ft.res_reference, 'a')
-                AND coalesce(stg.res_subject, 'a') 			 					 = coalesce(ft.res_subject, 'a')
-                AND coalesce(stg.res_description, 'a') 		 					 = coalesce(ft.res_description, 'a')
-                AND coalesce(stg.res_statuscode, 'a') 		 					 = coalesce(ft.res_statuscode, 'a')
-                AND coalesce(stg.res_statusname, 'a') 		 					 = coalesce(ft.res_statusname, 'a')
-                AND coalesce(stg.res_nrofparticipants, 0) 	 					 = coalesce(ft.res_nrofparticipants, 0)
-                AND coalesce(stg.res_buildingreference, 'a') 					 = coalesce(ft.res_buildingreference, 'a')
-                AND coalesce(stg.res_buildingname, 'a') 						 = coalesce(ft.res_buildingname, 'a')
-                AND coalesce(stg.res_starttimestamp, '2999-01-01 23:59:59.000')  = coalesce(ft.res_starttimestamp, '2999-01-01 23:59:59.000')
-                AND coalesce(stg.res_endtimestamp, '2999-01-01 23:59:59.000') 	 = coalesce(ft.res_endtimestamp, '2999-01-01 23:59:59.000')
-                AND coalesce(stg.res_canceltimestamp, '2999-01-01 23:59:59.000') = coalesce(ft.res_canceltimestamp, '2999-01-01 23:59:59.000')
-                AND coalesce(stg.res_createtimestamp, '2999-01-01 23:59:59.000') = coalesce(ft.res_createtimestamp, '2999-01-01 23:59:59.000')
-                AND coalesce(stg.res_updatetimestamp, '2999-01-01 23:59:59.000') = coalesce(ft.res_updatetimestamp, '2999-01-01 23:59:59.000')
-                AND coalesce(stg.res_organizerorganizationname, 'a')   			 = coalesce(ft.res_organizerorganizationname, 'a')
-                AND coalesce(stg.res_creatororganizationname, 'a') 	   			 = coalesce(ft.res_creatororganizationname, 'a')
-                AND coalesce(stg.res_itemnr, 'a') 					   			 = coalesce(ft.res_itemnr, 'a')
-                AND coalesce(stg.res_itemid,0) 						   			 = coalesce(ft.res_itemid,0)
-                AND coalesce(stg.res_itemobjectreference, 'a') 		   			 = coalesce(ft.res_itemobjectreference, 'a')
-                AND coalesce(stg.res_itemcapacity, 0) 				   			 = coalesce(ft.res_itemcapacity, 0)
-                AND coalesce(stg.res_itemname, 'a') 				   			 = coalesce(ft.res_itemname, 'a')
-                AND coalesce(stg.res_itemdescription, 'a') 			   			 = coalesce(ft.res_itemdescription, 'a')
-                AND coalesce(stg.res_itemtype, 'a') 				   			 = coalesce(ft.res_itemtype, 'a')
-                AND coalesce(stg.res_itemobjectcategoryname, 'a') 	   			 = coalesce(ft.res_itemobjectcategoryname, 'a')
-                AND coalesce(stg.res_itemobjectcategoryreference, 'a') 			 = coalesce(ft.res_itemobjectcategoryreference, 'a')
-                AND coalesce(stg.res_itemquantity, 0) 				   			 = coalesce(ft.res_itemquantity, 0)
-                AND coalesce(stg.res_id, 'a') 						   			 = coalesce(ft.res_id, 'a')
-                AND coalesce(stg.res_objectnameid, 'a') 			   			 = coalesce(ft.res_objectnameid, 'a')
-                AND coalesce(stg.res_result, 'a') 					   			 = coalesce(ft.res_result, 'a')
-                AND ft.is_deleted 												 = 'N'
-        )
-    )
-    -- records to insert
+MERGE INTO
+  `cobundu-bi-playground.SPACEWELL.IWMS_RESERVATIONS` AS TARGET
+USING
+  (
+  WITH
+    stg AS (
     SELECT
-        cast(null as string) as res_reference,
-        0 					 as res_itemid,
-        stg.res_reference 	 as res_reference_stg,
-        stg.res_itemid 	  	 as res_itemid_stg,
-        stg.* except(res_reference, res_itemid)
-    FROM stg
-    UNION ALL
+      *
+    FROM (
+      SELECT
+        user_reference AS res_userreference,
+        reference AS res_reference,
+        subject AS res_subject,
+        description AS res_description,
+        status_code AS res_statuscode,
+        status_name AS res_statusname,
+        CAST(nrofparticipants AS int) AS res_nrofparticipants,
+        building_reference AS res_buildingreference,
+        building_name AS res_buildingname,
+        organizer_organization_name AS res_organizerorganizationname,
+        Creator_organisation_name AS res_creatororganizationname,
+        item_nr AS res_itemnr,
+        item_object_reference AS res_itemobjectreference,
+        CAST(item_object_capacity AS INT) AS res_itemcapacity,
+        item_name AS res_itemname,
+        item_description AS res_itemdescription,
+        item_type AS res_itemtype,
+        item_object_category_name AS res_itemobjectcategoryname,
+        item_object_category_reference AS res_itemobjectcategoryreference,
+        CAST(item_quantity AS INT) AS res_itemquantity,
+        id AS res_id,
+        objectnameid AS res_objectnameid,
+        CAST(DATETIME(SAFE.PARSE_TIMESTAMP("%Y-%m-%dT%H:%M:%SZ",start_timestamp), tz_iana_timezone) AS timestamp) AS res_starttimestamp,
+        CAST(DATETIME(SAFE.PARSE_TIMESTAMP("%Y-%m-%dT%H:%M:%SZ",end_timestamp), tz_iana_timezone) AS timestamp) AS res_endtimestamp,
+        CAST(DATETIME(SAFE.PARSE_TIMESTAMP("%Y-%m-%dT%H:%M:%SZ",cancel_timestamp), tz_iana_timezone) AS timestamp) AS res_canceltimestamp,
+        CAST(DATETIME(SAFE.PARSE_TIMESTAMP("%Y-%m-%dT%H:%M:%SZ",create_timestamp), tz_iana_timezone) AS timestamp) AS res_createtimestamp,
+        CAST(DATETIME(SAFE.PARSE_TIMESTAMP("%Y-%m-%dT%H:%M:%SZ",update_timestamp), tz_iana_timezone) AS timestamp) AS res_updatetimestamp,
+        itemid AS res_itemid,
+        Result AS res_result
+      FROM
+        `cobundu-bi-playground.SPACEWELL.RESERVATIONS` ) AS stg
+    WHERE
+      NOT EXISTS (
+      SELECT
+        1
+      FROM
+        `cobundu-bi-playground.SPACEWELL.IWMS_RESERVATIONS` AS ft
+      WHERE
+        COALESCE(stg.res_userreference, 'a') = COALESCE(ft.res_userreference, 'a')
+        AND COALESCE(stg.res_reference, 'a') = COALESCE(ft.res_reference, 'a')
+        AND COALESCE(stg.res_subject, 'a') = COALESCE(ft.res_subject, 'a')
+        AND COALESCE(stg.res_description, 'a') = COALESCE(ft.res_description, 'a')
+        AND COALESCE(stg.res_statuscode, 'a') = COALESCE(ft.res_statuscode, 'a')
+        AND COALESCE(stg.res_statusname, 'a') = COALESCE(ft.res_statusname, 'a')
+        AND COALESCE(stg.res_nrofparticipants, 0) = COALESCE(ft.res_nrofparticipants, 0)
+        AND COALESCE(stg.res_buildingreference, 'a') = COALESCE(ft.res_buildingreference, 'a')
+        AND COALESCE(stg.res_buildingname, 'a') = COALESCE(ft.res_buildingname, 'a')
+        AND COALESCE(stg.res_starttimestamp, '2999-01-01 23:59:59.000') = COALESCE(ft.res_starttimestamp, '2999-01-01 23:59:59.000')
+        AND COALESCE(stg.res_endtimestamp, '2999-01-01 23:59:59.000') = COALESCE(ft.res_endtimestamp, '2999-01-01 23:59:59.000')
+        AND COALESCE(stg.res_canceltimestamp, '2999-01-01 23:59:59.000') = COALESCE(ft.res_canceltimestamp, '2999-01-01 23:59:59.000')
+        AND COALESCE(stg.res_createtimestamp, '2999-01-01 23:59:59.000') = COALESCE(ft.res_createtimestamp, '2999-01-01 23:59:59.000')
+        AND COALESCE(stg.res_updatetimestamp, '2999-01-01 23:59:59.000') = COALESCE(ft.res_updatetimestamp, '2999-01-01 23:59:59.000')
+        AND COALESCE(stg.res_organizerorganizationname, 'a') = COALESCE(ft.res_organizerorganizationname, 'a')
+        AND COALESCE(stg.res_creatororganizationname, 'a') = COALESCE(ft.res_creatororganizationname, 'a')
+        AND COALESCE(stg.res_itemnr, 'a') = COALESCE(ft.res_itemnr, 'a')
+        AND COALESCE(stg.res_itemid,0) = COALESCE(ft.res_itemid,0)
+        AND COALESCE(stg.res_itemobjectreference, 'a') = COALESCE(ft.res_itemobjectreference, 'a')
+        AND COALESCE(stg.res_itemcapacity, 0) = COALESCE(ft.res_itemcapacity, 0)
+        AND COALESCE(stg.res_itemname, 'a') = COALESCE(ft.res_itemname, 'a')
+        AND COALESCE(stg.res_itemdescription, 'a') = COALESCE(ft.res_itemdescription, 'a')
+        AND COALESCE(stg.res_itemtype, 'a') = COALESCE(ft.res_itemtype, 'a')
+        AND COALESCE(stg.res_itemobjectcategoryname, 'a') = COALESCE(ft.res_itemobjectcategoryname, 'a')
+        AND COALESCE(stg.res_itemobjectcategoryreference, 'a') = COALESCE(ft.res_itemobjectcategoryreference, 'a')
+        AND COALESCE(stg.res_itemquantity, 0) = COALESCE(ft.res_itemquantity, 0)
+        AND COALESCE(stg.res_id, 'a') = COALESCE(ft.res_id, 'a')
+        AND COALESCE(stg.res_objectnameid, 'a') = COALESCE(ft.res_objectnameid, 'a')
+        AND COALESCE(stg.res_result, 'a') = COALESCE(ft.res_result, 'a')
+        AND ft.is_deleted = 'N' ) )
+        -- records to insert
+  SELECT
+    CAST(NULL AS string) AS res_reference,
+    0 AS res_itemid,
+    stg.res_reference AS res_reference_stg,
+    stg.res_itemid AS res_itemid_stg,
+    stg.* EXCEPT(res_reference,
+      res_itemid)
+  FROM
+    stg
+  UNION ALL
     -- records to update
-    SELECT
-        stg.res_reference,
-        stg.res_itemid,
-        null 				as res_reference_stg,
-        0 	 				as res_itemid_stg,
-        stg.* except(res_reference, res_itemid)
-    FROM stg
-    JOIN `cobundu-bi-playground.SPACEWELL.IWMS_RESERVATIONS` as target
-        ON stg.res_reference = target.res_reference
-        AND stg.res_itemid   = target.res_itemid
-        AND target.is_deleted = 'N'
-
-) as source
-    ON source.res_reference = target.res_reference
-    AND source.res_itemid = target.res_itemid
-    AND target.is_deleted = 'N'
-WHEN MATCHED THEN
-    UPDATE SET
-        is_deleted = 'Y',
-        last_modified_timestamp = CURRENT_TIMESTAMP()
-WHEN NOT MATCHED THEN
-    INSERT (
-        res_userreference,
-        res_reference,
-        res_subject,
-        res_description,
-        res_statuscode,
-        res_statusname,
-        res_nrofparticipants,
-        res_buildingreference,
-        res_buildingname,
-        res_starttimestamp,
-        res_endtimestamp,
-        res_canceltimestamp,
-        res_createtimestamp,
-        res_updatetimestamp,
-        res_organizerorganizationname,
-        res_creatororganizationname,
-        res_itemnr,
-        res_itemobjectreference,
-        res_itemcapacity,
-        res_itemname,
-        res_itemdescription,
-        res_itemtype,
-        res_itemobjectcategoryname,
-        res_itemobjectcategoryreference,
-        res_itemquantity,
-        res_id,
-        res_objectnameid,
-        res_stage,
-        last_modified_timestamp,
-        is_deleted,
-        res_itemid,
-        res_result
-    )
-
-    VALUES (
-        res_userreference,
-        res_reference_stg,
-        res_subject,
-        res_description,
-        res_statuscode,
-        res_statusname,
-        res_nrofparticipants,
-        res_buildingreference,
-        res_buildingname,
-        res_starttimestamp,
-        res_endtimestamp,
-        res_canceltimestamp,
-        res_createtimestamp,
-        res_updatetimestamp,
-        res_organizerorganizationname,
-        res_creatororganizationname,
-        res_itemnr,
-        res_itemobjectreference,
-        res_itemcapacity,
-        res_itemname,
-        res_itemdescription,
-        res_itemtype,
-        res_itemobjectcategoryname,
-        res_itemobjectcategoryreference,
-        res_itemquantity,
-        res_id,
-        res_objectnameid,
-        CASE
-            WHEN res_starttimestamp > current_timestamp
-                THEN 'P'
-            WHEN
-                res_starttimestamp <= current_timestamp
-                AND res_endtimestamp >= current_timestamp
-                THEN 'C'
-            WHEN res_endtimestamp < current_timestamp
-                THEN 'H'
-        END,
-        current_timestamp(),
-        'N',
-        res_itemid_stg,
-        res_result
-    );
+  SELECT
+    stg.res_reference,
+    stg.res_itemid,
+    NULL AS res_reference_stg,
+    0 AS res_itemid_stg,
+    stg.* EXCEPT(res_reference,
+      res_itemid)
+  FROM
+    stg
+  JOIN
+    `cobundu-bi-playground.SPACEWELL.IWMS_RESERVATIONS` AS TARGET
+  ON
+    stg.res_reference = target.res_reference
+    AND stg.res_itemid = target.res_itemid
+    AND target.is_deleted = 'N' ) AS SOURCE
+ON
+  source.res_reference = target.res_reference
+  AND source.res_itemid = target.res_itemid
+  AND target.is_deleted = 'N'
+  WHEN MATCHED THEN UPDATE SET is_deleted = 'Y', last_modified_timestamp = CURRENT_TIMESTAMP()
+  WHEN NOT MATCHED
+  THEN
+INSERT
+  ( res_userreference,
+    res_reference,
+    res_subject,
+    res_description,
+    res_statuscode,
+    res_statusname,
+    res_nrofparticipants,
+    res_buildingreference,
+    res_buildingname,
+    res_starttimestamp,
+    res_endtimestamp,
+    res_canceltimestamp,
+    res_createtimestamp,
+    res_updatetimestamp,
+    res_organizerorganizationname,
+    res_creatororganizationname,
+    res_itemnr,
+    res_itemobjectreference,
+    res_itemcapacity,
+    res_itemname,
+    res_itemdescription,
+    res_itemtype,
+    res_itemobjectcategoryname,
+    res_itemobjectcategoryreference,
+    res_itemquantity,
+    res_id,
+    res_objectnameid,
+    res_stage,
+    last_modified_timestamp,
+    is_deleted,
+    res_itemid,
+    res_result )
+VALUES
+  ( res_userreference, res_reference_stg, res_subject, res_description, res_statuscode, res_statusname, res_nrofparticipants, res_buildingreference, res_buildingname, res_starttimestamp, res_endtimestamp, res_canceltimestamp, res_createtimestamp, res_updatetimestamp, res_organizerorganizationname, res_creatororganizationname, res_itemnr, res_itemobjectreference, res_itemcapacity, res_itemname, res_itemdescription, res_itemtype, res_itemobjectcategoryname, res_itemobjectcategoryreference, res_itemquantity, res_id, res_objectnameid,
+    CASE
+      WHEN res_starttimestamp > current_timestamp THEN 'P'
+      WHEN res_starttimestamp <= current_timestamp
+    AND res_endtimestamp >= current_timestamp THEN 'C'
+      WHEN res_endtimestamp < current_timestamp THEN 'H'
+  END
+    , CURRENT_TIMESTAMP(), 'N', res_itemid_stg, res_result );
 
 
-    UPDATE `cobundu-bi-playground.SPACEWELL.IWMS_RESERVATIONS` AS target
-SET
+  UPDATE
+    `cobundu-bi-playground.SPACEWELL.IWMS_RESERVATIONS` AS TARGET
+  SET
     is_deleted = 'Y',
     last_modified_timestamp = CURRENT_TIMESTAMP()
-WHERE NOT EXISTS (
-    SELECT 1
-    FROM `cobundu-bi-playground.SPACEWELL.RESERVATIONS` AS source
-    WHERE target.res_reference = source.reference
-      AND target.res_itemobjectreference = source.item_object_reference
-);
+  WHERE
+    NOT EXISTS (
+    SELECT
+      1
+    FROM
+      `cobundu-bi-playground.SPACEWELL.RESERVATIONS` AS SOURCE
+    WHERE
+      target.res_reference = source.reference
+      AND target.res_itemobjectreference = source.item_object_reference );
+
