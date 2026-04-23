@@ -1,0 +1,64 @@
+js {
+    const projectId      = `${dataform.projectConfig.defaultProject}`;
+    const source_dataset = "NORDEA";
+    const tableName      = "VW_REP_CALLS_21";
+    const columnsToCheck = ["LOCATION_ID", "CUSTOMER", "CUSTOMER_CODE"];
+
+    function checkColumnsFromSchema(projectId, source_dataset, tableName, columnsToCheck) {
+        const columnAvailability = {};
+
+        const schemaQuery = `
+            SELECT column_name
+            FROM \`${projectId}.${source_dataset}.INFORMATION_SCHEMA.COLUMNS\`
+            WHERE table_name = '${tableName}'
+            AND column_name IN (${columnsToCheck.map(col => `'${col}'`).join(', ')})
+        `;
+
+        try {
+            const result = dataform.query(schemaQuery);
+            const availableColumns = result.map(row => row.column_name);
+
+            columnsToCheck.forEach(column => {
+                columnAvailability[column] = availableColumns.includes(column);
+            });
+        } catch (error) {
+            console.warn(`Failed to check columns in INFORMATION_SCHEMA: ${error.message}`);
+            columnsToCheck.forEach(column => {
+                columnAvailability[column] = false;
+            });
+        }
+
+        return columnAvailability;
+    }
+    
+    function shouldIncludeColumn(columnName, dataset, columnAvailability) {
+        return columnAvailability[columnName] || false;
+    }
+
+    function getColumnString(columnName, includeColumn) {
+        return includeColumn ? `,${columnName}` : "";
+    }
+
+    const columnAvailability = checkColumnsFromSchema(projectId, source_dataset, tableName, columnsToCheck);
+
+    // Check column availability using the function
+    const hasLocationIDCol = shouldIncludeColumn("LOCATION_ID", source_dataset, columnAvailability);
+    const hasCustomerCol = shouldIncludeColumn("CUSTOMER", source_dataset, columnAvailability);
+    const hasCustomerCodeCol = shouldIncludeColumn("CUSTOMER_CODE", source_dataset, columnAvailability);
+
+    // Generate column strings for SQL
+    const locationIdColumn = getColumnString("LOCATION_ID", hasLocationIDCol);
+    const customerColumn = getColumnString("CUSTOMER", hasCustomerCol);
+    const customerCodeColumn = getColumnString("CUSTOMER_CODE", hasCustomerCodeCol);
+
+}
+
+config {
+    type: "view",
+    schema: "NORDEA"
+}
+
+SELECT
+  CALL_ID ${locationIdColumn} ${customerColumn} ${customerCodeColumn}
+FROM
+  ${projectId}.${source_dataset}.${tableName}
