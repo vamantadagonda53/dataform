@@ -1,0 +1,342 @@
+config {
+  type: "incremental",
+  schema: dataform.projectConfig.vars.transformation_target_tenant_dataset,
+ 
+}
+
+WITH
+  -- Define valid clients once to avoid repeated filtering
+  valid_clients AS (
+    SELECT c.id, c.reference, c.customeraccountnumber, c.url, c.parentclientid
+    FROM `cobundu-bi-playground.axx_axdb17.client` AS c
+    WHERE c.reference NOT IN (
+      'afb', 'reb', 'baseline', 'fmb', 'gob', 'swb',
+      'axxiomab', 'inherit1', 'inherit2', 'inherit3',
+      'axtest', 'manual'
+    )
+    AND c.reference IS NOT NULL
+    -- Uncomment to filter single tenant:
+    -- AND c.id = 710000000000090
+  ),
+
+  -- Base CTEs filtered by valid clients
+  reservation_base AS (
+    SELECT r.id, r.clientid, r.reservationscheduleid, r.catalogitems, r.assets
+    FROM `cobundu-bi-playground.axx_axdb17.reservation` AS r
+    INNER JOIN valid_clients AS vc ON r.clientid = vc.id
+    WHERE r.binentryid = 0
+  ),
+
+  pagename_base AS (
+    SELECT p.id, p.clientid, p.name
+    FROM `cobundu-bi-playground.axx_axdb17.pagename` AS p
+    INNER JOIN valid_clients AS vc ON p.clientid = vc.id
+    WHERE p.binentryid = 0
+  ),
+
+  externalapp_base AS (
+    SELECT e.id, e.clientid, e.externalapptypecode, e.requestfolderid
+    FROM `cobundu-bi-playground.axx_axdb17.externalapp` AS e
+    INNER JOIN valid_clients AS vc ON e.clientid = vc.id
+    WHERE e.binentryid = 0
+  ),
+
+  combined_data AS (
+    SELECT 'building' AS type, p.id, p.clientid
+    FROM `cobundu-bi-playground.axx_axdb17.property` AS p
+    INNER JOIN valid_clients AS vc ON p.clientid = vc.id
+    WHERE p.binentryid = 0
+
+    UNION ALL
+    SELECT 'asset', a.id, a.clientid
+    FROM `cobundu-bi-playground.axx_axdb17.asset` AS a
+    INNER JOIN valid_clients AS vc ON a.clientid = vc.id
+    WHERE a.binentryid = 0
+
+    UNION ALL
+    SELECT
+      CASE WHEN personid != 0 THEN 'person' ELSE 'organisation' END,
+      c.id, c.clientid
+    FROM `cobundu-bi-playground.axx_axdb17.contact` AS c
+    INNER JOIN valid_clients AS vc ON c.clientid = vc.id
+    WHERE c.binentryid = 0
+
+    UNION ALL
+    SELECT 'request', r.id, r.clientid
+    FROM `cobundu-bi-playground.axx_axdb17.request` AS r
+    INNER JOIN valid_clients AS vc ON r.clientid = vc.id
+    WHERE r.binentryid = 0
+
+    UNION ALL
+    SELECT
+      CASE
+        WHEN wo.maintenancescheduleid != 0 AND folder.typecode = 3  THEN 'workorder_preventive_inspection'
+        WHEN wo.maintenancescheduleid != 0 AND folder.typecode != 3 THEN 'workorder_preventive'
+        WHEN wo.maintenancescheduleid = 0  AND folder.typecode = 3  THEN 'workorder_inspection'
+        WHEN wo.maintenancescheduleid = 0  AND folder.typecode != 3 THEN 'workorder_reactive'
+        ELSE 'workorder_unknown'
+      END,
+      wo.id, wo.clientid
+    FROM `cobundu-bi-playground.axx_axdb17.workorder` AS wo
+    INNER JOIN `cobundu-bi-playground.axx_axdb17.folder` AS folder
+      ON wo.categoryfolderid = folder.id
+    INNER JOIN valid_clients AS vc ON wo.clientid = vc.id
+    WHERE wo.binentryid = 0
+
+   /* UNION ALL
+    SELECT 'document_stored', d.id, d.clientid
+    FROM `cobundu-bi-playground.axx_axdb17.document` AS d
+    INNER JOIN valid_clients AS vc ON d.clientid = vc.id
+    WHERE d.binentryid = 0
+*/
+    UNION ALL
+    SELECT 'contract', ct.id, ct.clientid
+    FROM `cobundu-bi-playground.axx_axdb17.contract` AS ct
+    INNER JOIN valid_clients AS vc ON ct.clientid = vc.id
+    WHERE ct.binentryid = 0
+
+    UNION ALL
+    SELECT 'custom_report', o.id, o.clientid
+    FROM `cobundu-bi-playground.axx_axdb17.objectreport` AS o
+    INNER JOIN valid_clients AS vc ON o.clientid = vc.id
+    WHERE o.binentryid = 0
+
+    UNION ALL
+    SELECT 'sso', s.id, s.clientid
+    FROM `cobundu-bi-playground.axx_axdb17.samlsetting` AS s
+    INNER JOIN valid_clients AS vc ON s.clientid = vc.id
+    WHERE s.binentryid = 0
+
+    UNION ALL
+    SELECT 'compliance', l.id, l.clientid
+    FROM `cobundu-bi-playground.axx_axdb17.legislationdocument` AS l
+    INNER JOIN valid_clients AS vc ON l.clientid = vc.id
+    WHERE l.binentryid = 0
+
+    UNION ALL
+    SELECT 'stock_management', i.id, i.clientid
+    FROM `cobundu-bi-playground.axx_axdb17.inventoryitem` AS i
+    INNER JOIN valid_clients AS vc ON i.clientid = vc.id
+    WHERE i.binentryid = 0
+
+    UNION ALL
+    SELECT 'rental_contract', ir.id, ir.clientid
+    FROM `cobundu-bi-playground.axx_axdb17.invoicerun` AS ir
+    INNER JOIN valid_clients AS vc ON ir.clientid = vc.id
+    WHERE ir.binentryid = 0
+
+    UNION ALL
+    SELECT 'project', pr.id, pr.clientid
+    FROM `cobundu-bi-playground.axx_axdb17.project` AS pr
+    INNER JOIN valid_clients AS vc ON pr.clientid = vc.id
+    WHERE pr.binentryid = 0
+
+    UNION ALL
+    SELECT
+      CASE
+        WHEN purchaseordertypecode = 1 THEN 'proposal_poi'
+        WHEN purchaseordertypecode = 2 THEN 'purchase_order_outgoing_poo'
+        ELSE 'purchaseorder_unknown'
+      END,
+      po.id, po.clientid
+    FROM `cobundu-bi-playground.axx_axdb17.purchaseorder` AS po
+    INNER JOIN valid_clients AS vc ON po.clientid = vc.id
+    WHERE po.binentryid = 0
+
+    UNION ALL
+    SELECT
+      CASE
+        WHEN invoicetypecode = 1 THEN 'invoices_incoming'
+        WHEN invoicetypecode = 2 THEN 'invoices_outgoing'
+        ELSE 'invoices_unknown'
+      END,
+      inv.id, inv.clientid
+    FROM `cobundu-bi-playground.axx_axdb17.invoice` AS inv
+    INNER JOIN valid_clients AS vc ON inv.clientid = vc.id
+    WHERE inv.binentryid = 0
+
+    UNION ALL
+    SELECT 'custom_workflows', wf.id, wfv.clientid
+    FROM `cobundu-bi-playground.axx_axdb17.workflowdefinition` AS wf
+    INNER JOIN `cobundu-bi-playground.axx_axdb17.workflow` AS wfv
+      ON wf.workflowid = wfv.id
+    INNER JOIN `cobundu-bi-playground.axx_axdb17.objectname` AS objectname
+      ON wf.objectnameid = objectname.id
+    INNER JOIN `cobundu-bi-playground.axx_axdb17.client` AS wfvclient
+      ON wfv.clientid = wfvclient.id
+    INNER JOIN valid_clients AS vc ON wfv.clientid = vc.id
+    WHERE wf.binentryid = 0
+      AND wfv.objectnameid != 0
+      AND objectname.name IN (
+        'Request', 'Visitor', 'Reservation', 'PurchaseOrder', 'Invoice',
+        'Quotation', 'WorkOrder', 'Asset', 'Contact', 'Person',
+        'Organization', 'Contract', 'Project')
+      AND wfvclient.reference NOT IN ('fmb', 'gob', 'swb')
+
+    UNION ALL
+    SELECT 'custom_pages', id, clientid
+    FROM pagename_base
+    WHERE NOT REGEXP_CONTAINS(name, '^[A-Za-z]{3}-')
+
+    UNION ALL
+    SELECT 'startboard', id, clientid
+    FROM pagename_base
+    WHERE name LIKE '%StartBoard'
+
+    UNION ALL
+    SELECT type, r.id, r.clientid
+    FROM reservation_base AS r
+    CROSS JOIN UNNEST([
+      CASE
+        WHEN r.reservationscheduleid != 0 THEN 'reservation_generated'
+        WHEN r.reservationscheduleid = 0  THEN 'reservation_adhoc'
+        ELSE 'reservation_unknown'
+      END,
+      CASE
+        WHEN r.catalogitems = 0 OR r.assets = 0 THEN 'reservation_with_catering_equipment'
+        ELSE 'reservation_without_catering_equipment'
+      END
+    ]) AS type
+
+    UNION ALL
+    SELECT
+      CASE
+        WHEN visitorscheduleid != 0 AND reservationid != 0 THEN 'visitor_generated_by_res'
+        WHEN visitorscheduleid = 0  AND reservationid = 0  THEN 'visitor_adhoc_no_res'
+        WHEN visitorscheduleid != 0 AND reservationid = 0  THEN 'visitor_generated_not_by_res'
+        WHEN visitorscheduleid = 0  AND reservationid != 0 THEN 'visitor_adhoc_res'
+        ELSE 'visitor_unknown'
+      END,
+      v.id, v.clientid
+    FROM `cobundu-bi-playground.axx_axdb17.visitor` AS v
+    INNER JOIN valid_clients AS vc ON v.clientid = vc.id
+    WHERE v.binentryid = 0
+
+    UNION ALL
+    SELECT 'calendar_exchange', id, clientid
+    FROM externalapp_base
+    WHERE externalapptypecode = 30
+
+    UNION ALL
+    SELECT 'simple_ticketing', id, clientid
+    FROM externalapp_base
+    WHERE requestfolderid != 0
+
+    UNION ALL
+    SELECT
+      CASE
+        WHEN createtime >= DATE_SUB(CURRENT_DATE(), INTERVAL 30 DAY)  THEN 'logins_last_30_days'
+        WHEN createtime >= DATE_SUB(CURRENT_DATE(), INTERVAL 60 DAY)  THEN 'logins_31_to_60_days'
+        WHEN createtime >= DATE_SUB(CURRENT_DATE(), INTERVAL 90 DAY)  THEN 'logins_61_to_90_days'
+        WHEN createtime >= DATE_SUB(CURRENT_DATE(), INTERVAL 120 DAY) THEN 'logins_91_to_120_days'
+      END,
+      sa.id, sa.clientid
+    FROM `cobundu-bi-playground.axx_axdb17.systemaccess` AS sa
+    INNER JOIN valid_clients AS vc ON sa.clientid = vc.id
+    WHERE sa.binentryid = 0
+      AND sa.createtime >= DATE_SUB(CURRENT_DATE(), INTERVAL 120 DAY)
+      AND sa.systemaccessstatuscode IN (2, 4, 6)
+  ),
+
+  counts AS (
+    SELECT clientid, type, COUNT(*) AS countt
+    FROM combined_data
+    WHERE type IS NOT NULL AND type != ''
+    GROUP BY clientid, type
+  ),
+
+  licenses AS (
+    SELECT
+      vc.id AS client_id,
+      MAX(CASE WHEN usertype.reference = 'SYS' THEN licenseitem.totalquantity END) AS axx_total_system_administrator,
+      MAX(CASE WHEN usertype.reference = 'SYS' THEN licenseitem.actualquantity END) AS axx_used_system_administrator,
+      MAX(CASE WHEN usertype.reference = 'ADM' THEN licenseitem.totalquantity END) AS axx_total_administrator,
+      MAX(CASE WHEN usertype.reference = 'ADM' THEN licenseitem.actualquantity END) AS axx_used_administrator,
+      MAX(CASE WHEN usertype.reference = 'FUL' THEN licenseitem.totalquantity END) AS axx_total_full_user,
+      MAX(CASE WHEN usertype.reference = 'FUL' THEN licenseitem.actualquantity END) AS axx_used_full_user,
+      MAX(CASE WHEN usertype.reference = 'REQ' THEN licenseitem.totalquantity END) AS axx_total_requestor,
+      MAX(CASE WHEN usertype.reference = 'REQ' THEN licenseitem.actualquantity END) AS axx_used_requestor,
+      MAX(CASE WHEN usertype.reference = 'LIM' THEN licenseitem.totalquantity END) AS axx_total_limited_user,
+      MAX(CASE WHEN usertype.reference = 'LIM' THEN licenseitem.actualquantity END) AS axx_used_limited_user,
+      MAX(CASE WHEN usertype.reference = 'SPE' THEN licenseitem.totalquantity END) AS axx_total_special,
+      MAX(CASE WHEN usertype.reference = 'SPE' THEN licenseitem.actualquantity END) AS axx_used_special
+    FROM valid_clients AS vc
+    INNER JOIN `cobundu-bi-playground.axx_axdb17.licenseitem` AS licenseitem
+      ON vc.id = licenseitem.clientid
+    INNER JOIN `cobundu-bi-playground.axx_axdb17.usertype` AS usertype
+      ON licenseitem.instanceid = usertype.id
+    WHERE licenseitem.licenseitemtypecode = 2
+      AND usertype.name != 'support'
+    GROUP BY vc.id
+  ),
+
+  custom_fields AS (
+    SELECT clientid, MAX(field_count) AS axx_custom_field_per_object_max
+    FROM (
+      SELECT obf.clientid, obf.objectnameid, COUNT(*) AS field_count
+      FROM `cobundu-bi-playground.axx_axdb17.objectfield` AS obf
+      INNER JOIN valid_clients AS vc ON obf.clientid = vc.id
+      WHERE obf.binentryid = 0
+      GROUP BY obf.clientid, obf.objectnameid
+    )
+    GROUP BY clientid
+  ),
+
+  final_base AS (
+    SELECT
+      CURRENT_DATE() AS axx_stats_date,      -- ✅ Required Column 1 (partition key)
+      'axx_axdb17' AS server,                -- ✅ Required Column 2 (server identifier)
+      vc.reference AS tenant,
+      vc.customeraccountnumber AS global_account,
+      parent_client.reference AS baseline,
+      vc.url AS iwms_url,
+      CASE
+        WHEN parent_client.reference IN ('fmb', 'gob', 'swb') THEN 'standard'
+        WHEN parent_client.reference IS NULL THEN 'root'
+        ELSE 'custom'
+      END AS baseline_def,
+      l.axx_total_system_administrator,
+      l.axx_used_system_administrator,
+      l.axx_total_administrator,
+      l.axx_used_administrator,
+      l.axx_total_full_user,
+      l.axx_used_full_user,
+      l.axx_total_requestor,
+      l.axx_used_requestor,
+      l.axx_total_limited_user,
+      l.axx_used_limited_user,
+      l.axx_total_special,
+      l.axx_used_special,
+      cf.axx_custom_field_per_object_max,
+      c.type,
+      c.countt
+    FROM counts AS c
+    INNER JOIN valid_clients AS vc ON c.clientid = vc.id
+    LEFT JOIN `cobundu-bi-playground.axx_axdb17.client` AS parent_client
+      ON vc.parentclientid = parent_client.id
+    LEFT JOIN licenses AS l ON l.client_id = c.clientid
+    LEFT JOIN custom_fields AS cf ON cf.clientid = c.clientid
+  )
+
+SELECT *
+FROM final_base
+PIVOT (
+  MAX(countt) AS axx
+  FOR type IN (
+    'building', 'asset', 'person', 'organisation', 'request',
+    'workorder_preventive_inspection', 'workorder_preventive',
+    'workorder_inspection', 'workorder_reactive',
+    'document_stored', 'contract', 'custom_report', 'sso',
+    'compliance', 'stock_management', 'rental_contract', 'project',
+    'proposal_poi', 'purchase_order_outgoing_poo',
+    'invoices_incoming', 'invoices_outgoing',
+    'custom_workflows', 'custom_pages', 'startboard',
+    'reservation_generated', 'reservation_adhoc',
+    'reservation_with_catering_equipment', 'reservation_without_catering_equipment',
+    'visitor_generated_by_res', 'visitor_adhoc_no_res',
+    'visitor_generated_not_by_res', 'visitor_adhoc_res',
+    'calendar_exchange', 'simple_ticketing',
+    'logins_last_30_days', 'logins_31_to_60_days',
+    'logins_61_to_90_days', 'logins_91_to_120_days'
+  )
+)

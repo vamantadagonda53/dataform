@@ -1,0 +1,6 @@
+
+{
+  "vars": {
+    "transformation_target_tenant_dataset": "tenant_123_gold"
+  }
+}
