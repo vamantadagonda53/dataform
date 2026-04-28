@@ -1,6 +1,0 @@
-config {
-      type: "declaration",
-      schema: "ORSTED_P",
-      database: "cobundu-bi-playground",
-      name: "MV_REP_LEASE_OUT_21"
-    }

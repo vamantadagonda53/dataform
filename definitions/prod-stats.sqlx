@@ -1,7 +1,7 @@
 config {
   type: "incremental",
   schema: dataform.projectConfig.vars.transformation_target_tenant_dataset,
- 
+  tags: ["prod_stats_test"]
 }
 
 WITH
