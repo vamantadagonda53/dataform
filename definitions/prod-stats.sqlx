@@ -1,5 +1,5 @@
 config {
-  type: "incremental",
+  type: "table",
   schema: "curated_data",
   tags: ["prod_stats_test"]
 }
