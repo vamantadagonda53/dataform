@@ -1,5 +1,6 @@
 
-{
+{ 
+  "defaultProject": "cobundu-bi-playground",
   "vars": {
     "transformation_target_tenant_dataset": "curated_data"
   }
