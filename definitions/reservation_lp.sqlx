@@ -1,7 +1,7 @@
 config {
     type: "incremental",
     schema: "curated_data",
-    tags: ["prod_stats_test"],
+    tags: ["rsrv_lp_test"],
 }
 
 SELECT
