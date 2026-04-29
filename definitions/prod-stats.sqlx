@@ -1,6 +1,6 @@
 config {
   type: "incremental",
-  schema: "curated_dataset",
+  schema: "curated_data",
   tags: ["prod_stats_test"]
 }
 
