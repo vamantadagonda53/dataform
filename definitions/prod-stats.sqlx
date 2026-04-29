@@ -1,7 +1,11 @@
 config {
   type: "incremental",
   schema: "curated_data",
-  tags: ["prod_stats_test"]
+  tags: ["prod_stats_test"],
+  //{
+  //"codeCompilationConfig": {
+  //  "tablePrefix": "PREFIX",
+  //}
 }
 
 WITH
