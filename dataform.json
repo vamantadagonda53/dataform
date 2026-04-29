@@ -1,0 +1,8 @@
+
+{
+  "defaultSchema": "curated_data",
+  "vars": {
+    "axdb_versions": ["17", "24"],
+    "axdb_project": "cobundu-bi-playground"
+  }
+}
