@@ -1,6 +1,6 @@
 config {
-  type: "operations",
-  hasOutput: true,
+  type: "table",
+  //hasOutput: true,
   schema: dataform.projectConfig.vars.transformation_target_tenant_dataset,
   name: "timeslots_1h_reservations",
   tags: ["axxerion"],
@@ -556,4 +556,4 @@ WHERE
             tgt.business_day_start_hour,
             tgt.business_day_end_hour
         )
-    ) <> src.payload_hash;
+    ) <> src.payload_hash
