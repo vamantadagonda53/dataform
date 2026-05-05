@@ -8,7 +8,10 @@ config {
 }
 
 js {
-  const defaultLookbackDays = dataform.projectConfig.vars.lookback_days;
+    const configuredLookbackDays = Number(dataform.projectConfig.vars.lookback_days);
+    const defaultLookbackDays = Number.isFinite(configuredLookbackDays)
+        ? configuredLookbackDays
+        : 1;
   const historyStartDate = "2024-01-01";
 }
 
