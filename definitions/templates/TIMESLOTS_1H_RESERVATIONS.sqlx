@@ -184,7 +184,7 @@ ${when(incremental(), `
         SELECT
             CAST(NULL AS STRING) AS timeslot_id,
             CAST(NULL AS TIMESTAMP) AS creation_timestamp
-        WHERE FALSE
+        FROM (SELECT 1) WHERE FALSE
     ),
 `)}
 
