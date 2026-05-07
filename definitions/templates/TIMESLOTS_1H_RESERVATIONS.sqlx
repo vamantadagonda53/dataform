@@ -4,16 +4,14 @@ config {
   name: "timeslots_1h_reservations",
   tags: ["axxerion"],
   uniqueKey: ["timeslot_id"],
+  partitionBy: "calendar_date",
+  requirePartitionFilter: false,
+  clusterBy: ["location_id", "reservable_id"],
   //columns: columns_description.getColumnsDescriptions("timeslots_1h_reservations"),
-  bigquery: {
-    partitionBy: "calendar_date",
-    requirePartitionFilter: false,
-    clusterBy: ["location_id", "reservable_id"],
-    labels: {
-      layer: "mart_tables",
-      domain: "reservations",
-      managed_by: "dataform"
-    }
+  labels: {
+    layer: "mart_tables",
+    domain: "reservations",
+    managed_by: "dataform"
   }
 }
 
