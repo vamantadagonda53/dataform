@@ -1,39 +1,40 @@
 config {
-  type: "operations",
-  hasOutput: true,
+  type: "incremental",
   schema: dataform.projectConfig.vars.transformation_target_tenant_dataset,
   name: "timeslots_1h_reservations",
   tags: ["axxerion"],
-  //columns: columns_description.getColumnsDescriptions("timeslots_1h_reservations")
+  uniqueKey: ["timeslot_id"],
+  //columns: columns_description.getColumnsDescriptions("timeslots_1h_reservations"),
+  bigquery: {
+    partitionBy: "calendar_date",
+    requirePartitionFilter: false,
+    clusterBy: ["location_id", "reservable_id"],
+    labels: {
+      layer: "mart_tables",
+      domain: "reservations",
+      managed_by: "dataform"
+    }
+  }
 }
 
 js {
-    const configuredLookbackDays = Number(dataform.projectConfig.vars.lookback_days);
-    const defaultLookbackDays = Number.isFinite(configuredLookbackDays)
-        ? configuredLookbackDays
-        : 1;
-  const historyStartDate = "2024-01-01";
+  const configuredTestTimestamp = dataform.projectConfig.vars.test_timestamp;
+  const configuredLookbackDays = Number(dataform.projectConfig.vars.lookback_days);
+  const defaultLookbackDays = Number.isFinite(configuredLookbackDays)
+      ? configuredLookbackDays
+      : 1;
+  const defaultHistoryStartDate = "2024-01-01";
+  const runTimestampExpression = configuredTestTimestamp
+      ? `SAFE_CAST('${configuredTestTimestamp}' AS TIMESTAMP)`
+      : "CURRENT_TIMESTAMP()";
+  const historyStartDateExpression = configuredTestTimestamp
+      ? `DATE_SUB(DATE(${runTimestampExpression}), INTERVAL 1 DAY)`
+      : `DATE('${defaultHistoryStartDate}')`;
 }
 
-CREATE TEMP TABLE timeslots_1h_reservations_snapshot AS
 WITH
     run_metadata AS (
-        SELECT
-            CURRENT_TIMESTAMP() AS snapshot_timestamp,
-            TIMESTAMP("9999-12-31 23:59:59+00") AS open_ended_valid_to
-    ),
-
-    table_state AS (
-        SELECT
-            COUNT(*) AS row_count,
-            COALESCE(
-                MAX(modification_timestamp),
-                TIMESTAMP("${historyStartDate} 00:00:00+00")
-            ) AS max_modification_timestamp,
-            COALESCE(MAX(calendar_date), DATE_SUB(DATE("${historyStartDate}"), INTERVAL 1 DAY))
-                AS max_calendar_date
-        FROM ${self()}  -- noqa: LXR
-        WHERE is_current = TRUE
+        SELECT ${runTimestampExpression} AS snapshot_timestamp
     ),
 
     business_settings AS (
@@ -98,39 +99,48 @@ WITH
         WHERE reso.reso_type IN ('ROOM', 'WORKPLACE', 'PARKING')
     ),
 
-    current_valid_reservations AS (
+${when(incremental(), `
+    table_state AS (
         SELECT
-            res.res_id,
+            COUNT(*) AS row_count,
+            COALESCE(
+                MAX(modification_timestamp),
+                TIMESTAMP(${historyStartDateExpression})
+            ) AS max_modification_timestamp,
+            COALESCE(MAX(calendar_date), DATE_SUB(${historyStartDateExpression}, INTERVAL 1 DAY))
+                AS max_calendar_date
+        FROM ${self()}  -- noqa: LXR
+    ),
+
+    existing_timeslots AS (
+        SELECT
+            timeslot_id,
+            MIN(creation_timestamp) AS creation_timestamp
+        FROM ${self()}  -- noqa: LXR
+        GROUP BY timeslot_id
+    ),
+
+    -- All reservation items that have been recently updated (includes deleted/cancelled)
+    -- used for change detection only; not filtered by is_deleted or res_result
+    reservation_scope AS (
+        SELECT
             res.res_itemid,
-            res.res_userreference AS reservation_reference,
-            res.res_itemnr AS reservation_item_nr,
             res.res_starttimestamp,
             res.res_endtimestamp,
             res.res_updatetime,
             loc.location_id,
-            loc.location_class,
-            loc.parent_location_id,
-            loc.parent_location_class,
-            loc.building_id,
-            loc.floor_id,
-            loc.reservable_id,
-            loc.reservable_reference,
-            loc.reservable_name,
-            loc.reservable_type,
             loc.time_zone
         FROM ${ref('IWMS_RESERVATIONS')} AS res
         INNER JOIN reservable_locations AS loc
             ON res.res_itemobjectreference = loc.reso_unique_reference
         WHERE
-            res.is_deleted = 'N'
-            AND res.res_result = 'COMPLETED'
-            AND res.res_endtimestamp < CURRENT_TIMESTAMP()
-            AND DATE(res.res_endtimestamp) >= DATE("${historyStartDate}")
+            res.res_endtimestamp < ${runTimestampExpression}
+            AND DATE(res.res_endtimestamp) >= ${historyStartDateExpression}
     ),
 
     changed_reservations AS (
         SELECT res.*
-        FROM current_valid_reservations AS res
+        FROM reservation_scope AS res
         CROSS JOIN table_state AS st
         WHERE
             st.row_count = 0
@@ -140,6 +150,7 @@ WITH
             )
     ),
 
+    -- Hourly slot positions touched by source-side reservation changes
     impacted_slots_from_source AS (
         SELECT DISTINCT
             res.location_id,
@@ -155,6 +166,7 @@ WITH
         ) AS slot_start_timestamp
     ),
 
+    -- Existing timeslot positions in the target that reference changed reservation items
     impacted_slots_from_existing AS (
         SELECT DISTINCT
             tgt.location_id,
@@ -166,20 +178,53 @@ WITH
         CROSS JOIN UNNEST(IFNULL(tgt.reservation_item_id, [])) AS reservation_item_id
         INNER JOIN changed_reservations AS res
             ON reservation_item_id = res.res_itemid
-        WHERE tgt.is_current = TRUE
+    ),
+`, `
+    existing_timeslots AS (
+        SELECT
+            CAST(NULL AS STRING) AS timeslot_id,
+            CAST(NULL AS TIMESTAMP) AS creation_timestamp
+        WHERE FALSE
+    ),
+`)}
+
+    -- Only valid past reservations used for slot computation (SRS 3.3 / BI-5355)
+    current_valid_reservations AS (
+        SELECT
+            res.res_id,
+            res.res_itemid,
+            res.res_userreference AS reservation_reference,
+            res.res_itemnr AS reservation_item_nr,
+            res.res_starttimestamp,
+            res.res_endtimestamp,
+            res.res_updatetime,
+            loc.location_id,
+            loc.time_zone
+        FROM ${ref('IWMS_RESERVATIONS')} AS res
+        INNER JOIN reservable_locations AS loc
+            ON res.res_itemobjectreference = loc.reso_unique_reference
+        WHERE
+            res.is_deleted = 'N'
+            AND res.res_result = 'COMPLETED'
+            AND res.res_endtimestamp < ${runTimestampExpression}
+            AND DATE(res.res_endtimestamp) >= ${historyStartDateExpression}
     ),
 
     dense_slot_bounds AS (
         SELECT
             loc.location_id,
             loc.time_zone,
+${when(incremental(), `
             CASE
-                WHEN st.row_count = 0 THEN DATE("${historyStartDate}")
+                WHEN st.row_count = 0 THEN ${historyStartDateExpression}
                 ELSE DATE_ADD(st.max_calendar_date, INTERVAL 1 DAY)
             END AS start_date,
-            DATE_SUB(CURRENT_DATE(loc.time_zone), INTERVAL 1 DAY) AS end_date
+`, `
+            ${historyStartDateExpression} AS start_date,
+`)}
+            DATE_SUB(DATE(${runTimestampExpression}, loc.time_zone), INTERVAL 1 DAY) AS end_date
         FROM reservable_locations AS loc
-        CROSS JOIN table_state AS st
+${when(incremental(), `        CROSS JOIN table_state AS st`)}
     ),
 
     new_dense_slots AS (
@@ -199,42 +244,45 @@ WITH
         UNNEST(GENERATE_ARRAY(0, 23)) AS hour_of_day
     ),
 
-    candidate_slots AS (
-        SELECT DISTINCT location_id, slot_start_timestamp, time_zone
+    -- All (location, slot_start) positions to compute in this run
+    candidate_positions AS (
+        SELECT location_id, slot_start_timestamp, time_zone
         FROM new_dense_slots
-
+${when(incremental(), `
         UNION DISTINCT
 
-        SELECT DISTINCT location_id, slot_start_timestamp, time_zone
+        SELECT location_id, slot_start_timestamp, time_zone
         FROM impacted_slots_from_source
 
         UNION DISTINCT
 
-        SELECT DISTINCT location_id, slot_start_timestamp, time_zone
+        SELECT location_id, slot_start_timestamp, time_zone
         FROM impacted_slots_from_existing
+`)}
     ),
 
     slot_context AS (
         SELECT
-            slots.location_id,
+            pos.location_id,
             loc.location_class,
             loc.parent_location_id,
             loc.parent_location_class,
             loc.building_id,
             loc.floor_id,
             loc.reservable_id,
+            loc.reso_unique_reference AS reservable_unique_reference,
             loc.reservable_reference,
             loc.reservable_name,
             loc.reservable_type,
-            slots.time_zone,
-            slots.slot_start_timestamp,
-            TIMESTAMP_ADD(slots.slot_start_timestamp, INTERVAL 1 HOUR) AS slot_end_timestamp,
-            DATE(DATETIME(slots.slot_start_timestamp, slots.time_zone)) AS calendar_date,
-            DATETIME(slots.slot_start_timestamp, slots.time_zone) AS calendar_datetime,
-            EXTRACT(HOUR FROM DATETIME(slots.slot_start_timestamp, slots.time_zone)) AS hour_of_day
-        FROM candidate_slots AS slots
+            pos.time_zone,
+            pos.slot_start_timestamp,
+            TIMESTAMP_ADD(pos.slot_start_timestamp, INTERVAL 1 HOUR) AS slot_end_timestamp,
+            DATE(DATETIME(pos.slot_start_timestamp, pos.time_zone)) AS calendar_date,
+            DATETIME(pos.slot_start_timestamp, pos.time_zone) AS calendar_datetime,
+            EXTRACT(HOUR FROM DATETIME(pos.slot_start_timestamp, pos.time_zone)) AS hour_of_day
+        FROM candidate_positions AS pos
         INNER JOIN reservable_locations AS loc
-            ON slots.location_id = loc.location_id
+            ON pos.location_id = loc.location_id
     ),
 
     overlapping_reservations AS (
@@ -246,6 +294,7 @@ WITH
             slot.building_id,
             slot.floor_id,
             slot.reservable_id,
+            slot.reservable_unique_reference,
             slot.reservable_reference,
             slot.reservable_name,
             slot.reservable_type,
@@ -259,6 +308,7 @@ WITH
             res.res_itemid,
             res.reservation_reference,
             res.reservation_item_nr,
+            -- Overlap bounds in minutes elapsed from slot start (used for quarter_hours)
             TIMESTAMP_DIFF(
                 GREATEST(
                     LEAST(res.res_endtimestamp, slot.slot_end_timestamp),
@@ -310,9 +360,12 @@ WITH
             building_id,
             floor_id,
             reservable_id,
+            reservable_unique_reference,
             reservable_reference,
             reservable_name,
             reservable_type,
+            -- quarter_hours: repeated string per reservation showing covered quarter-hours
+            -- SRS: 1=00-15, 2=15-30, 3=30-45, 4=45-60; NULL when no reservation in slot
             CASE
                 WHEN COUNTIF(res_id IS NOT NULL) = 0 THEN CAST(NULL AS ARRAY<STRING>)
                 ELSE ARRAY_AGG(
@@ -331,6 +384,7 @@ WITH
                     ORDER BY res_starttimestamp, reservation_item_sort_key
                 )
             END AS quarter_hours,
+            -- duration: repeated integer (minutes) per reservation; 0 when no reservation
             CASE
                 WHEN COUNTIF(res_id IS NOT NULL) = 0 THEN [0]
                 ELSE ARRAY_AGG(
@@ -383,6 +437,7 @@ WITH
             building_id,
             floor_id,
             reservable_id,
+            reservable_unique_reference,
             reservable_reference,
             reservable_name,
             reservable_type,
@@ -396,167 +451,36 @@ WITH
     )
 
 SELECT
-    payload.*,
-    run_metadata.snapshot_timestamp AS snapshot_timestamp,
-    TO_JSON_STRING(
-        STRUCT(
-            payload.calendar_date,
-            payload.day_of_week,
-            payload.calendar_datetime,
-            payload.timeslot_start,
-            payload.hour_of_day,
-            payload.location_id,
-            payload.location_class,
-            payload.parent_location_id,
-            payload.parent_location_class,
-            payload.building_id,
-            payload.floor_id,
-            payload.reservable_id,
-            payload.reservable_reference,
-            payload.reservable_name,
-            payload.reservable_type,
-            payload.quarter_hours,
-            payload.duration,
-            payload.reservation_id,
-            payload.reservation_reference,
-            payload.reservation_item_id,
-            payload.reservation_item_nr,
-            payload.business_day_start_hour,
-            payload.business_day_end_hour
-        )
-    ) AS payload_hash
+    payload.timeslot_id,
+    payload.calendar_date,
+    payload.day_of_week,
+    payload.calendar_datetime,
+    payload.timeslot_start,
+    payload.hour_of_day,
+    payload.location_id,
+    payload.location_class,
+    payload.parent_location_id,
+    payload.parent_location_class,
+    payload.building_id,
+    payload.floor_id,
+    payload.reservable_id,
+    payload.reservable_unique_reference,
+    payload.reservable_reference,
+    payload.reservable_name,
+    payload.reservable_type,
+    payload.quarter_hours,
+    payload.duration,
+    payload.reservation_id,
+    payload.reservation_reference,
+    payload.reservation_item_id,
+    payload.reservation_item_nr,
+    payload.business_day_start_hour,
+    payload.business_day_end_hour,
+    COALESCE(
+        ${when(incremental(), `existing.creation_timestamp,`)}
+        run_metadata.snapshot_timestamp
+    ) AS creation_timestamp,
+    run_metadata.snapshot_timestamp AS modification_timestamp
 FROM slot_payload AS payload
-CROSS JOIN run_metadata;
-
-UPDATE ${self()} AS tgt  -- noqa: PRS, LXR
-SET
-    tgt.is_current = FALSE,
-    tgt.valid_to = src.snapshot_timestamp,
-    tgt.modification_timestamp = src.snapshot_timestamp
-FROM timeslots_1h_reservations_snapshot AS src
-WHERE
-    tgt.timeslot_id = src.timeslot_id
-    AND tgt.is_current = TRUE
-    AND TO_JSON_STRING(
-        STRUCT(
-            tgt.calendar_date,
-            tgt.day_of_week,
-            tgt.calendar_datetime,
-            tgt.timeslot_start,
-            tgt.hour_of_day,
-            tgt.location_id,
-            tgt.location_class,
-            tgt.parent_location_id,
-            tgt.parent_location_class,
-            tgt.building_id,
-            tgt.floor_id,
-            tgt.reservable_id,
-            tgt.reservable_reference,
-            tgt.reservable_name,
-            tgt.reservable_type,
-            tgt.quarter_hours,
-            tgt.duration,
-            tgt.reservation_id,
-            tgt.reservation_reference,
-            tgt.reservation_item_id,
-            tgt.reservation_item_nr,
-            tgt.business_day_start_hour,
-            tgt.business_day_end_hour
-        )
-    ) <> src.payload_hash;
-
-INSERT INTO ${self()} (  -- noqa: PRS, LXR
-    timeslot_id,
-    calendar_date,
-    day_of_week,
-    calendar_datetime,
-    timeslot_start,
-    hour_of_day,
-    location_id,
-    location_class,
-    parent_location_id,
-    parent_location_class,
-    building_id,
-    floor_id,
-    reservable_id,
-    reservable_reference,
-    reservable_name,
-    reservable_type,
-    quarter_hours,
-    duration,
-    reservation_id,
-    reservation_reference,
-    reservation_item_id,
-    reservation_item_nr,
-    business_day_start_hour,
-    business_day_end_hour,
-    creation_timestamp,
-    modification_timestamp,
-    valid_from,
-    valid_to,
-    is_current
-)
-SELECT
-    src.timeslot_id,
-    src.calendar_date,
-    src.day_of_week,
-    src.calendar_datetime,
-    src.timeslot_start,
-    src.hour_of_day,
-    src.location_id,
-    src.location_class,
-    src.parent_location_id,
-    src.parent_location_class,
-    src.building_id,
-    src.floor_id,
-    src.reservable_id,
-    src.reservable_reference,
-    src.reservable_name,
-    src.reservable_type,
-    src.quarter_hours,
-    src.duration,
-    src.reservation_id,
-    src.reservation_reference,
-    src.reservation_item_id,
-    src.reservation_item_nr,
-    src.business_day_start_hour,
-    src.business_day_end_hour,
-    src.snapshot_timestamp,
-    src.snapshot_timestamp,
-    src.snapshot_timestamp,
-    TIMESTAMP("9999-12-31 23:59:59+00"),
-    TRUE
-FROM timeslots_1h_reservations_snapshot AS src
-LEFT JOIN ${self()} AS tgt  -- noqa: LXR
-    ON
-        src.timeslot_id = tgt.timeslot_id
-        AND tgt.is_current = TRUE
-WHERE
-    tgt.timeslot_id IS NULL
-    OR TO_JSON_STRING(
-        STRUCT(
-            tgt.calendar_date,
-            tgt.day_of_week,
-            tgt.calendar_datetime,
-            tgt.timeslot_start,
-            tgt.hour_of_day,
-            tgt.location_id,
-            tgt.location_class,
-            tgt.parent_location_id,
-            tgt.parent_location_class,
-            tgt.building_id,
-            tgt.floor_id,
-            tgt.reservable_id,
-            tgt.reservable_reference,
-            tgt.reservable_name,
-            tgt.reservable_type,
-            tgt.quarter_hours,
-            tgt.duration,
-            tgt.reservation_id,
-            tgt.reservation_reference,
-            tgt.reservation_item_id,
-            tgt.reservation_item_nr,
-            tgt.business_day_start_hour,
-            tgt.business_day_end_hour
-        )
-    ) <> src.payload_hash;
+CROSS JOIN run_metadata
+${when(incremental(), `LEFT JOIN existing_timeslots AS existing ON payload.timeslot_id = existing.timeslot_id`)}
