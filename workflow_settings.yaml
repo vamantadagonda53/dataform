@@ -1,7 +1,7 @@
 defaultProject: cobundu-bi-playground
 defaultLocation: EU
-defaultDataset: dataform
+defaultDataset: curated_dataset
 defaultAssertionDataset: dataform_assertions
 dataformCoreVersion: 3.0.50
 vars:
-    transformation_target_tenant_dataset : curated_data_r
+    transformation_target_tenant_dataset : curated_dataset
