@@ -7,7 +7,7 @@ config {
   partitionBy: "calendar_date",
   requirePartitionFilter: false,
   clusterBy: ["location_id", "reservable_id"],
-  //columns: columns_description.getColumnsDescriptions("timeslots_1h_reservations"),
+  columns: columns_description.getColumnsDescriptions("timeslots_1h_reservations"),
   labels: {
     layer: "mart_tables",
     domain: "reservations",
@@ -16,7 +16,7 @@ config {
 }
 
 js {
-  //const fullReload = columns_description.stringToBoolean(dataform.projectConfig.vars.full_reload);
+  const fullReload = columns_description.stringToBoolean(dataform.projectConfig.vars.full_reload);
 }
 
 pre_operations {
