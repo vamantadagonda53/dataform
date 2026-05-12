@@ -1,0 +1,144 @@
+config {
+  type: "incremental",
+  schema: dataform.projectConfig.vars.transformation_target_tenant_dataset,
+  tags: ["axxerion"],
+  uniqueKey: ["res_id", "res_itemid", "slot_start_timestamp"],
+  partitionBy: "DATE(slot_start_timestamp)",
+  requirePartitionFilter: false,
+  clusterBy: ["location_id", "slot_start_timestamp"],
+  labels: {
+    layer: "intermediate_tables",
+    domain: "reservations",
+    managed_by: "dataform"
+  }
+}
+
+pre_operations {
+    ${when(incremental(), `
+    DELETE FROM ${self()} AS tgt  -- noqa: LXR
+    WHERE EXISTS (
+        SELECT 1
+        FROM ${ref('IWMS_RESERVATIONS')} AS src
+        WHERE
+            src.res_id = tgt.res_id
+            AND src.res_itemid = tgt.res_itemid
+            AND src.res_stage = 'H'
+            AND src.res_updatetime >= (
+                SELECT COALESCE(MAX(res_updatetime), DATETIME('2024-01-01 00:00:00'))
+                FROM ${self()}  -- noqa: LXR
+            )
+            AND (
+                src.res_starttimestamp != tgt.res_starttimestamp
+                OR src.res_endtimestamp != tgt.res_endtimestamp
+                OR src.is_deleted != tgt.is_deleted
+                OR src.res_result != tgt.reservation_state
+            )
+    );
+    `)}
+}
+
+SELECT
+    res.res_id,
+    res.res_itemid,
+    res.res_userreference AS reservation_reference,
+    res.res_itemnr AS reservation_item_nr,
+    loc.location_id,
+    loc.location_class,
+    loc.parent_location_id,
+    loc.parent_location_class,
+    loc.building_id,
+    loc.floor_id,
+    loc.reservable_id,
+    loc.reservable_unique_reference,
+    loc.reservable_reference,
+    loc.reservable_name,
+    loc.reservable_type,
+    slot_start AS slot_start_timestamp,
+    loc.time_zone,
+    CASE
+        WHEN is_deleted = 'Y'
+            THEN 'DELETE'
+        ELSE res.res_result
+    END AS reservation_state,
+    res.is_deleted,
+    -- For cancelled or deleted: 0 (cancelled/deleted reservations contribute no occupancy)
+    CASE
+        WHEN res.res_result = 'COMPLETED' AND res.is_deleted = 'N'
+            THEN TIMESTAMP_DIFF(
+                LEAST(
+                    GREATEST(res.res_starttimestamp, slot_start),
+                    TIMESTAMP_ADD(slot_start, INTERVAL 1 HOUR)
+                ),
+                slot_start,
+                MINUTE
+            )
+        ELSE 0
+    END AS overlap_start_minute,
+    -- For cancelled or deleted: 0
+    CASE
+        WHEN res.res_result = 'COMPLETED' AND res.is_deleted = 'N'
+            THEN TIMESTAMP_DIFF(
+                GREATEST(
+                    LEAST(res.res_endtimestamp, TIMESTAMP_ADD(slot_start, INTERVAL 1 HOUR)),
+                    slot_start
+                ),
+                slot_start,
+                MINUTE
+            )
+        ELSE 0
+    END AS overlap_end_minute,
+    -- For cancelled or deleted: 0
+    CASE
+        WHEN res.res_result = 'COMPLETED' AND res.is_deleted = 'N'
+            THEN TIMESTAMP_DIFF(
+                LEAST(res.res_endtimestamp, TIMESTAMP_ADD(slot_start, INTERVAL 1 HOUR)),
+                GREATEST(res.res_starttimestamp, slot_start),
+                MINUTE
+            )
+        ELSE 0
+    END AS overlap_duration_minutes,
+    res.res_starttimestamp,
+    res.res_endtimestamp,
+    res.res_updatetime,
+    CURRENT_TIMESTAMP() AS creation_timestamp,
+    CURRENT_TIMESTAMP() AS modification_timestamp
+FROM ${ref('IWMS_RESERVATIONS')} AS res
+INNER JOIN ${ref('RESERVABLE_LOCATIONS')} AS loc
+    ON res.res_itemobjectreference = loc.reservable_unique_reference,
+    UNNEST(
+        GENERATE_TIMESTAMP_ARRAY(
+            TIMESTAMP_TRUNC(res.res_starttimestamp, HOUR),
+            TIMESTAMP_SUB(res.res_endtimestamp, INTERVAL 1 SECOND),
+            INTERVAL 1 HOUR
+        )
+    ) AS slot_start
+WHERE
+    res.res_stage = 'H'
+    AND DATE(res.res_endtimestamp) >= DATE('2024-01-01')
+    ${when(incremental(), `
+    AND res.res_updatetime >= (
+        SELECT COALESCE(MAX(res_updatetime), DATETIME('2024-01-01 00:00:00'))
+        FROM ${self()}  -- noqa: LXR
+    )
+    AND (
+        NOT EXISTS (
+            SELECT 1
+            FROM ${self()} AS tgt  -- noqa: LXR
+            WHERE
+                tgt.res_id = res.res_id
+                AND tgt.res_itemid = res.res_itemid
+        )
+        OR EXISTS (
+            SELECT 1
+            FROM ${self()} AS tgt  -- noqa: LXR
+            WHERE
+                tgt.res_id = res.res_id
+                AND tgt.res_itemid = res.res_itemid
+                AND (
+                    res.res_starttimestamp != tgt.res_starttimestamp
+                    OR res.res_endtimestamp != tgt.res_endtimestamp
+                    OR res.is_deleted != tgt.is_deleted
+                    OR res.res_result != tgt.reservation_state
+                )
+        )
+    `)}

@@ -1,0 +1,196 @@
+config {
+  type: "incremental",
+  schema: dataform.projectConfig.vars.transformation_target_tenant_dataset,
+  name: "timeslots_1h_reservations",
+  tags: ["axxerion"],
+  uniqueKey: ["timeslot_id"],
+  partitionBy: "calendar_date",
+  requirePartitionFilter: false,
+  clusterBy: ["location_id", "reservable_id"],
+  //columns: columns_description.getColumnsDescriptions("timeslots_1h_reservations"),
+  labels: {
+    layer: "mart_tables",
+    domain: "reservations",
+    managed_by: "dataform"
+  }
+}
+
+js {
+  //const fullReload = columns_description.stringToBoolean(dataform.projectConfig.vars.full_reload);
+}
+
+pre_operations {
+    ${when(incremental() && fullReload, `
+    TRUNCATE TABLE ${self()};  -- noqa: LXR
+    `)}
+
+    ${when(incremental() && !fullReload, `
+    DELETE FROM ${self()} AS tgt  -- noqa: LXR
+    WHERE NOT EXISTS (
+        SELECT 1
+        FROM ${ref('RESERVABLE_LOCATIONS')} AS loc
+        WHERE
+            loc.location_id = tgt.location_id
+            AND loc.reservable_unique_reference = tgt.reservable_unique_reference
+    );
+    `)}
+}
+
+WITH
+    filtered_slots AS (
+        -- Filter slots based on fullReload and target table watermark logic
+        SELECT
+            slot.*
+        FROM ${ref('IWMS_RESERVATIONS_SLOTS')} AS slot
+        WHERE ${when(
+            incremental() && !fullReload,
+            `slot.slot_start_timestamp >= (
+                SELECT COALESCE(MAX(mod_ts), TIMESTAMP('2024-01-01 00:00:00'))
+                FROM ${self()} AS tgt
+                LEFT JOIN UNNEST(tgt.modification_timestamp) AS mod_ts
+            )`,
+            "TRUE"
+        )}
+    ),
+
+    dense_slot_bounds AS (
+        SELECT
+            loc.location_id,
+            loc.time_zone,
+            CASE
+                WHEN ${fullReload} THEN DATE('2024-01-01')
+                ELSE COALESCE(MIN(DATE(filtered_slots.slot_start_timestamp)), DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY))
+            END AS start_date,
+            DATE_SUB(CURRENT_DATE(), INTERVAL 1 DAY) AS end_date
+        FROM ${ref('RESERVABLE_LOCATIONS')} AS loc
+        LEFT JOIN filtered_slots
+            ON loc.location_id = filtered_slots.location_id
+        GROUP BY loc.location_id, loc.time_zone
+    ),
+
+    dense_slots AS (
+        SELECT
+            bounds.location_id,
+            TIMESTAMP(DATETIME(slot_date, TIME(hour_of_day, 0, 0)), bounds.time_zone)
+                AS slot_start_timestamp,
+            bounds.time_zone
+        FROM dense_slot_bounds AS bounds,
+            UNNEST(
+                IF(
+                    bounds.start_date <= bounds.end_date,
+                    GENERATE_DATE_ARRAY(bounds.start_date, bounds.end_date),
+                    ARRAY<DATE>[]
+                )
+            ) AS slot_date,
+            UNNEST(GENERATE_ARRAY(0, 23)) AS hour_of_day
+    )
+
+SELECT
+    CONCAT(
+        pos.location_id,
+        '|',
+        FORMAT_TIMESTAMP('%Y-%m-%dT%H:%M:%S%z', pos.slot_start_timestamp, pos.time_zone)
+    ) AS timeslot_id,
+    DATE(DATETIME(pos.slot_start_timestamp, pos.time_zone)) AS calendar_date,
+    MOD(EXTRACT(DAYOFWEEK FROM DATE(DATETIME(pos.slot_start_timestamp, pos.time_zone))) + 5, 7) + 1
+        AS day_of_week,
+    DATETIME(pos.slot_start_timestamp, pos.time_zone) AS calendar_datetime,
+    FORMAT_TIMESTAMP('%Y-%m-%dT%H:%M:%S%z', pos.slot_start_timestamp, pos.time_zone)
+        AS timeslot_start,
+    EXTRACT(HOUR FROM DATETIME(pos.slot_start_timestamp, pos.time_zone)) AS hour_of_day,
+    pos.location_id,
+    loc.location_class,
+    loc.parent_location_id,
+    loc.parent_location_class,
+    loc.building_id,
+    loc.floor_id,
+    loc.reservable_id,
+    loc.reservable_unique_reference,
+    loc.reservable_reference,
+    loc.reservable_name,
+    loc.reservable_type,
+    -- quarter_hours: NULL when no reservation; repeated string per reservation otherwise
+    CASE
+        WHEN COUNTIF(exp.res_id IS NOT NULL) = 0 THEN CAST(NULL AS ARRAY<STRING>)
+        ELSE ARRAY_AGG(
+            ARRAY_TO_STRING(
+                ARRAY(
+                    SELECT CAST(quarter_nr AS STRING)
+                    FROM UNNEST([1, 2, 3, 4]) AS quarter_nr
+                    WHERE
+                        (quarter_nr - 1) * 15 < exp.overlap_end_minute
+                        AND quarter_nr * 15 > exp.overlap_start_minute
+                    ORDER BY quarter_nr
+                ),
+                ''
+            )
+            IGNORE NULLS
+            ORDER BY exp.res_starttimestamp, exp.res_itemid
+        )
+    END AS quarter_hours,
+    -- duration: [0] when no reservation; repeated reserved minutes per reservation otherwise
+    CASE
+        WHEN COUNTIF(exp.res_id IS NOT NULL) = 0 THEN [0]
+        ELSE ARRAY_AGG(
+            exp.overlap_duration_minutes
+            IGNORE NULLS
+            ORDER BY exp.res_starttimestamp, exp.res_itemid
+        )
+    END AS duration,
+    CASE
+        WHEN COUNTIF(exp.res_id IS NOT NULL) = 0 THEN CAST(NULL AS ARRAY<INT64>)
+        ELSE ARRAY_AGG(
+            exp.res_id IGNORE NULLS ORDER BY exp.res_starttimestamp, exp.res_itemid
+        )
+    END AS reservation_id,
+    CASE
+        WHEN COUNTIF(exp.res_id IS NOT NULL) = 0 THEN CAST(NULL AS ARRAY<STRING>)
+        ELSE ARRAY_AGG(
+            exp.reservation_reference
+            IGNORE NULLS
+            ORDER BY exp.res_starttimestamp, exp.res_itemid
+        )
+    END AS reservation_reference,
+    CASE
+        WHEN COUNTIF(exp.res_id IS NOT NULL) = 0 THEN CAST(NULL AS ARRAY<INT64>)
+        ELSE ARRAY_AGG(
+            exp.res_itemid IGNORE NULLS ORDER BY exp.res_starttimestamp, exp.res_itemid
+        )
+    END AS reservation_item_id,
+    CASE
+        WHEN COUNTIF(exp.res_id IS NOT NULL) = 0 THEN CAST(NULL AS ARRAY<STRING>)
+        ELSE ARRAY_AGG(
+            exp.reservation_item_nr
+            IGNORE NULLS
+            ORDER BY exp.res_starttimestamp, exp.res_itemid
+        )
+    END AS reservation_item_nr,
+    ARRAY_AGG(exp.reservation_state IGNORE NULLS ORDER BY exp.res_id) AS reservation_state,
+    ARRAY_AGG(CURRENT_TIMESTAMP()) AS creation_timestamp,
+    ARRAY_AGG(CURRENT_TIMESTAMP()) AS modification_timestamp
+FROM dense_slots AS pos
+INNER JOIN ${ref('RESERVABLE_LOCATIONS')} AS loc
+    ON pos.location_id = loc.location_id
+LEFT JOIN ${ref('IWMS_RESERVATIONS_SLOTS')} AS exp
+    ON
+        pos.location_id = exp.location_id
+        AND pos.slot_start_timestamp = exp.slot_start_timestamp
+WHERE
+    -- Filter out cancelled/deleted reservations (zero duration)
+    -- Keep only COMPLETED (overlap_duration_minutes > 0) or no match (NULL)
+    exp.overlap_duration_minutes IS NULL
+    OR exp.overlap_duration_minutes > 0
+GROUP BY
+    pos.location_id,
+    pos.slot_start_timestamp,
+    pos.time_zone,
+    loc.location_class,
+    loc.parent_location_id,
+    loc.parent_location_class,
+    loc.building_id,
+    loc.floor_id,
+    loc.reservable_id,
+    loc.reservable_unique_reference,
+    loc.reservable_reference,
+    loc.reservable_name,
+    loc.reservable_type
