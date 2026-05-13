@@ -1,6 +1,6 @@
 config {
   type: "declaration",
-  schema: "curated_data_r",
+  schema: "curated_dataset",
   //database: dataform.projectConfig.vars.source_database,
   name: "DIM_LOCATIONS"
 }
