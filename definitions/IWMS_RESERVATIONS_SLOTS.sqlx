@@ -107,9 +107,9 @@ INNER JOIN ${ref('RESERVABLE_LOCATIONS')} AS loc
     ON res.res_itemobjectreference = loc.reservable_unique_reference,
     UNNEST(
         GENERATE_TIMESTAMP_ARRAY(
-            TIMESTAMP_TRUNC(res.res_starttimestamp, HOUR),
+            TIMESTAMP(DATETIME_TRUNC(DATETIME(res.res_starttimestamp, loc.time_zone), HOUR), loc.time_zone),
             TIMESTAMP_SUB(res.res_endtimestamp, INTERVAL 1 SECOND),
-            INTERVAL (DATETIME_TRUNC(DATETIME(res.res_starttimestamp, loc.time_zone), HOUR), loc.time_zone
+            INTERVAL 1 HOUR
         )
     ) AS slot_start
 WHERE
