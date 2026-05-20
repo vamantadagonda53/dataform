@@ -2,4 +2,4 @@ defaultProject: cobundu-bi-playground
 defaultLocation: EU
 defaultDataset: ORSTED_P
 defaultAssertionDataset: dataform_assertions
-dataformCoreVersion: 3.0.50
+dataformCoreVersion: 3.0.0
