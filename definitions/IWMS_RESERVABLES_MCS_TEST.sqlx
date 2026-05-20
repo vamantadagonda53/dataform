@@ -1,0 +1,203 @@
+config {
+  type: "test",
+  dataset: "IWMS_RESERVABLES_MCS"
+}
+
+input "MV_REP_RESERVATIONS_21" {
+  -- TC1: Deduplication — resource_id 101 appears twice; row with later from_datetime wins
+  SELECT
+    101                   AS resource_id,
+    'RES-001'             AS resource_code,
+    'Conference Room A'   AS resource_reference,
+    '0000000001'          AS reservation_class_id,
+    10                    AS room_capacity,
+    'CAT-REF-A'           AS resource_category_reference,
+    'Meeting Rooms'       AS resource_category,
+    0                     AS resource_out_of_use,
+    201                   AS location_id,
+    'BLD-01'              AS building_code,
+    'Head Office'         AS building_reference,
+    'FL-01'               AS floor_code,
+    'Floor 1'             AS floor_reference,
+    TIMESTAMP('2024-06-01 09:00:00 UTC') AS from_datetime
+  UNION ALL
+  -- Older row for same resource — should be discarded
+  SELECT
+    101, 'RES-001', 'Conference Room A', '0000000001',
+    8, 'CAT-REF-A', 'Meeting Rooms', 0, 201,
+    'BLD-01', 'Head Office', 'FL-01', 'Floor 1',
+    TIMESTAMP('2024-01-01 09:00:00 UTC') AS from_datetime
+  UNION ALL
+  -- TC2: resource_id IS NULL — must be excluded
+  SELECT
+    CAST(NULL AS INT64) AS resource_id,
+    'RES-NULL', 'Null Resource', '0000000001',
+    5, 'CAT-REF-X', 'Unknown', 0, 999,
+    'BLD-XX', 'Unknown Bld', 'FL-XX', 'Floor X',
+    TIMESTAMP('2024-06-01 09:00:00 UTC')
+  UNION ALL
+  -- TC3a: WORKPLACE mapping
+  SELECT
+    102, 'RES-002', 'Workplace B', '0000000008',
+    1, 'CAT-REF-B', 'Workplaces', 0, 202,
+    'BLD-02', 'Branch Office', 'FL-02', 'Floor 2',
+    TIMESTAMP('2024-06-01 09:00:00 UTC')
+  UNION ALL
+  -- TC3b: PARKING mapping
+  SELECT
+    103, 'RES-003', 'Parking Spot C', '0000000005',
+    1, 'CAT-REF-C', 'Parking', 0, 203,
+    'BLD-02', 'Branch Office', 'FL-02', 'Floor 2',
+    TIMESTAMP('2024-06-01 09:00:00 UTC')
+  UNION ALL
+  -- TC3c: EQUIPMENT mapping (class 0003)
+  SELECT
+    104, 'RES-004', 'Projector D', '0000000003',
+    1, 'CAT-REF-D', 'Equipment', 0, 204,
+    'BLD-01', 'Head Office', 'FL-01', 'Floor 1',
+    TIMESTAMP('2024-06-01 09:00:00 UTC')
+  UNION ALL
+  -- TC3d: EQUIPMENT mapping (class 0004)
+  SELECT
+    105, 'RES-005', 'Laptop E', '0000000004',
+    1, 'CAT-REF-D', 'Equipment', 0, 205,
+    'BLD-01', 'Head Office', 'FL-01', 'Floor 1',
+    TIMESTAMP('2024-06-01 09:00:00 UTC')
+  UNION ALL
+  -- TC3e: SERVICE mapping (class 0006)
+  SELECT
+    106, 'RES-006', 'Catering F', '0000000006',
+    1, 'CAT-REF-E', 'Services', 0, 206,
+    'BLD-03', 'Remote Office', 'FL-01', 'Floor 1',
+    TIMESTAMP('2024-06-01 09:00:00 UTC')
+  UNION ALL
+  -- TC3f: SERVICE mapping (class 0007)
+  SELECT
+    107, 'RES-007', 'IT Support G', '0000000007',
+    1, 'CAT-REF-E', 'Services', 0, 207,
+    'BLD-03', 'Remote Office', 'FL-01', 'Floor 1',
+    TIMESTAMP('2024-06-01 09:00:00 UTC')
+  UNION ALL
+  -- TC4: Unknown reservation_class_id → reso_type = NULL
+  SELECT
+    108, 'RES-008', 'Unknown Resource H', '9999999999',
+    2, 'CAT-REF-Z', 'Unknown', 0, 208,
+    'BLD-01', 'Head Office', 'FL-01', 'Floor 1',
+    TIMESTAMP('2024-06-01 09:00:00 UTC')
+  UNION ALL
+  -- TC5+6: ARCHIVED — resource_out_of_use = 1
+  SELECT
+    109, 'RES-009', 'Archived Room I', '0000000001',
+    5, 'CAT-REF-A', 'Meeting Rooms', 1, 209,
+    'BLD-01', 'Head Office', 'FL-01', 'Floor 1',
+    TIMESTAMP('2024-06-01 09:00:00 UTC')
+  UNION ALL
+  -- TC7: SAFE_CAST edge case — non-numeric string for resource_out_of_use → ACTIVE
+  SELECT
+    110, 'RES-010', 'Strange Status J', '0000000001',
+    3, 'CAT-REF-A', 'Meeting Rooms', 'N/A', 210,
+    'BLD-01', 'Head Office', 'FL-01', 'Floor 1',
+    TIMESTAMP('2024-06-01 09:00:00 UTC')
+}
+
+-- Expected output (one row per resource, ordered by resource_id)
+SELECT
+  -- TC1: dedup winner — capacity from the latest row (10, not 8)
+  'RES-001'          AS reso_reference,
+  '101'              AS reso_unique_reference,
+  'ROOM'             AS reso_type,
+  'Conference Room A' AS reso_name,
+  CAST(10 AS INT64)  AS reso_capacity,
+  'CAT-REF-A'        AS reso_categoryname,
+  'Meeting Rooms'    AS reso_categoryreference,
+  '101'              AS reso_id,
+  CAST(NULL AS STRING) AS reso_objectnameid,
+  CAST(NULL AS STRING) AS reso_propertyid,
+  CAST(NULL AS STRING) AS reso_building_id,
+  'BLD-01'           AS reso_buildingreference,
+  'Head Office'      AS reso_buildingname,
+  CAST(NULL AS STRING) AS reso_tz_iana_timezone,
+  CAST(NULL AS STRING) AS reso_tz_utc_offset_dst,
+  CAST(NULL AS STRING) AS reso_tz_abbreviation_dst,
+  '201'              AS reso_objectid,
+  CAST(NULL AS STRING) AS reso_objecttype,
+  CAST(NULL AS INT64)  AS reso_floorid,
+  'FL-01'            AS reso_floorreference,
+  'Floor 1'          AS reso_floorname,
+  'ACTIVE'           AS reso_status,
+  COALESCE(SAFE_CAST('${dataform.projectConfig.vars.test_timestamp}' AS TIMESTAMP), CURRENT_TIMESTAMP()) AS last_modified_timestamp
+UNION ALL
+SELECT '102','102','WORKPLACE','Workplace B',CAST(1 AS INT64),'CAT-REF-B','Workplaces','102',
+  CAST(NULL AS STRING),CAST(NULL AS STRING),CAST(NULL AS STRING),
+  'BLD-02','Branch Office',
+  CAST(NULL AS STRING),CAST(NULL AS STRING),CAST(NULL AS STRING),
+  '202',CAST(NULL AS STRING),CAST(NULL AS INT64),
+  'FL-02','Floor 2','ACTIVE',
+  COALESCE(SAFE_CAST('${dataform.projectConfig.vars.test_timestamp}' AS TIMESTAMP), CURRENT_TIMESTAMP())
+UNION ALL
+SELECT '103','103','PARKING','Parking Spot C',CAST(1 AS INT64),'CAT-REF-C','Parking','103',
+  CAST(NULL AS STRING),CAST(NULL AS STRING),CAST(NULL AS STRING),
+  'BLD-02','Branch Office',
+  CAST(NULL AS STRING),CAST(NULL AS STRING),CAST(NULL AS STRING),
+  '203',CAST(NULL AS STRING),CAST(NULL AS INT64),
+  'FL-02','Floor 2','ACTIVE',
+  COALESCE(SAFE_CAST('${dataform.projectConfig.vars.test_timestamp}' AS TIMESTAMP), CURRENT_TIMESTAMP())
+UNION ALL
+SELECT '104','104','EQUIPMENT','Projector D',CAST(1 AS INT64),'CAT-REF-D','Equipment','104',
+  CAST(NULL AS STRING),CAST(NULL AS STRING),CAST(NULL AS STRING),
+  'BLD-01','Head Office',
+  CAST(NULL AS STRING),CAST(NULL AS STRING),CAST(NULL AS STRING),
+  '204',CAST(NULL AS STRING),CAST(NULL AS INT64),
+  'FL-01','Floor 1','ACTIVE',
+  COALESCE(SAFE_CAST('${dataform.projectConfig.vars.test_timestamp}' AS TIMESTAMP), CURRENT_TIMESTAMP())
+UNION ALL
+SELECT '105','105','EQUIPMENT','Laptop E',CAST(1 AS INT64),'CAT-REF-D','Equipment','105',
+  CAST(NULL AS STRING),CAST(NULL AS STRING),CAST(NULL AS STRING),
+  'BLD-01','Head Office',
+  CAST(NULL AS STRING),CAST(NULL AS STRING),CAST(NULL AS STRING),
+  '205',CAST(NULL AS STRING),CAST(NULL AS INT64),
+  'FL-01','Floor 1','ACTIVE',
+  COALESCE(SAFE_CAST('${dataform.projectConfig.vars.test_timestamp}' AS TIMESTAMP), CURRENT_TIMESTAMP())
+UNION ALL
+SELECT '106','106','SERVICE','Catering F',CAST(1 AS INT64),'CAT-REF-E','Services','106',
+  CAST(NULL AS STRING),CAST(NULL AS STRING),CAST(NULL AS STRING),
+  'BLD-03','Remote Office',
+  CAST(NULL AS STRING),CAST(NULL AS STRING),CAST(NULL AS STRING),
+  '206',CAST(NULL AS STRING),CAST(NULL AS INT64),
+  'FL-01','Floor 1','ACTIVE',
+  COALESCE(SAFE_CAST('${dataform.projectConfig.vars.test_timestamp}' AS TIMESTAMP), CURRENT_TIMESTAMP())
+UNION ALL
+SELECT '107','107','SERVICE','IT Support G',CAST(1 AS INT64),'CAT-REF-E','Services','107',
+  CAST(NULL AS STRING),CAST(NULL AS STRING),CAST(NULL AS STRING),
+  'BLD-03','Remote Office',
+  CAST(NULL AS STRING),CAST(NULL AS STRING),CAST(NULL AS STRING),
+  '207',CAST(NULL AS STRING),CAST(NULL AS INT64),
+  'FL-01','Floor 1','ACTIVE',
+  COALESCE(SAFE_CAST('${dataform.projectConfig.vars.test_timestamp}' AS TIMESTAMP), CURRENT_TIMESTAMP())
+UNION ALL
+-- TC4: unknown class → NULL type
+SELECT '108','108',CAST(NULL AS STRING),'Unknown Resource H',CAST(2 AS INT64),'CAT-REF-Z','Unknown','108',
+  CAST(NULL AS STRING),CAST(NULL AS STRING),CAST(NULL AS STRING),
+  'BLD-01','Head Office',
+  CAST(NULL AS STRING),CAST(NULL AS STRING),CAST(NULL AS STRING),
+  '208',CAST(NULL AS STRING),CAST(NULL AS INT64),
+  'FL-01','Floor 1','ACTIVE',
+  COALESCE(SAFE_CAST('${dataform.projectConfig.vars.test_timestamp}' AS TIMESTAMP), CURRENT_TIMESTAMP())
+UNION ALL
+-- TC6: ARCHIVED
+SELECT '109','109','ROOM','Archived Room I',CAST(5 AS INT64),'CAT-REF-A','Meeting Rooms','109',
+  CAST(NULL AS STRING),CAST(NULL AS STRING),CAST(NULL AS STRING),
+  'BLD-01','Head Office',
+  CAST(NULL AS STRING),CAST(NULL AS STRING),CAST(NULL AS STRING),
+  '209',CAST(NULL AS STRING),CAST(NULL AS INT64),
+  'FL-01','Floor 1','ARCHIVED',
+  COALESCE(SAFE_CAST('${dataform.projectConfig.vars.test_timestamp}' AS TIMESTAMP), CURRENT_TIMESTAMP())
+UNION ALL
+-- TC7: SAFE_CAST 'N/A' → NULL → not 1 → ACTIVE
+SELECT '110','110','ROOM','Strange Status J',CAST(3 AS INT64),'CAT-REF-A','Meeting Rooms','110',
+  CAST(NULL AS STRING),CAST(NULL AS STRING),CAST(NULL AS STRING),
+  'BLD-01','Head Office',
+  CAST(NULL AS STRING),CAST(NULL AS STRING),CAST(NULL AS STRING),
+  '210',CAST(NULL AS STRING),CAST(NULL AS INT64),
+  'FL-01','Floor 1','ACTIVE',
+  COALESCE(SAFE_CAST('${dataform.projectConfig.vars.test_timestamp}' AS TIMESTAMP), CURRENT_TIMESTAMP())
