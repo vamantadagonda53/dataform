@@ -1,0 +1,101 @@
+config {
+  type: "table",
+  schema: dataform.projectConfig.vars.mcs_22_transformation_target_tenant_dataset,
+  tags: ["mcs", "mcs_22"],
+  bigquery: {
+    labels: {
+      layer: "mart_tables",
+      domain: "reservables",
+      managed_by: "dataform"
+    }
+  }
+}
+
+-- BI-5369: Build IWMS_RESERVABLES from MCS source view MV_REP_RESERVATIONS_21
+-- Source view has one row per reservation line; deduplicate to one row per resource.
+-- Field mapping: https://mcsfm-my.sharepoint.com/:x:/g/personal/kurt_demeulemeester_spacewell_com/IQB67mQQYWNaRrUrkuUqpsdNAZYEJcaoyG-HPkwg-KNaHkw?e=INcMk1
+
+WITH resources AS (
+    SELECT
+        resource_id,
+        resource_code,
+        resource_reference,
+        reservation_class_id,
+        room_capacity,
+        resource_category_reference,
+        resource_category,
+        resource_out_of_use,
+        location_id,
+        building_code,
+        building_reference,
+        floor_code,
+        floor_reference,
+        -- Deduplicate to one row per resource; take the most recent reservation's snapshot
+        ROW_NUMBER() OVER (
+            PARTITION BY resource_id
+            ORDER BY from_datetime DESC
+        ) AS row_nr
+    FROM ${ref('MV_REP_RESERVATIONS_21')}
+    WHERE resource_id IS NOT NULL
+)
+
+SELECT
+    -- Identification
+    r.resource_code                         AS reso_reference,
+    CAST(r.resource_id AS STRING)           AS reso_unique_reference,
+
+    -- Type mapping via Case Statement A (RSRV_CLASS_ID → reso_type)
+    CASE CAST(r.reservation_class_id AS STRING)
+        WHEN '0000000001' THEN 'ROOM'
+        WHEN '0000000008' THEN 'WORKPLACE'
+        WHEN '0000000005' THEN 'PARKING'
+        WHEN '0000000003' THEN 'EQUIPMENT'
+        WHEN '0000000004' THEN 'EQUIPMENT'
+        WHEN '0000000006' THEN 'SERVICE'
+        WHEN '0000000007' THEN 'SERVICE'
+        ELSE NULL
+    END                                     AS reso_type,
+
+    -- Resource attributes
+    r.resource_reference                    AS reso_name,
+    CAST(r.room_capacity AS INT64)          AS reso_capacity,
+    r.resource_category_reference           AS reso_categoryname,
+    CAST(r.resource_category AS STRING)     AS reso_categoryreference,
+    CAST(r.resource_id AS STRING)           AS reso_id,
+
+    -- Deferred fields (no MCS source available yet — see BI-5369)
+    CAST(NULL AS STRING)                    AS reso_objectnameid,
+    CAST(NULL AS STRING)                    AS reso_propertyid,
+    CAST(NULL AS STRING)                    AS reso_building_id,
+
+    -- Building: reso_buildingreference → BUILDING_CODE (open question: confirm vs BUILDING_REFERENCE — see BI-5369)
+    r.building_code                         AS reso_buildingreference,
+    r.building_reference                    AS reso_buildingname,
+
+    -- Timezone: deferred — no MCS source available yet (see BI-5369)
+    CAST(NULL AS STRING)                    AS reso_tz_iana_timezone,
+    CAST(NULL AS STRING)                    AS reso_tz_utc_offset_dst,
+    CAST(NULL AS STRING)                    AS reso_tz_abbreviation_dst,
+
+    -- Location linkage
+    CAST(r.location_id AS STRING)           AS reso_objectid,
+
+    -- Deferred fields (no MCS source available yet — see BI-5369)
+    CAST(NULL AS STRING)                    AS reso_objecttype,
+    CAST(NULL AS INT64)                     AS reso_floorid,
+
+    -- Floor
+    r.floor_code                            AS reso_floorreference,
+    r.floor_reference                       AS reso_floorname,
+
+    -- Status: ACTIVE / ARCHIVED derived from resource_out_of_use
+    -- Note: status for EQUIPMENT / SERVICE types relies on same field pending future resolution (BI-5369)
+    CASE
+        WHEN SAFE_CAST(r.resource_out_of_use AS INT64) = 1 THEN 'ARCHIVED'
+        ELSE 'ACTIVE'
+    END                                     AS reso_status,
+
+    CURRENT_TIMESTAMP()                     AS last_modified_timestamp
+
+FROM resources AS r
+WHERE r.row_nr = 1
