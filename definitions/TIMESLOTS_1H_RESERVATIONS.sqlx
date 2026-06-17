@@ -54,50 +54,14 @@ pre_operations {
     `)}
 }
 
-WITH max_update AS (
-  SELECT
-    COALESCE(MAX(upd_ts), DATETIME('2024-01-01 00:00:00')) AS max_upd_ts
-  FROM ${self()},
-       UNNEST(res_updatetime) AS upd_ts
-),
-
-max_calendar AS (
-  SELECT
-    COALESCE(MAX(calendar_date), DATE('2024-01-01')) AS max_cal_date
-  FROM ${self()}
-),
-
-filter_dates AS (
-  SELECT DISTINCT DATE(slot_start_timestamp) AS calendar_date
-  FROM ${ref('IWMS_RESERVATIONS_SLOTS')}
-  WHERE res_updatetime >= (SELECT max_upd_ts FROM max_update)
-
-  UNION DISTINCT
-
-  SELECT DISTINCT calendar_date
-  FROM ${self()} tgt
-  WHERE NOT EXISTS (
-    SELECT 1
-    FROM ${ref('reservable_locations_calendar')} cal
-    WHERE cal.timeslot_id = tgt.timeslot_id
-  )
-
-  UNION DISTINCT
-
-  SELECT cal_date
-  FROM max_calendar,
-       UNNEST(GENERATE_DATE_ARRAY(
-         DATE_ADD(max_cal_date, INTERVAL 1 DAY),
-         CURRENT_DATE()
-       )) AS cal_date
-)
-
 SELECT
     cal.timeslot_id,
     DATE(cal.slot_start_timestamp) AS calendar_date,
-    MOD(EXTRACT(DAYOFWEEK FROM DATE(cal.slot_start_timestamp)) + 5, 7) + 1 AS day_of_week,
+    MOD(EXTRACT(DAYOFWEEK FROM DATE(cal.slot_start_timestamp)) + 5, 7) + 1
+        AS day_of_week,
     DATETIME(cal.slot_start_timestamp) AS calendar_datetime,
-    FORMAT_TIMESTAMP('%Y-%m-%dT%H:%M:%S%z', cal.slot_start_timestamp) AS timeslot_start,
+    FORMAT_TIMESTAMP('%Y-%m-%dT%H:%M:%S%z', cal.slot_start_timestamp)
+        AS timeslot_start,
     EXTRACT(HOUR FROM DATETIME(cal.slot_start_timestamp)) AS hour_of_day,
     cal.location_id,
     cal.location_class,
@@ -110,55 +74,102 @@ SELECT
     cal.reservable_reference,
     cal.reservable_name,
     cal.reservable_type,
-
     CASE
-        WHEN COUNTIF(exp.res_id IS NOT NULL) = 0 THEN NULL
+        WHEN COUNTIF(exp.res_id IS NOT NULL) = 0 THEN CAST(NULL AS ARRAY<STRING>)
         ELSE ARRAY_AGG(
             ARRAY_TO_STRING(
                 ARRAY(
-                    SELECT CAST(q AS STRING)
-                    FROM UNNEST([1,2,3,4]) q
+                    SELECT CAST(quarter_nr AS STRING)
+                    FROM UNNEST([1, 2, 3, 4]) AS quarter_nr
                     WHERE
-                        (q - 1) * 15 < CASE
+                        -- Pad zero-width interval (sub-minute reservation collapsed by MINUTE
+                        -- truncation) to 1 minute so it lands in the quarter containing its start.
+                        (quarter_nr - 1) * 15 < CASE
                             WHEN exp.overlap_start_minute = exp.overlap_end_minute
                                 THEN exp.overlap_end_minute + 1
                             ELSE exp.overlap_end_minute
                         END
-                        AND q * 15 > exp.overlap_start_minute
+                        AND quarter_nr * 15 > exp.overlap_start_minute
+                    ORDER BY quarter_nr
                 ),
                 ''
             )
+            IGNORE NULLS
             ORDER BY exp.res_starttimestamp, exp.res_id
         )
     END AS quarter_hours,
-
+    -- duration: [0.0] when no reservation; repeated reserved minutes (fractional) per reservation otherwise
     CASE
-        WHEN COUNTIF(exp.res_id IS NOT NULL) = 0 THEN [0.0]
+        WHEN COUNTIF(exp.res_id IS NOT NULL) = 0 THEN [CAST(0 AS FLOAT64)]
         ELSE ARRAY_AGG(
             exp.overlap_duration_minutes
+            IGNORE NULLS
             ORDER BY exp.res_starttimestamp, exp.res_id
         )
     END AS duration,
-
-    ARRAY_AGG(exp.res_id IGNORE NULLS ORDER BY exp.res_starttimestamp, exp.res_itemid) AS reservation_id,
-    ARRAY_AGG(exp.reservation_reference IGNORE NULLS ORDER BY exp.res_starttimestamp, exp.res_itemid) AS reservation_reference,
-    ARRAY_AGG(exp.res_itemid IGNORE NULLS ORDER BY exp.res_starttimestamp, exp.res_itemid) AS reservation_item_id,
-    ARRAY_AGG(exp.reservation_item_nr IGNORE NULLS ORDER BY exp.res_starttimestamp, exp.res_itemid) AS reservation_item_nr,
+    CASE
+        WHEN COUNTIF(exp.res_id IS NOT NULL) = 0 THEN CAST(NULL AS ARRAY<INT64>)
+        ELSE ARRAY_AGG(
+            exp.res_id IGNORE NULLS ORDER BY exp.res_starttimestamp, exp.res_itemid
+        )
+    END AS reservation_id,
+    CASE
+        WHEN COUNTIF(exp.res_id IS NOT NULL) = 0 THEN CAST(NULL AS ARRAY<STRING>)
+        ELSE ARRAY_AGG(
+            exp.reservation_reference
+            IGNORE NULLS
+            ORDER BY exp.res_starttimestamp, exp.res_itemid
+        )
+    END AS reservation_reference,
+    CASE
+        WHEN COUNTIF(exp.res_id IS NOT NULL) = 0 THEN CAST(NULL AS ARRAY<INT64>)
+        ELSE ARRAY_AGG(
+            exp.res_itemid IGNORE NULLS ORDER BY exp.res_starttimestamp, exp.res_itemid
+        )
+    END AS reservation_item_id,
+    CASE
+        WHEN COUNTIF(exp.res_id IS NOT NULL) = 0 THEN CAST(NULL AS ARRAY<STRING>)
+        ELSE ARRAY_AGG(
+            exp.reservation_item_nr
+            IGNORE NULLS
+            ORDER BY exp.res_starttimestamp, exp.res_itemid
+        )
+    END AS reservation_item_nr,
     ARRAY_AGG(exp.reservation_state IGNORE NULLS ORDER BY exp.res_id) AS reservation_state,
     ARRAY_AGG(exp.res_updatetime IGNORE NULLS ORDER BY exp.res_starttimestamp, exp.res_itemid) AS res_updatetime,
-
     ARRAY_AGG(CURRENT_TIMESTAMP()) AS creation_timestamp,
     ARRAY_AGG(CURRENT_TIMESTAMP()) AS modification_timestamp
-
-FROM ${ref('reservable_locations_calendar')} cal
-LEFT JOIN ${ref('IWMS_RESERVATIONS_SLOTS')} exp
-    ON cal.timeslot_id = exp.timeslot_id
-    AND exp.is_deleted = 'N'
-
+FROM ${ref('reservable_locations_calendar')} AS cal
+LEFT JOIN ${ref('IWMS_RESERVATIONS_SLOTS')} AS exp
+    ON
+        cal.timeslot_id = exp.timeslot_id
+        AND exp.is_deleted = 'N'
+${when(incremental() && !fullReload, `
 WHERE DATE(cal.slot_start_timestamp) IN (
-  SELECT calendar_date FROM filter_dates
+    SELECT DISTINCT DATE(slot_start_timestamp) AS calendar_date
+    FROM ${ref('IWMS_RESERVATIONS_SLOTS')}
+    WHERE res_updatetime >= (
+        SELECT COALESCE(MAX(upd_ts), DATETIME('2024-01-01 00:00:00'))
+        FROM ${self()} AS tgt, UNNEST(tgt.res_updatetime) AS upd_ts
+    )
+    UNION DISTINCT
+    SELECT DISTINCT calendar_date
+    FROM ${self()} AS tgt
+    WHERE NOT EXISTS (
+        SELECT 1
+        FROM ${ref('reservable_locations_calendar')} AS cal
+        WHERE cal.timeslot_id = tgt.timeslot_id
+    )
+    UNION DISTINCT
+    SELECT cal_date FROM UNNEST(GENERATE_DATE_ARRAY(
+        DATE_ADD(
+            COALESCE((SELECT MAX(calendar_date) FROM ${self()}), DATE('2024-01-01')),
+            INTERVAL 1 DAY
+        ),
+        CURRENT_DATE()
+    )) AS cal_date
 )
-
+`)}
 GROUP BY
     cal.timeslot_id,
     cal.location_id,
