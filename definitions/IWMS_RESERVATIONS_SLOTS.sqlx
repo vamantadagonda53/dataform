@@ -104,8 +104,10 @@ WITH
             TIMESTAMP_DIFF(
                 LEAST(res.res_endtimestamp, TIMESTAMP_ADD(slot_start, INTERVAL 1 HOUR)),
                 GREATEST(res.res_starttimestamp, slot_start),
-                SECOND
-            ) / 60.0 AS overlap_duration_minutes,
+                MINUTE
+            ) AS overlap_duration_minutes,
+            --    SECOND
+            --) / 60.0 AS overlap_duration_minutes,
             res.res_starttimestamp,
             res.res_endtimestamp,
             res.res_createtimestamp,

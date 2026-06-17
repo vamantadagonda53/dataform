@@ -100,7 +100,7 @@ SELECT
     END AS quarter_hours,
     -- duration: [0.0] when no reservation; repeated reserved minutes (fractional) per reservation otherwise
     CASE
-        WHEN COUNTIF(exp.res_id IS NOT NULL) = 0 THEN [CAST(0 AS FLOAT64)]
+        WHEN COUNTIF(exp.res_id IS NOT NULL) = 0 THEN [CAST(0 AS INT64)]
         ELSE ARRAY_AGG(
             exp.overlap_duration_minutes
             IGNORE NULLS
