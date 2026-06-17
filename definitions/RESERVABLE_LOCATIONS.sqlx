@@ -25,7 +25,7 @@ WITH
                     THEN 'Active'
                 ELSE 'Inactive'
             END AS loc_status
-        FROM ${ref('DIM_LOCATIONS')}
+        FROM ${ref('dim_locations')}
         WHERE etl_current_flag = 'Y'
     )
 SELECT
