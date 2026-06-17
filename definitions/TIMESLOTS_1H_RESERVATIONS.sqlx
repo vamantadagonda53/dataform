@@ -102,7 +102,8 @@ SELECT
     CASE
         WHEN COUNTIF(exp.res_id IS NOT NULL) = 0 THEN [CAST(0 AS INT64)]
         ELSE ARRAY_AGG(
-            exp.overlap_duration_minutes
+            --exp.overlap_duration_minutes
+            CAST(exp.overlap_duration_minutes AS INT64)
             IGNORE NULLS
             ORDER BY exp.res_starttimestamp, exp.res_id
         )
