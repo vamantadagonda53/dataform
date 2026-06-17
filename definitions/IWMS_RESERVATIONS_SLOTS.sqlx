@@ -5,6 +5,7 @@ config {
   uniqueKey: ["res_id", "res_itemid", "slot_start_timestamp"],
   partitionBy: "DATE(slot_start_timestamp)",
   requirePartitionFilter: false,
+  onSchemaChange: "SYNCHRONIZE",
   clusterBy: ["location_id", "slot_start_timestamp"],
   labels: {
     layer: "intermediate_tables",
@@ -13,69 +14,143 @@ config {
   }
 }
 
-SELECT
-    res.res_id,
-    res.res_itemid,
-    res.res_userreference AS reservation_reference,
-    res.res_itemnr AS reservation_item_nr,
-    loc.location_id,
-    loc.location_class,
-    loc.parent_location_id,
-    loc.parent_location_class,
-    loc.building_id,
-    loc.floor_id,
-    loc.reservable_id,
-    loc.reso_unique_reference,
-    loc.reservable_reference,
-    loc.reservable_name,
-    loc.reservable_type,
-    slot_start AS slot_start_timestamp,
-    loc.time_zone,
-    TIMESTAMP_DIFF(
-        LEAST(
-            GREATEST(res.res_starttimestamp, slot_start),
-            TIMESTAMP_ADD(slot_start, INTERVAL 1 HOUR)
-        ),
-        slot_start,
-        MINUTE
-    ) AS overlap_start_minute,
-    TIMESTAMP_DIFF(
-        GREATEST(
-            LEAST(res.res_endtimestamp, TIMESTAMP_ADD(slot_start, INTERVAL 1 HOUR)),
-            slot_start
-        ),
-        slot_start,
-        MINUTE
-    ) AS overlap_end_minute,
-    TIMESTAMP_DIFF(
-        LEAST(res.res_endtimestamp, TIMESTAMP_ADD(slot_start, INTERVAL 1 HOUR)),
-        GREATEST(res.res_starttimestamp, slot_start),
-        MINUTE
-    ) AS overlap_duration_minutes,
-    res.res_starttimestamp,
-    res.res_endtimestamp,
-    res.res_updatetime,
-    CURRENT_TIMESTAMP() AS creation_timestamp,
-    CURRENT_TIMESTAMP() AS modification_timestamp
-FROM ${ref('IWMS_RESERVATIONS')} AS res
-INNER JOIN ${ref('RESERVABLE_LOCATIONS')} AS loc
-    ON res.res_itemobjectreference = loc.reso_unique_reference,
-    UNNEST(
-        GENERATE_TIMESTAMP_ARRAY(
-            TIMESTAMP(DATETIME_TRUNC(DATETIME(res.res_starttimestamp, loc.time_zone), HOUR), loc.time_zone),
-            TIMESTAMP_SUB(res.res_endtimestamp, INTERVAL 1 SECOND),
-            INTERVAL 1 HOUR
-        )
-    ) AS slot_start
-WHERE
-    res.is_deleted = 'N'
-    AND res.res_result = 'COMPLETED'
-    AND res.res_stage = 'H'
-    AND res.res_endtimestamp < CURRENT_TIMESTAMP()
-    AND DATE(res.res_endtimestamp) >= DATE('2024-01-01')
-    ${when(incremental(), `
-    AND res.res_updatetime >= (
-        SELECT COALESCE(MAX(res_updatetime), DATETIME('2024-01-01 00:00:00'))
-        FROM ${self()}  -- noqa: LXR
-    )
+js {
+  const fullReload = columns_description.stringToBoolean(dataform.projectConfig.vars.full_reload);
+}
+
+pre_operations {
+    ${when(incremental() && fullReload, `
+    TRUNCATE TABLE ${self()};  -- noqa: LXR
     `)}
+
+    ${when(incremental() && !fullReload, `
+    DELETE FROM ${self()} AS tgt  -- noqa: LXR
+    WHERE EXISTS (
+        SELECT 1
+        FROM ${ref('IWMS_RESERVATIONS')} AS src
+        WHERE
+            src.res_id = tgt.res_id
+            AND src.res_itemid = tgt.res_itemid
+            AND GREATEST(src.res_updatetime, DATETIME(src.last_modified_timestamp)) >= (
+                SELECT COALESCE(MAX(GREATEST(res_updatetime, DATETIME(last_modified_timestamp))), DATETIME('2024-01-01 00:00:00'))
+                FROM ${self()}  -- noqa: LXR
+            )
+            AND (
+                src.res_starttimestamp != tgt.res_starttimestamp
+                OR src.res_endtimestamp != tgt.res_endtimestamp
+                OR src.is_deleted != tgt.is_deleted
+                OR src.res_stage != tgt.res_stage
+                OR src.res_result != tgt.res_result
+                OR CASE
+                    WHEN src.is_deleted = 'Y' THEN 'DELETED'
+                    ELSE src.res_result
+                END != tgt.reservation_state
+            )
+    )
+    OR NOT EXISTS (
+        SELECT 1
+        FROM ${ref('IWMS_RESERVATIONS')} AS src
+        WHERE
+            src.res_id = tgt.res_id
+            AND src.res_itemid = tgt.res_itemid
+    );
+    `)}
+}
+
+WITH
+    slots AS (
+        SELECT
+            res.res_id,
+            res.res_itemid,
+            res.res_userreference AS reservation_reference,
+            res.res_itemnr AS reservation_item_nr,
+            loc.location_id,
+            loc.location_class,
+            loc.parent_location_id,
+            loc.parent_location_class,
+            loc.building_id,
+            loc.floor_id,
+            loc.reservable_id,
+            loc.reservable_unique_reference,
+            loc.reservable_reference,
+            loc.reservable_name,
+            loc.reservable_type,
+            slot_start AS slot_start_timestamp,
+            loc.time_zone,
+            CASE
+                WHEN res.is_deleted = 'Y'
+                    THEN 'DELETED'
+                ELSE res.res_result
+            END AS reservation_state,
+            res.is_deleted,
+            -- Overlap start minute: distance from slot start to reservation start (within 1-hour window)
+            TIMESTAMP_DIFF(
+                LEAST(
+                    GREATEST(res.res_starttimestamp, slot_start),
+                    TIMESTAMP_ADD(slot_start, INTERVAL 1 HOUR)
+                ),
+                slot_start,
+                MINUTE
+            ) AS overlap_start_minute,
+            -- Overlap end minute: distance from slot start to reservation end (within 1-hour window)
+            TIMESTAMP_DIFF(
+                GREATEST(
+                    LEAST(res.res_endtimestamp, TIMESTAMP_ADD(slot_start, INTERVAL 1 HOUR)),
+                    slot_start
+                ),
+                slot_start,
+                MINUTE
+            ) AS overlap_end_minute,
+            TIMESTAMP_DIFF(
+                LEAST(res.res_endtimestamp, TIMESTAMP_ADD(slot_start, INTERVAL 1 HOUR)),
+                GREATEST(res.res_starttimestamp, slot_start),
+                SECOND
+            ) / 60.0 AS overlap_duration_minutes,
+            res.res_starttimestamp,
+            res.res_endtimestamp,
+            res.res_createtimestamp,
+            res.res_updatetime,
+            res.res_stage,
+            res.res_result,
+            CURRENT_TIMESTAMP() AS creation_timestamp,
+            CURRENT_TIMESTAMP() AS modification_timestamp,
+            DATETIME(res.last_modified_timestamp) AS last_modified_timestamp,
+            CONCAT(
+                loc.location_id,
+                '|',
+                FORMAT_TIMESTAMP('%Y-%m-%dT%H:%M:%S%z', slot_start, loc.time_zone)
+            ) AS timeslot_id,
+            DATE(slot_start, loc.time_zone) AS calendar_date,
+            ROW_NUMBER() OVER (
+                PARTITION BY
+                    res.res_starttimestamp,
+                    res.res_endtimestamp,
+                    loc.reservable_unique_reference,
+                    loc.reservable_reference,
+                    slot_start
+                ORDER BY res.res_createtimestamp ASC
+            ) AS slot_rank
+        FROM ${ref('IWMS_RESERVATIONS')} AS res
+        INNER JOIN ${ref('RESERVABLE_LOCATIONS')} AS loc
+            ON res.res_itemobjectreference = loc.reservable_unique_reference,
+            UNNEST(
+                GENERATE_TIMESTAMP_ARRAY(
+                    TIMESTAMP_TRUNC(res.res_starttimestamp, HOUR),
+                    TIMESTAMP_SUB(res.res_endtimestamp, INTERVAL 1 SECOND),
+                    INTERVAL 1 HOUR
+                )
+            ) AS slot_start
+        WHERE
+            res.res_stage = 'H'
+            AND res.res_result IN ('RESERVED', 'COMPLETED')
+            AND DATE(res.res_endtimestamp) >= DATE('2024-01-01')
+            ${when(incremental() && !fullReload, `
+            AND GREATEST(res.res_updatetime, DATETIME(res.last_modified_timestamp)) >= (
+                SELECT COALESCE(MAX(GREATEST(res_updatetime, last_modified_timestamp)), DATETIME('2024-01-01 00:00:00'))
+                FROM ${self()}  -- noqa: LXR
+            )`)}
+    )
+
+SELECT * EXCEPT (slot_rank)
+FROM slots
+WHERE slot_rank = 1
