@@ -83,7 +83,7 @@
             )
             )*/
             FORMAT_TIMESTAMP(
-             '%Y-%m-%dT%H:00:00%Ez',
+             '%Y-%m-%dT%H:00:00',
             TIMESTAMP(
             DATETIME(
             TIMESTAMP_TRUNC(
@@ -100,7 +100,7 @@
             ),
             dim.time_zone
              )
-            )
+            ),FORMAT_TIMESTAMP('%z', slot_start, loc.time_zone)
 
         ) AS timeslot_id,
         dim.reservable_id,
