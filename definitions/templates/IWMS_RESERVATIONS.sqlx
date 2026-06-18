@@ -17,7 +17,7 @@ config {
 
 js {
   const fullReload = columns_description.stringToBoolean(dataform.projectConfig.vars.full_reload);
-  const defaultLookbackDays = dataform.projectConfig.vars.lookback_days;
+  const defaultLookbackDays = 1;
 }
 
 WITH
@@ -108,7 +108,7 @@ WITH
             ${ref('contact')} AS creator_organization_contact
             ON creator_organization.contactid = creator_organization_contact.id
         LEFT JOIN
-            ${ref('reservable')} AS reservable_details
+            ${ref('reservables')} AS reservable_details
             ON reservationitem.reservableid = reservable_details.id
         INNER JOIN
             ${ref('client')} AS client
