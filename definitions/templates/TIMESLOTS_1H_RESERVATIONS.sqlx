@@ -194,4 +194,5 @@ GROUP BY
     cal.reservable_unique_reference,
     cal.reservable_reference,
     cal.reservable_name,
-    cal.reservable_type
+    cal.reservable_type,
+    cal.time_zone
