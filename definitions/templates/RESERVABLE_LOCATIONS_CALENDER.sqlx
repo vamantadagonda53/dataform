@@ -75,12 +75,31 @@
             '%Y-%m-%dT%H:00:00%z',
             TIMESTAMP(DATETIME(grid.slot_start, dim.time_zone), dim.time_zone)
             )   */
-            FORMAT_DATETIME(
+            /*FORMAT_DATETIME(
             '%Y-%m-%dT%H:00:00',
             DATETIME(
                 TIMESTAMP_TRUNC(slot_start, HOUR, dim.time_zone),
                 dim.time_zone
             )
+            )*/
+            FORMAT_TIMESTAMP(
+             '%Y-%m-%dT%H:00:00%Ez',
+            TIMESTAMP(
+            DATETIME(
+            TIMESTAMP_TRUNC(
+                slot_start
+                - (
+                TIMESTAMP_DIFF(
+                    TIMESTAMP(DATETIME(slot_start, loc.time_zone), loc.time_zone),
+                    slot_start,
+                    SECOND
+                ) * INTERVAL 1 SECOND
+                ),
+                HOUR
+            )
+            ),
+            loc.time_zone
+             )
             )
 
         ) AS timeslot_id,
