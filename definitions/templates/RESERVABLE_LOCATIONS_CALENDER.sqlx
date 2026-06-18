@@ -100,7 +100,7 @@
             ),
             dim.time_zone
              )
-            ),FORMAT_TIMESTAMP('%z', slot_start, loc.time_zone)
+            ),FORMAT_TIMESTAMP('%z', slot_start, dim.time_zone)
 
         ) AS timeslot_id,
         dim.reservable_id,
