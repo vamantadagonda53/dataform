@@ -1,6 +1,341 @@
 config {
-  type: "declaration",
-  schema: "curated_data",
-  //database: dataform.projectConfig.vars.source_database,
-  name: "IWMS_RESERVATIONS"
+  type: "incremental",
+  schema: dataform.projectConfig.vars.transformation_target_tenant_dataset,
+  tags: ["axxerion"],
+  uniqueKey: ["res_id", "res_itemid"],
+  partitionBy: "DATETIME_TRUNC(res_updatetime, MONTH)",
+  onSchemaChange: "SYNCHRONIZE",
+  requirePartitionFilter: false,
+  clusterBy: ["res_id", "res_itemid"],
+  columns: columns_description.getColumnsDescriptions("IWMS_RESERVATIONS"),
+  labels: {
+    layer: "intermediate_tables",
+    domain: "reservations",
+    managed_by: "dataform"
+  }
+}
+
+js {
+  const fullReload = columns_description.stringToBoolean(dataform.projectConfig.vars.full_reload);
+  const defaultLookbackDays = dataform.projectConfig.vars.lookback_days;
+}
+
+WITH
+    stg AS (
+        SELECT
+            res.reference AS res_userreference,
+            res.uniquereference AS res_reference,
+            res.name AS res_subject,
+            res.description AS res_description,
+            enum_res.name AS res_statusname,
+            enum_res.reference AS res_statuscode,
+            res.noshow AS res_noshow,
+            CAST(res.persons AS INT64) AS res_nrofparticipants,
+            CONCAT("P", CAST(property.id AS STRING)) AS res_building_id,
+            property.reference AS res_buildingreference,
+            property.name AS res_buildingname,
+            TIMESTAMP(res.starttime) AS starttimestamp,
+            TIMESTAMP(res.endtime) AS endtimestamp,
+            TIMESTAMP(res.canceltime) AS canceltimestamp,
+            TIMESTAMP(res.createtime) AS createtimestamp,
+            TIMESTAMP(res.updatetime) AS updatetimestamp,
+            organizer_organization_contact.wholename AS res_organizerorganizationname,
+            creator_organization_contact.wholename AS res_creatororganizationname,
+            reservationitem.reference AS res_itemnr,
+            reservable_details.uniquereference AS res_itemobjectreference,
+            CAST(reservable_details.item_object_capacity AS INT64) AS res_itemcapacity,
+            reservationitem.name AS res_itemname,
+            reservationitem.description AS res_itemdescription,
+            reservable_details.item_type AS res_itemtype,
+            reservable_details.item_object_category_name AS res_itemobjectcategoryname,
+            reservable_details.item_object_category_reference AS res_itemobjectcategoryreference,
+            CAST(reservationitem.items AS INT64) AS res_itemquantity,
+            res.id AS res_id,
+            reservationitem.id AS res_itemid,
+            CAST(reservable_details.objectnameid AS STRING) AS res_objectnameid,
+            COALESCE(reg.timezone_, client.timezone_, "UTC") AS res_tz_iana_timezone,
+            "N" AS is_deleted,
+            GREATEST(
+                COALESCE(res.updatetime, DATETIME("1970-01-01 00:00:00")),
+                COALESCE(reservationitem.updatetime, DATETIME("1970-01-01 00:00:00"))
+            ) AS res_updatetime
+        FROM
+            ${ref('reservationitem')} AS reservationitem
+        INNER JOIN
+            ${ref('reservation')} AS res
+            ON
+                reservationitem.reservationid = res.id
+        LEFT JOIN
+            ${ref('property')} AS property
+            ON
+                res.propertyid = property.id
+                AND property.binentryid = 0
+        LEFT JOIN
+            ${ref('objectregime')} AS objreg
+            ON
+                property.id = objreg.instanceid
+                AND objreg.binentryid = 0
+        LEFT JOIN
+            ${ref('regime')} AS reg
+            ON
+                objreg.regimeid = reg.id
+                AND reg.binentryid = 0
+        LEFT JOIN
+            ${ref('contact')} AS organizer
+            ON
+                res.contactid = organizer.id
+                AND organizer.binentryid = 0
+        LEFT JOIN
+            ${ref('organization')} AS organizer_organization
+            ON
+                organizer.organizationid = organizer_organization.id
+                AND organizer_organization.binentryid = 0
+        LEFT JOIN
+            ${ref('contact')} AS organizer_organization_contact
+            ON organizer_organization.contactid = organizer_organization_contact.id
+        LEFT JOIN
+            ${ref('systemuser')} AS systemuser_contact
+            ON
+                res.createsystemuserid = systemuser_contact.id
+                AND systemuser_contact.binentryid = 0
+        LEFT JOIN
+            ${ref('contact')} AS creator
+            ON systemuser_contact.contactid = creator.id
+        LEFT JOIN
+            ${ref('organization')} AS creator_organization
+            ON creator.organizationid = creator_organization.id
+        LEFT JOIN
+            ${ref('contact')} AS creator_organization_contact
+            ON creator_organization.contactid = creator_organization_contact.id
+        LEFT JOIN
+            ${ref('reservables')} AS reservable_details
+            ON reservationitem.reservableid = reservable_details.id
+        INNER JOIN
+            ${ref('client')} AS client
+            ON
+                res.clientid = client.id
+                AND client.binentryid = 0
+        LEFT JOIN
+            ${ref('enumerations')} AS enum_res
+            ON
+                res.clientid = enum_res.clientid
+                AND enum_res.type = "ReservationStatus"
+                AND res.reservationstatuscode = enum_res.intvalue
+        WHERE
+            client.id = ${dataform.projectConfig.vars.client_id}  -- noqa: PRS, LXR, LT02
+            AND res.binentryid = 0
+            AND reservationitem.binentryid = 0
+            AND reservationitem.reservableid != 0
+            AND reservationitem.reservationid != 0
+            AND res.reservationstatuscode != 1
+    ),
+
+    stg_tz AS (
+        SELECT
+            * EXCEPT (starttimestamp, endtimestamp, canceltimestamp, createtimestamp, updatetimestamp),
+            CASE
+                WHEN res_tz_iana_timezone != "UTC"
+                    THEN CAST(DATETIME(starttimestamp, res_tz_iana_timezone) AS TIMESTAMP)
+                ELSE starttimestamp
+            END AS res_starttimestamp,
+            CASE
+                WHEN res_tz_iana_timezone != "UTC"
+                    THEN CAST(DATETIME(endtimestamp, res_tz_iana_timezone) AS TIMESTAMP)
+                ELSE endtimestamp
+            END AS res_endtimestamp,
+            CASE
+                WHEN res_tz_iana_timezone != "UTC"
+                    THEN CAST(DATETIME(canceltimestamp, res_tz_iana_timezone) AS TIMESTAMP)
+                ELSE canceltimestamp
+            END AS res_canceltimestamp,
+            CASE
+                WHEN res_tz_iana_timezone != "UTC"
+                    THEN CAST(DATETIME(createtimestamp, res_tz_iana_timezone) AS TIMESTAMP)
+                ELSE createtimestamp
+            END AS res_createtimestamp,
+            CASE
+                WHEN res_tz_iana_timezone != "UTC"
+                    THEN CAST(DATETIME(updatetimestamp, res_tz_iana_timezone) AS TIMESTAMP)
+                ELSE updatetimestamp
+            END AS res_updatetimestamp
+        FROM stg
+    ),
+
+    stg_final AS (
+        SELECT
+            *,
+            CAST(CURRENT_DATETIME(res_tz_iana_timezone) AS TIMESTAMP) AS res_now_timestamp
+        FROM stg_tz
+        ${when(incremental() && !fullReload, `WHERE DATE(res_updatetime) >= DATE_SUB(
+            COALESCE(
+                (SELECT DATE(MAX(res_updatetime)) FROM ${self()}),  -- noqa: LXR
+                DATE("1970-01-01")
+            ),
+            INTERVAL ${defaultLookbackDays} DAY
+        )
+        AND NOT EXISTS (
+            SELECT 1
+            FROM ${self()} AS tgt  -- noqa: LXR
+            WHERE
+                tgt.res_id = stg_tz.res_id
+                AND tgt.res_itemid = stg_tz.res_itemid
+                AND tgt.res_updatetime = stg_tz.res_updatetime
+                AND tgt.is_deleted = "N"
+        )`)}  -- noqa: PRS
+    )
+
+SELECT
+    res_userreference,
+    res_reference,
+    res_subject,
+    res_description,
+    res_statuscode,
+    res_statusname,
+    res_nrofparticipants,
+    res_building_id,
+    res_buildingreference,
+    res_buildingname,
+    res_starttimestamp,
+    res_endtimestamp,
+    res_canceltimestamp,
+    res_createtimestamp,
+    res_updatetimestamp,
+    res_organizerorganizationname,
+    res_creatororganizationname,
+    res_itemnr,
+    res_itemobjectreference,
+    res_itemcapacity,
+    res_itemname,
+    res_itemdescription,
+    res_itemtype,
+    res_itemobjectcategoryname,
+    res_itemobjectcategoryreference,
+    res_itemquantity,
+    res_id,
+    res_objectnameid,
+    res_noshow,
+    res_updatetime,
+    res_tz_iana_timezone,
+    res_now_timestamp AS last_modified_timestamp,
+    is_deleted,
+    res_itemid,
+    -- Constants in uppercase
+    CASE
+        WHEN (
+            res_canceltimestamp IS NULL
+            AND res_noshow = 0
+            AND res_endtimestamp < res_now_timestamp
+        )
+            THEN "COMPLETED"
+        WHEN res_canceltimestamp <= res_starttimestamp
+            THEN "CANCELLED"
+        WHEN (res_canceltimestamp > res_starttimestamp OR res_noshow = 1)
+            THEN "NO_SHOW"
+        WHEN res_endtimestamp >= res_now_timestamp
+            THEN "RESERVED"
+        ELSE "ERROR"
+    END AS res_result,
+    CASE
+        WHEN res_starttimestamp > res_now_timestamp
+            THEN "P"
+        WHEN
+            res_starttimestamp <= res_now_timestamp
+            AND res_endtimestamp >= res_now_timestamp
+            THEN "C"
+        WHEN res_endtimestamp < res_now_timestamp
+            THEN "H"
+    END AS res_stage
+FROM stg_final
+
+post_operations {
+  -- Combined: soft deletes + stage recalculation (P→C, P→H, C→H) + result recalculation
+  UPDATE ${self()} AS tgt  -- noqa: PRS, LXR
+  SET
+      tgt.is_deleted    = COALESCE(src.new_is_deleted, tgt.is_deleted),
+      tgt.res_stage     = COALESCE(src.new_stage, tgt.res_stage),
+      tgt.res_result    = COALESCE(src.new_result, tgt.res_result),
+      tgt.last_modified_timestamp = CAST(CURRENT_DATETIME(tgt.res_tz_iana_timezone) AS TIMESTAMP)
+  FROM (
+      SELECT
+          res_id,
+          res_itemid,
+          new_is_deleted,
+          NULLIF(computed_stage, old_stage) AS new_stage,
+          new_result
+      FROM (
+          SELECT
+              b.res_id,
+              b.res_itemid,
+              b.res_stage AS old_stage,
+
+              -- 1) Soft-delete: row no longer present in source
+              CASE
+                  WHEN NOT EXISTS (
+                      SELECT 1
+                      FROM ${ref('reservationitem')} AS ri
+                      INNER JOIN ${ref('reservation')} AS r
+                          ON ri.reservationid = r.id
+                          AND ri.clientid = r.clientid
+                          AND r.clientid = ${dataform.projectConfig.vars.client_id}  -- noqa: PRS, LXR, LT02
+                      WHERE r.binentryid = 0
+                          AND ri.reservableid != 0
+                          AND ri.reservationid != 0
+                          AND r.reservationstatuscode != 1
+                          AND r.id = b.res_id
+                          AND ri.id = b.res_itemid
+                  ) THEN "Y"
+              END AS new_is_deleted,
+
+              -- 2) Stage transition (P→C, P→H, C→H)
+              CASE
+                  WHEN b.res_stage IN ("P", "C") THEN
+                      CASE
+                          WHEN b.res_starttimestamp > b.now_ts THEN "P"
+                          WHEN b.res_endtimestamp >= b.now_ts  THEN "C"
+                          ELSE "H"
+                      END
+              END AS computed_stage,
+
+              -- 3) Result transition (RESERVED → terminal state when past end time)
+              CASE
+                  WHEN b.res_result = "RESERVED" AND b.res_endtimestamp < b.now_ts THEN
+                      CASE
+                          WHEN b.res_canceltimestamp IS NULL AND b.res_noshow = 0
+                              THEN "COMPLETED"
+                          WHEN b.res_canceltimestamp <= b.res_starttimestamp
+                              THEN "CANCELLED"
+                          WHEN b.res_canceltimestamp > b.res_starttimestamp OR b.res_noshow = 1
+                              THEN "NO_SHOW"
+                          ELSE "ERROR"
+                      END
+              END AS new_result
+
+          FROM (
+              SELECT
+                  t.res_id,
+                  t.res_itemid,
+                  t.res_stage,
+                  t.res_result,
+                  t.res_starttimestamp,
+                  t.res_endtimestamp,
+                  t.res_canceltimestamp,
+                  t.res_noshow,
+                  CAST(CURRENT_DATETIME(t.res_tz_iana_timezone) AS TIMESTAMP) AS now_ts
+              FROM ${self()} AS t  -- noqa: PRS, LXR
+              WHERE t.is_deleted = "N"
+          ) AS b
+      )
+  ) AS src
+  WHERE
+      tgt.res_id = src.res_id
+      AND tgt.res_itemid = src.res_itemid
+      AND tgt.is_deleted = "N"
+      AND (
+          (src.new_is_deleted IS NOT NULL 
+              AND tgt.is_deleted != src.new_is_deleted)
+          OR (src.new_stage IS NOT NULL 
+              AND tgt.res_stage != src.new_stage)
+          OR (src.new_result IS NOT NULL 
+              AND tgt.res_result != src.new_result)
+      );
 }
