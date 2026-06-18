@@ -67,10 +67,14 @@
         CONCAT(
             dim.location_id,
             '|',
-            FORMAT_TIMESTAMP('%Y-%m-%dT%H:%M:%S%z',
+            /*FORMAT_TIMESTAMP('%Y-%m-%dT%H:%M:%S%z',
                 CAST(DATETIME(
                     grid.slot_start, dim.time_zone
-                ) AS TIMESTAMP))
+                ) AS TIMESTAMP))*/
+             FORMAT_TIMESTAMP(
+            '%Y-%m-%dT%H:00:00%z',
+            TIMESTAMP(DATETIME(grid.slot_start, dim.time_zone), dim.time_zone)
+            )   
         ) AS timeslot_id,
         dim.reservable_id,
         dim.reservable_unique_reference,
