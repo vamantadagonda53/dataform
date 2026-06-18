@@ -122,7 +122,7 @@ WITH
                 AND enum_res.type = "ReservationStatus"
                 AND res.reservationstatuscode = enum_res.intvalue
         WHERE
-            client.id = ${dataform.projectConfig.vars.client_id}  -- noqa: PRS, LXR, LT02
+            client.id = 1610000000000002  -- noqa: PRS, LXR, LT02
             AND res.binentryid = 0
             AND reservationitem.binentryid = 0
             AND reservationitem.reservableid != 0
@@ -276,7 +276,7 @@ post_operations {
                       INNER JOIN ${ref('reservation')} AS r
                           ON ri.reservationid = r.id
                           AND ri.clientid = r.clientid
-                          AND r.clientid = ${dataform.projectConfig.vars.client_id}  -- noqa: PRS, LXR, LT02
+                          AND r.clientid = 1610000000000002  -- noqa: PRS, LXR, LT02
                       WHERE r.binentryid = 0
                           AND ri.reservableid != 0
                           AND ri.reservationid != 0
