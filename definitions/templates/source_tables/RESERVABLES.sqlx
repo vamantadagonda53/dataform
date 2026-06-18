@@ -2,5 +2,5 @@ config {
   type: "declaration",
   schema: "axx_axdb17",
   //database: dataform.projectConfig.vars.source_database,
-  name: "reservables"
+  name: "reservable"
 }
