@@ -90,7 +90,7 @@
                 slot_start
                 - (
                 TIMESTAMP_DIFF(
-                    TIMESTAMP(DATETIME(slot_start, loc.time_zone), loc.time_zone),
+                    TIMESTAMP(DATETIME(slot_start, dim.time_zone), dim.time_zone),
                     slot_start,
                     SECOND
                 ) * INTERVAL 1 SECOND
@@ -98,7 +98,7 @@
                 HOUR
             )
             ),
-            loc.time_zone
+            dim.time_zone
              )
             )
 
