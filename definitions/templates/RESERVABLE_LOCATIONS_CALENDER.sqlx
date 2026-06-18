@@ -71,10 +71,18 @@
                 CAST(DATETIME(
                     grid.slot_start, dim.time_zone
                 ) AS TIMESTAMP))*/
-             FORMAT_TIMESTAMP(
+             /*FORMAT_TIMESTAMP(
             '%Y-%m-%dT%H:00:00%z',
             TIMESTAMP(DATETIME(grid.slot_start, dim.time_zone), dim.time_zone)
-            )   
+            )   */
+            FORMAT_DATETIME(
+            '%Y-%m-%dT%H:00:00',
+            DATETIME(
+                TIMESTAMP_TRUNC(slot_start, HOUR, dim.time_zone),
+                dim.time_zone
+            )
+            )
+
         ) AS timeslot_id,
         dim.reservable_id,
         dim.reservable_unique_reference,
