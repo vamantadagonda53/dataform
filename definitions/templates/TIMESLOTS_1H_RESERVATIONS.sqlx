@@ -64,7 +64,7 @@ SELECT
     cal.slot_start_timestamp
     - (
       TIMESTAMP_DIFF(
-        TIMESTAMP(DATETIME(cal.slot_start_timestamp, dim.time_zone)),
+        TIMESTAMP(DATETIME(cal.slot_start_timestamp, cal.time_zone)),
         cal.slot_start_timestamp,
         SECOND
       ) * INTERVAL 1 SECOND
