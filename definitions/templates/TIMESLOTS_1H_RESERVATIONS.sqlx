@@ -95,7 +95,7 @@ SELECT
                 slot_start
                 - (
                 TIMESTAMP_DIFF(
-                    TIMESTAMP(DATETIME(slot_start, loc.time_zone), loc.time_zone),
+                    TIMESTAMP(DATETIME(slot_start, cal.time_zone), cal.time_zone),
                     slot_start,
                     SECOND
                 ) * INTERVAL 1 SECOND
@@ -103,9 +103,9 @@ SELECT
                 HOUR
             )
             ),
-            loc.time_zone
+            cal.time_zone
              )
-            ), FORMAT_TIMESTAMP('%z', slot_start, loc.time_zone)
+            ), FORMAT_TIMESTAMP('%z', slot_start, cal.time_zone)
             ) AS timeslot_start,    
     EXTRACT(HOUR FROM DATETIME(cal.slot_start_timestamp)) AS hour_of_day,
     cal.location_id,
