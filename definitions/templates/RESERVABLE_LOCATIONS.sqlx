@@ -1,0 +1,56 @@
+config {
+  type: "view",
+  schema: dataform.projectConfig.vars.transformation_target_tenant_dataset,
+  tags: ["axxerion"],
+  labels: {
+    layer: "intermediate_views",
+    domain: "reservables",
+    managed_by: "dataform"
+  }
+}
+
+WITH
+    locations AS (
+        SELECT
+            location_id,
+            loc_type,
+            loc_parent_id,
+            loc_building_id,
+            loc_floor_id,
+            CASE
+                WHEN
+                    etl_is_deleted = 'N'
+                    AND loc_is_archived = 'N'
+                    AND loc_is_disabled = 'N'
+                    THEN 'Active'
+                ELSE 'Inactive'
+            END AS loc_status
+        FROM ${ref('dim_locations')}
+        WHERE etl_current_flag = 'Y'
+    )
+SELECT
+    reso.reso_id AS reservable_id,
+    reso.reso_unique_reference AS reservable_unique_reference,
+    reso.reso_reference AS reservable_reference,
+    reso.reso_name AS reservable_name,
+    COALESCE(reso.reso_type, loc.loc_type) AS reservable_type,
+    loc.location_id,
+    loc.loc_type AS location_class,
+    loc.loc_parent_id AS parent_location_id,
+    CASE
+        WHEN loc.loc_type = 'WORKPLACE' THEN 'ROOM'
+        WHEN loc.loc_type IN ('ROOM', 'PARKING') THEN 'FLOOR'
+    END AS parent_location_class,
+    loc.loc_building_id AS building_id,
+    loc.loc_floor_id AS floor_id,
+    reso.reso_tz_iana_timezone AS time_zone,
+    loc.loc_status
+FROM ${ref('IWMS_RESERVABLES')} AS reso
+INNER JOIN locations AS loc
+    ON
+        reso.reso_objectid = loc.location_id
+WHERE loc.loc_type IN ('ROOM', 'WORKPLACE', 'PARKING')
+QUALIFY
+    ROW_NUMBER() OVER (PARTITION BY loc.location_id, loc.loc_status ORDER BY loc.loc_status)
+    = 1
+ORDER BY reservable_id

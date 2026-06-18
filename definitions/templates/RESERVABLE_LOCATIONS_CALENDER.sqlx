@@ -1,0 +1,102 @@
+    config {
+      type: "incremental",
+      schema: dataform.projectConfig.vars.transformation_target_tenant_dataset,
+      name: "reservable_locations_calendar",
+      tags: ["axxerion"],
+      uniqueKey: ["timeslot_id"],
+      partitionBy: "DATE(slot_start_timestamp)",
+      requirePartitionFilter: false,
+      onSchemaChange: "SYNCHRONIZE",
+      clusterBy: ["location_id", "reservable_unique_reference"],
+      labels: {
+        layer: "intermediate_tables",
+        domain: "reservables",
+        managed_by: "dataform"
+      }
+    }
+    
+    js {
+      const fullReload = columns_description.stringToBoolean(dataform.projectConfig.vars.full_reload);
+    }
+    
+    pre_operations {
+        ${when(incremental() && fullReload, `
+        TRUNCATE TABLE ${self()};  -- noqa: LXR
+        `)}
+    
+        ${when(incremental() && !fullReload, `
+        DELETE FROM ${self()} AS tgt  -- noqa: LXR
+        WHERE NOT EXISTS (
+            SELECT 1
+            FROM ${ref('RESERVABLE_LOCATIONS')} AS src
+            WHERE src.reservable_unique_reference = tgt.reservable_unique_reference
+        );
+    
+        DELETE FROM ${self()} AS tgt  -- noqa: LXR
+        WHERE EXISTS (
+            SELECT 1
+            FROM ${ref('RESERVABLE_LOCATIONS')} AS src
+            WHERE src.reservable_unique_reference = tgt.reservable_unique_reference
+              AND (tgt.reservable_name IS DISTINCT FROM src.reservable_name
+                OR tgt.reservable_type IS DISTINCT FROM src.reservable_type
+                OR tgt.location_class IS DISTINCT FROM src.location_class
+                OR tgt.parent_location_class IS DISTINCT FROM src.parent_location_class
+                OR tgt.time_zone IS DISTINCT FROM src.time_zone)
+        );
+        `)}
+    }
+    
+    WITH
+        reservable_dim AS (
+            SELECT *
+            FROM ${ref('RESERVABLE_LOCATIONS')}
+        ),
+    
+        hourly_grid AS (
+            SELECT slot_start
+            FROM UNNEST(
+                GENERATE_TIMESTAMP_ARRAY(
+                    TIMESTAMP('2024-01-01 00:00:00'),
+                    TIMESTAMP(DATETIME(CURRENT_DATE(), TIME '23:00:00')),
+                    INTERVAL 1 HOUR
+                )
+            ) AS slot_start
+        )
+    
+    SELECT
+        CONCAT(
+            dim.location_id,
+            '|',
+            FORMAT_TIMESTAMP('%Y-%m-%dT%H:%M:%S%z',
+                CAST(DATETIME(
+                    grid.slot_start, dim.time_zone
+                ) AS TIMESTAMP))
+        ) AS timeslot_id,
+        dim.reservable_id,
+        dim.reservable_unique_reference,
+        dim.reservable_reference,
+        dim.reservable_name,
+        dim.reservable_type,
+        dim.location_id,
+        dim.location_class,
+        dim.parent_location_id,
+        dim.parent_location_class,
+        dim.building_id,
+        dim.floor_id,
+        dim.time_zone,
+        grid.slot_start AS slot_start_timestamp,
+        CURRENT_TIMESTAMP() AS creation_timestamp,
+        CURRENT_TIMESTAMP() AS modification_timestamp
+    FROM reservable_dim AS dim
+    CROSS JOIN hourly_grid AS grid
+    ${when(incremental() && !fullReload, `
+    WHERE
+        NOT EXISTS (
+            SELECT 1 FROM ${self()} AS tgt
+            WHERE tgt.reservable_unique_reference = dim.reservable_unique_reference
+        )
+        OR DATE(grid.slot_start) > (
+            SELECT COALESCE(MAX(DATE(slot_start_timestamp)), DATE('2023-12-31'))
+            FROM ${self()}
+        )
+    `)}
