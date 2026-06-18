@@ -120,7 +120,23 @@ WITH
             CONCAT(
                 loc.location_id,
                 '|',
-                FORMAT_TIMESTAMP('%Y-%m-%dT%H:%M:%S%z', slot_start)
+                /*FORMAT_TIMESTAMP('%Y-%m-%dT%H:%M:%S%z', slot_start)*/
+            FORMAT_TIMESTAMP(
+            '%Y-%m-%dT%H:%M:%S%Ez',
+             TIMESTAMP(
+             DATETIME(
+             slot_start
+              - (
+            TIMESTAMP_DIFF(
+            TIMESTAMP(DATETIME(slot_start, loc.time_zone)),
+            slot_start,
+            SECOND
+            ) * INTERVAL 1 SECOND
+      )
+    ),
+    loc.time_zone
+  )
+)
             ) AS timeslot_id,
             DATE(slot_start) AS calendar_date,
             ROW_NUMBER() OVER (
