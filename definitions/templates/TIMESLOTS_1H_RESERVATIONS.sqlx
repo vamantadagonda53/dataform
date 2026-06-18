@@ -60,7 +60,7 @@ SELECT
     MOD(EXTRACT(DAYOFWEEK FROM DATE(cal.slot_start_timestamp)) + 5, 7) + 1
         AS day_of_week,
     /*DATETIME(cal.slot_start_timestamp) AS calendar_datetime,*/
-    DATETIME(
+   /* DATETIME(
     cal.slot_start_timestamp
     - (
       TIMESTAMP_DIFF(
@@ -68,6 +68,20 @@ SELECT
         cal.slot_start_timestamp,
         SECOND
       ) * INTERVAL 1 SECOND
+    )
+    ) AS calendar_datetime,*/
+        
+    DATETIME(
+    TIMESTAMP_TRUNC(
+        cal.slot_start_timestamp
+        - (
+        TIMESTAMP_DIFF(
+            TIMESTAMP(DATETIME(cal.slot_start_timestamp, cal.time_zone), cal.time_zone),
+            cal.slot_start_timestamp,
+            SECOND
+        ) * INTERVAL 1 SECOND
+        ),
+        HOUR
     )
     ) AS calendar_datetime,
     FORMAT_TIMESTAMP('%Y-%m-%dT%H:%M:%S%z', cal.slot_start_timestamp)
