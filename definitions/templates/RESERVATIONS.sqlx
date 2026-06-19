@@ -22,7 +22,7 @@ WITH RECURSIVE
                 AND cli.binentryid = 0
                 AND res.binentryid = 0
         WHERE
-            res.clientid = ${dataform.projectConfig.vars.client_id}  -- noqa: PRS, LXR, LT02
+            res.clientid = 1610000000000002  -- noqa: PRS, LXR, LT02
         UNION ALL
         SELECT
             parent.clientid,
@@ -336,7 +336,7 @@ LEFT JOIN
     status_code
     ON res.uniquereference = status_code.uniquereference
 WHERE
-    client.id = ${dataform.projectConfig.vars.client_id}  -- noqa: PRS, LXR, LT02
+    client.id = 1610000000000002  -- noqa: PRS, LXR, LT02
     AND res.binentryid = 0
     AND reservationitem.reservableid != 0
     AND reservationitem.reservationid != 0
