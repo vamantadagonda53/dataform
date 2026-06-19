@@ -1,0 +1,343 @@
+config {
+  type: "table",
+  schema: dataform.projectConfig.vars.transformation_target_tenant_dataset,
+  tags: ["RESERVATIONS"]
+}
+
+WITH RECURSIVE
+    hierarchy AS (
+        SELECT
+            cli.clientid,
+            cli.reference,
+            cli.parentclientid,
+            1 AS level,
+            res.uniquereference,
+            res.reservationstatuscode
+        FROM
+            ${ref('client')} AS cli  -- noqa: PRS, LXR
+        INNER JOIN
+            ${ref('reservation')} AS res  -- noqa: PRS, LXR
+            ON
+                cli.clientid = res.clientid
+                AND cli.binentryid = 0
+                AND res.binentryid = 0
+        WHERE
+            res.clientid = ${dataform.projectConfig.vars.client_id}  -- noqa: PRS, LXR, LT02
+        UNION ALL
+        SELECT
+            parent.clientid,
+            parent.reference,
+            parent.parentclientid,
+            hier.level + 1 AS level,
+            hier.uniquereference,
+            hier.reservationstatuscode
+        FROM
+            ${ref('client')} AS parent  -- noqa: PRS, LXR
+        INNER JOIN
+            hierarchy AS hier
+            ON parent.clientid = hier.parentclientid
+    ),
+
+    max_level AS (
+        SELECT
+            MAX(level) AS max_level,
+            uniquereference,
+            reservationstatuscode
+        FROM
+            hierarchy
+        GROUP BY
+            uniquereference,
+            reservationstatuscode
+    ),
+
+    extended AS (
+        SELECT
+            clientid,
+            reference,
+            parentclientid,
+            level,
+            uniquereference,
+            reservationstatuscode
+        FROM
+            hierarchy
+        UNION ALL
+        SELECT
+            cli.clientid,
+            cli.reference,
+            cli.parentclientid,
+            max_lvl.max_level + 1 AS level,
+            max_lvl.uniquereference,
+            max_lvl.reservationstatuscode
+        FROM
+            ${ref('client')} AS cli  -- noqa: PRS, LXR
+        CROSS JOIN
+            max_level AS max_lvl
+        WHERE
+            cli.clientid = 1
+            AND cli.binentryid = 0
+            AND NOT EXISTS (
+                SELECT 1
+                FROM
+                    hierarchy AS hier
+                WHERE
+                    hier.clientid = cli.clientid
+            )
+    ),
+
+    status_code_ranked AS (
+        SELECT
+            ext.level,
+            ext.uniquereference,
+            ext.reservationstatuscode,
+            ext.clientid AS rsrc_client_id,
+            eval.clientid AS eval_clientid,
+            eval.intvalue,
+            eval.name,
+            eval.reference,
+            DENSE_RANK() OVER (
+                PARTITION BY ext.uniquereference
+                ORDER BY ext.level
+            ) AS rn
+        FROM
+            extended AS ext
+        INNER JOIN
+            ${ref('enumerationvalue')} AS eval  -- noqa: PRS, LXR
+            ON
+                ext.reservationstatuscode = eval.intvalue
+                AND eval.binentryid = 0
+        INNER JOIN
+            ${ref('enumerationtype')} AS etype  -- noqa: PRS, LXR
+            ON
+                eval.enumerationtypeid = etype.id
+                AND etype.binentryid = 0
+        WHERE
+            etype.name = "ReservationStatus"
+            AND ext.clientid = eval.clientid
+            AND ext.uniquereference IS NOT NULL
+    ),
+
+    status_code AS (
+        SELECT
+            level,
+            uniquereference,
+            reservationstatuscode,
+            rsrc_client_id,
+            eval_clientid,
+            intvalue,
+            name,
+            reference
+        FROM status_code_ranked
+        WHERE rn = 1
+    ),
+
+    reservable_details AS (
+        SELECT
+            reservable.id,
+            reservable.uniquereference,
+            reservable.objectnameid,
+            t1area.id AS area_id,
+            t1area.capacity AS area_capacity,
+            t1area.areatypecode,
+            t1area.categoryfolderid AS area_categoryfolderid,
+            t1area.name AS area_name,
+            asset.id AS asset_id,
+            asset.quantity AS asset_quantity,
+            asset.categoryfolderid AS asset_categoryfolderid,
+            asset.name AS asset_name,
+            catalogitem.id AS catalogitem_id,
+            catalogitem.categoryfolderid AS catalogitem_categoryfolderid,
+            catalogitem.name AS catalogitem_name,
+            area_category_folder.name AS area_category_folder_name,
+            area_category_folder.reference AS area_category_folder_reference,
+            asset_folder.name AS asset_folder_name,
+            asset_folder.reference AS asset_folder_reference,
+            catalogitem_folder.name AS catalogitem_folder_name,
+            catalogitem_folder.reference AS catalogitem_folder_reference,
+            objectname.name AS objectname_name,
+            -- Pre-computed CASE statements
+            CASE
+                WHEN reservable.objectnameid = 50 THEN CAST(t1area.capacity AS INT64)
+                WHEN reservable.objectnameid = 3 THEN CAST(asset.quantity AS INT64)
+                WHEN reservable.objectnameid = 63 THEN 1
+            END AS item_object_capacity,
+            CASE
+                WHEN reservable.objectnameid = 50
+                    THEN CASE
+                        WHEN t1area.areatypecode = 1 THEN "FLOOR"
+                        WHEN t1area.areatypecode = 2 THEN "ROOM"
+                        WHEN t1area.areatypecode = 3 THEN "WORKPLACE"
+                        WHEN t1area.areatypecode = 5 THEN "BUILDING"
+                        WHEN t1area.areatypecode = 9 THEN "PARKING"
+                    END
+                WHEN reservable.objectnameid = 3 THEN "EQUIPMENT"
+                WHEN reservable.objectnameid = 63 THEN "SERVICE"
+            END AS item_type,
+            CASE
+                WHEN reservable.objectnameid = 50 THEN area_category_folder.name
+                WHEN reservable.objectnameid = 3 THEN asset_folder.name
+                WHEN reservable.objectnameid = 63 THEN catalogitem_folder.name
+            END AS item_object_category_name,
+            CASE
+                WHEN reservable.objectnameid = 50 THEN area_category_folder.reference
+                WHEN reservable.objectnameid = 3 THEN asset_folder.reference
+                WHEN reservable.objectnameid = 63 THEN catalogitem_folder.reference
+            END AS item_object_category_reference
+        FROM
+            ${ref('reservable')} AS reservable
+        LEFT JOIN
+            ${ref('area')} AS t1area
+            ON
+                reservable.instanceid = t1area.id
+                AND t1area.binentryid = 0
+        LEFT JOIN
+            ${ref('asset')} AS asset
+            ON
+                reservable.instanceid = asset.id
+                AND asset.binentryid = 0
+        LEFT JOIN
+            ${ref('catalogitem')} AS catalogitem
+            ON
+                reservable.instanceid = catalogitem.id
+                AND catalogitem.binentryid = 0
+        LEFT JOIN
+            ${ref('folder')} AS area_category_folder
+            ON
+                t1area.categoryfolderid = area_category_folder.id
+                AND area_category_folder.binentryid = 0
+        LEFT JOIN
+            ${ref('folder')} AS asset_folder
+            ON asset.categoryfolderid = asset_folder.id
+        LEFT JOIN
+            ${ref('folder')} AS catalogitem_folder
+            ON catalogitem.categoryfolderid = catalogitem_folder.id
+        LEFT JOIN
+            ${ref('objectname')} AS objectname
+            ON
+                reservable.objectnameid = objectname.id
+                AND objectname.binentryid = 0
+        WHERE reservable.binentryid = 0
+    )
+
+SELECT
+    res.reference AS user_reference,
+    res.uniquereference AS reference,
+    res.binentryid AS bineid,
+    res.name AS subject,
+    res.description,
+    status_code.reference AS status_code,
+    status_code.name AS status_name,
+    -- constants in uppercase
+    CASE
+        WHEN (
+            res.canceltime IS NULL
+            AND res.noshow = 0
+            AND TIMESTAMP(res.endtime) < CURRENT_TIMESTAMP()
+        )
+            THEN "COMPLETED"
+        WHEN res.canceltime <= res.starttime
+            THEN "CANCELLED"
+        WHEN (res.canceltime > res.starttime OR res.noshow = 1)
+            THEN "NO_SHOW"
+        WHEN TIMESTAMP(res.endtime) >= CURRENT_TIMESTAMP()
+            THEN "RESERVED"
+        ELSE "ERROR"
+    END AS result,
+    res.persons AS nrofparticipants,
+    CONCAT("P", CAST(property.id AS STRING)) AS building_id,
+    property.reference AS building_reference,
+    property.name AS building_name,
+    FORMAT_TIMESTAMP("%Y-%m-%dT%H:%M:%SZ", TIMESTAMP(res.starttime)) AS start_timestamp,
+    FORMAT_TIMESTAMP("%Y-%m-%dT%H:%M:%SZ", TIMESTAMP(res.endtime)) AS end_timestamp,
+    FORMAT_TIMESTAMP("%Y-%m-%dT%H:%M:%SZ", TIMESTAMP(res.canceltime)) AS cancel_timestamp,
+    FORMAT_TIMESTAMP("%Y-%m-%dT%H:%M:%SZ", TIMESTAMP(res.createtime)) AS create_timestamp,
+    FORMAT_TIMESTAMP("%Y-%m-%dT%H:%M:%SZ", TIMESTAMP(res.updatetime)) AS update_timestamp,
+    organizer_organization_contact.wholename AS organizer_organization_name,
+    creator_organization_contact.wholename AS creator_organisation_name,
+    reservationitem.reference AS item_nr,
+    reservable_details.uniquereference AS item_object_reference,
+    reservable_details.item_object_capacity,
+    reservationitem.name AS item_name,
+    reservationitem.description AS item_description,
+    reservable_details.item_type,
+    reservable_details.item_object_category_name,
+    reservable_details.item_object_category_reference,
+    CAST(reservationitem.items AS INT64) AS item_quantity,
+    res.id,
+    346 AS objectname,
+    res.clientid,
+    res.closetime,
+    CAST(reservable_details.objectnameid AS STRING) AS objectnameid,
+    client.name,
+    client.parentclientid,
+    client.partnerclientid,
+    client.reference AS client_ref,
+    client.url,
+    client.projectsettingsid,
+    COALESCE(reg.timezone_, client.timezone_) AS tz_iana_timezone,
+    reservationitem.id AS itemid
+FROM
+    ${ref('reservationitem')} AS reservationitem
+LEFT JOIN
+    ${ref('reservation')} AS res
+    ON
+        reservationitem.reservationid = res.id
+        AND reservationitem.binentryid = 0
+LEFT JOIN
+    ${ref('property')} AS property
+    ON
+        res.propertyid = property.id
+        AND property.binentryid = 0
+LEFT JOIN
+    ${ref('objectregime')} AS objreg
+    ON
+        property.id = objreg.instanceid
+        AND objreg.binentryid = 0
+LEFT JOIN
+    ${ref('regime')} AS reg
+    ON
+        objreg.regimeid = reg.id
+        AND reg.binentryid = 0
+LEFT JOIN
+    ${ref('contact')} AS organizer
+    ON
+        res.contactid = organizer.id
+        AND organizer.binentryid = 0
+LEFT JOIN
+    ${ref('organization')} AS organizer_organization
+    ON
+        organizer.organizationid = organizer_organization.id
+        AND organizer_organization.binentryid = 0
+LEFT JOIN
+    ${ref('contact')} AS organizer_organization_contact
+    ON organizer_organization.contactid = organizer_organization_contact.id
+LEFT JOIN
+    ${ref('systemuser')} AS systemuser_contact
+    ON
+        res.createsystemuserid = systemuser_contact.id
+        AND systemuser_contact.binentryid = 0
+LEFT JOIN
+    ${ref('contact')} AS creator
+    ON systemuser_contact.contactid = creator.id
+LEFT OUTER JOIN
+    ${ref('organization')} AS creator_organization
+    ON creator.organizationid = creator_organization.id
+LEFT OUTER JOIN
+    ${ref('contact')} AS creator_organization_contact
+    ON creator_organization.contactid = creator_organization_contact.id
+LEFT JOIN
+    reservable_details
+    ON reservationitem.reservableid = reservable_details.id
+LEFT JOIN
+    ${ref('client')} AS client
+    ON
+        res.clientid = client.id
+        AND client.binentryid = 0
+LEFT JOIN
+    status_code
+    ON res.uniquereference = status_code.uniquereference
+WHERE
+    client.id = ${dataform.projectConfig.vars.client_id}  -- noqa: PRS, LXR, LT02
+    AND res.binentryid = 0
+    AND reservationitem.reservableid != 0
+    AND reservationitem.reservationid != 0
+    AND res.reservationstatuscode != 1
